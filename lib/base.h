@@ -1,0 +1,340 @@
+/*
+ * Copyright 2021 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// A small library of support functionality with no uapi dependencies that can
+// be shared between agent and clients.  This is picked up by both the agent and
+// clients.
+
+#ifndef GHOST_LIB_BASE_H_
+#define GHOST_LIB_BASE_H_
+
+#include <execinfo.h>
+#include <fcntl.h>
+#include <linux/futex.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+
+#include <atomic>
+#include <functional>
+#include <string>
+#include <thread>
+#include <vector>
+
+#include "absl/base/call_once.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/memory/memory.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
+#include "lib/logging.h"
+
+namespace ghost {
+
+static inline int GetTID();
+void Exit(int code);
+int SchedSetAffinity(pid_t pid, int cpu);
+size_t GetFileSize(int fd);
+void PrintBacktrace(FILE* f);
+
+static inline absl::Time MonotonicNow() {
+  struct timespec ts;
+
+  CHECK_EQ(clock_gettime(CLOCK_MONOTONIC, &ts), 0);
+  return absl::TimeFromTimespec(ts);
+}
+
+// Returns the TID (thread identifier) of the calling thread.
+static inline pid_t GetTID() {
+  static thread_local int tid = syscall(__NR_gettid);
+  return tid;
+}
+
+// Returns the raw GTID (ghOSt thread identifier) of the calling thread.
+//
+// A ghost tid is a 64-bit identifier for a task (as opposed to a TID
+// that can be up to 22 bits). The extra bits allow an agent to distinguish
+// between incarnations of the same tid (due to tid reuse). It is always
+// possible to get the linux TID associated with a GTID and interact with
+// it using traditional linux tools (e.g. ps, top, gdb, /proc/<pid>).
+//
+// Most callers should never need to call this function (preferring
+// Gtid::Current() since it caches the gtid in a thread-local var).
+int64_t GetGtid();
+
+// This class encapsulates a GTID (ghOSt thread identifier).
+//
+// Example:
+// Gtid gtid = Gtid::Current();
+// CHECK_EQ(gtid.id(), my_gtid);
+// pid_t my_tid = gtid.tid();
+// ...
+// int64_t some_gtid = 104'326;
+// Gtid gtid(some_gtid);
+// pid_t some_tid = gtid.tid();
+class Gtid {
+ public:
+  Gtid() : gtid_raw_(-1) {}  // Uninitialized.
+  explicit Gtid(int64_t gtid) : gtid_raw_(gtid) {}
+
+  // Returns the GTID for the calling thread.
+  static inline Gtid Current() {
+    static thread_local int64_t gtid = GetGtid();
+    return Gtid(gtid);
+  }
+
+  // Returns the raw GTID number.
+  int64_t id() const { return gtid_raw_; }
+
+  // Returns the TID (thread identifier) associated with the thread that has
+  // this GTID.
+  pid_t tid() const;
+
+  // Returns the TGID (thread group identifier) associated with the thread that
+  // has this GTID.
+  pid_t tgid() const;
+
+  bool operator==(const Gtid &b) const { return id() == b.id(); }
+  bool operator!=(const Gtid &b) const { return id() != b.id(); }
+  bool operator!() const { return id() == 0; }
+
+  friend std::ostream& operator<<(std::ostream& os, const Gtid& gtid) {
+    os << gtid.id();
+    return os;
+  }
+
+  // These are just some simple debug helpers to make things more readable.
+  // Assigns `name` to the GTID. This name will be returned on future calls to
+  // `describe`.
+  void assign_name(std::string name) const;
+
+  // Returns the name for this GTID. If no name has been assigned to this GTID
+  // via a call to `assign_name` then a name is automatically generated and
+  // returned.
+  absl::string_view describe() const;
+
+ private:
+  // The raw GTID number.
+  int64_t gtid_raw_;
+};
+
+// Futex functions. See `man 2 futex` for a description of what a Futex is and
+// how to use one. This Futex class supports any type `T` whose size is equal to
+// int's size.
+//
+// Example:
+// enum class SomeType {
+//   kTypeZero,
+//   kTypeOne,
+//   kTypeTwo,
+//   ...
+//   kTypeFive,
+// };
+//
+// Class member: std::atomic<SomeType> val_ = SomeType::kTypeZero;
+//
+// ...
+//
+// Thread 1:
+// Futex::Wait(&val_, /*val=*/SomeType::kTypeZero);
+// (This code causes thread 1 to sleep on the futex.)
+//
+// ...
+//
+// Thread 2:
+// val_.store(SomeType::kTypeFive, std::memory_order_release);
+// Futex::Wake(&val_, /*count=*/1);
+// (This code wakes up thread 1.)
+class Futex {
+ public:
+  // Wakes up threads waiting on the futex. Up to `count` threads waiting on `f`
+  // are woken up. Note that the type `T` must be the same size as an int, which
+  // is the size that futex supports. We use a template mainly to support enum
+  // class types.
+  template <class T>
+  static int Wake(std::atomic<T>* f, int count) {
+    static_assert(sizeof(T) == sizeof(int));
+    int rc = futex(reinterpret_cast<std::atomic<int>*>(f), FUTEX_WAKE, count,
+                   nullptr);
+    return rc;
+  }
+
+  // Waits on the futex `f` while its value is `val`. Note that the type `T`
+  // must be the same size as an int, which is the size that futex supports. We
+  // use a template mainly to support enum class types.
+  template <class T>
+  static int Wait(std::atomic<T>* f, T val) {
+    static_assert(sizeof(T) == sizeof(int));
+    while (true) {
+      int rc = futex(reinterpret_cast<std::atomic<int>*>(f), FUTEX_WAIT,
+                     static_cast<int>(val), nullptr);
+      if (rc == 0) {
+        if (f->load(std::memory_order_acquire) != val) {
+          return rc;
+        }
+        // This was a spurious wakeup, so sleep on the futex again.
+      } else {
+        if (errno == EAGAIN) {
+          // Futex value mismatch.
+          return 0;
+        }
+        CHECK_EQ(errno, EINTR);
+      }
+    }
+  }
+
+ private:
+  // The futex system call. See `man 2 futex`.
+  static int futex(std::atomic<int>* uaddr, int futex_op, int val,
+                   const struct timespec* timeout) {
+    return syscall(__NR_futex, uaddr, futex_op, val, timeout);
+  }
+};
+
+// This class is a notification, which is essentially a trigger. Threads can
+// sleep while the trigger has not been set (i.e., the notification is not yet
+// notified) and will wake up once the trigger is set (i.e., the notification is
+// notified). This class is similar to `absl::Notification` but contains extra
+// functionality, such as the ability to reset.
+//
+// Notifications act as memory barriers.
+//
+// Example:
+// Notification notification_;
+// ...
+// Thread 0:
+// CHECK(!notification_.HasBeenNotified());
+// notification_.WaitForNotification();
+// (Thread 0 now sleeps).
+// ...
+// Thread 1:
+// notification_.Notify();
+class Notification {
+ public:
+  Notification() {}
+
+  // Disallow copy and assign.
+  Notification(const Notification &) = delete;
+  Notification &operator=(const Notification &) = delete;
+
+  ~Notification();
+
+  // Returns true if the notification has been notified. Returns false
+  // otherwise.
+  bool HasBeenNotified() {
+    return notified_.load(std::memory_order_relaxed) ==
+           NotifiedState::kNotified;
+  }
+
+  // Resets the notification back to the `unnotified` state.
+  // Careful using this - you need to communicate to whoever will call Notify
+  // *after* you reset, e.g. with another Notification. There is no way for the
+  // notifier to 'notice' that this object is ready for another notification.
+  void Reset() {
+    notified_.store(NotifiedState::kNoWaiter, std::memory_order_relaxed);
+  }
+
+  // Notifies the notification. This causes `HasBeenNotified()` to return true
+  // on future calls to it and wakes up any threads sleeping on a call to
+  // `WaitForNotification()`.
+  void Notify();
+
+  // Puts the calling thread sleep until the notification is notified by a call
+  // to `Notify()`.
+  void WaitForNotification();
+
+ private:
+  enum class NotifiedState {
+    kNoWaiter,
+    kWaiter,
+    kNotified,
+  };
+
+  friend std::ostream& operator<<(std::ostream& os,
+                                  Notification::NotifiedState notified_state) {
+    switch (notified_state) {
+      case Notification::NotifiedState::kNoWaiter:
+        os << "No Waiter";
+        break;
+      case Notification::NotifiedState::kWaiter:
+        os << "Waiter";
+        break;
+      case Notification::NotifiedState::kNotified:
+        os << "Notified";
+        break;
+      default:
+        GHOST_ERROR("`notified_state` has non-enumerator value %d.",
+                    static_cast<int>(notified_state));
+        break;
+    }
+    return os;
+  }
+
+  // The notification state.
+  std::atomic<NotifiedState> notified_ = NotifiedState::kNoWaiter;
+};
+
+// Parent and child are codependent.  If the parent dies, the child dies.  If
+// the child exits with a non-zero status or is terminated by a signal, the
+// parent exits with the same error (if possible).  The parent can add an exit
+// handler to handle the error on its own.  A parent can wait on a child, which
+// will catch the normal exit(0).
+class ForkedProcess {
+ public:
+  // Returns to both the child and parent.  Caller needs to handle both cases.
+  ForkedProcess();
+  // The child runs 'lambda' and exits.
+  explicit ForkedProcess(std::function<int()> lambda);
+  ForkedProcess(const ForkedProcess&) = delete;
+  ForkedProcess& operator=(const ForkedProcess&) = delete;
+  ~ForkedProcess();
+
+  int WaitForChildExit();
+  bool IsChild() { return child_ == 0; }
+  // When a child exits abnormally, we'll call these.  The handlers are passed
+  // the child's pid and the wstatus, and they return true if they 'handled' the
+  // problem such that the parent should *not* exit.
+  void AddExitHandler(std::function<bool(pid_t, int)> handler);
+  void KillChild(int signum);
+
+ private:
+  // Looks up the child and runs any registered handlers for the child's
+  // abnormal exit.  Returns whether or not a handler wants to abort our exit.
+  static bool HandleAbnormalExit(pid_t child, int wait_status);
+  // For a given wait status, exit if the child abnormally exited (non-zero exit
+  // code or a signal).
+  static void HandleIfAbnormalExit(pid_t child, int wait_status);
+  // Signal handler for SIGCHLD.  Do not call this directly.
+  static void HandleSigchild(int signum);
+
+  static absl::flat_hash_map<pid_t, ForkedProcess*>& GetAllChildren() {
+    static absl::flat_hash_map<pid_t, ForkedProcess*>* all_children =
+        new absl::flat_hash_map<pid_t, ForkedProcess*>();
+
+    return *all_children;
+  }
+
+  pid_t child_;
+  std::vector<std::function<bool(pid_t, int)>> exit_handlers_;
+  static absl::Mutex mu_;
+};
+
+template <typename T1, typename T2>
+static inline T1 roundup2(T1 x, T2 y) {
+  return (((x) + ((y)-1)) & (~((y)-1)));
+}
+
+}  // namespace ghost
+
+#endif  // GHOST_LIB_BASE_H_

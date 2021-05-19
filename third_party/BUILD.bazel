@@ -1,0 +1,9 @@
+package(default_visibility = ["//visibility:public"])
+
+# Alias `third_party` projects, allowing us to refer to each one by
+# `//third_party:project`.
+
+alias(
+    name = "rocksdb",
+    actual = "@rocksdb//:rocksdb",
+)
