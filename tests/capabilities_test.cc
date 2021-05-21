@@ -111,6 +111,7 @@ TEST(CapabilitiesTest, AgentNice) {
   auto enclave = absl::make_unique<LocalEnclave>(
       topology, topology->ToCpuList(std::vector<int>{kAgentCpu}));
   Channel default_channel(GHOST_MAX_QUEUE_ELEMS, /*node=*/0);
+  default_channel.SetEnclaveDefault();
 
   Notification notification;
   CapabilitiesAgent agent(enclave.get(), topology->cpu(kAgentCpu),
@@ -169,7 +170,7 @@ TEST(CapabilitiesTest, AgentNoNice) {
     DropNiceCapability();
     // We do not need initialize an enclave, a channel, etc., for the agent
     // since the call below will fail before these are needed.
-    EXPECT_THAT(SchedEnterGhost(/*pid=*/0, /*agent=*/true), Eq(-1));
+    EXPECT_THAT(SchedAgentEnterGhost(-1, -1), Eq(-1));
     EXPECT_THAT(errno, Eq(EPERM));
   });
   thread.join();

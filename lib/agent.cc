@@ -16,6 +16,8 @@
 
 #include <linux/sched.h>
 
+#include "lib/scheduler.h"
+
 namespace ghost {
 
 Agent::~Agent() {
@@ -29,9 +31,22 @@ void Agent::Start() {
 }
 
 void Agent::ThreadBody() {
+  int queue_fd;
+  Scheduler* s = AgentScheduler();
+  if (!s) {
+    // Some tests don't have a scheduler.  Those that don't need to set a
+    // default channel before starting the agents, which the kernel will use.
+    // If they did not set a default, then SchedAgentEnterGhost will fail.
+    // TODO Once we move queues to ghostfs, we might be able to CHECK that
+    // there is a default for the enclave.
+    queue_fd = -1;
+  } else {
+    queue_fd = s->GetDefaultChannel().GetFd();
+  }
+
   gtid_ = Gtid::Current();
   SchedSetAffinity(0, cpu_.id());
-  const int ret = SchedEnterGhost(0, true);
+  const int ret = SchedAgentEnterGhost(enclave_->ctl_fd_, queue_fd);
   CHECK_EQ(ret, 0);
 
   status_word_ = StatusWord(StatusWord::AgentSW{});

@@ -52,7 +52,7 @@ Channel::~Channel() {
   close(fd_);
 }
 
-bool Channel::AssociateTask(Gtid gtid, int barrier) const {
+bool Channel::AssociateTask(Gtid gtid, int barrier, int *status) const {
   return Ghost::AssociateQueue(fd_, GHOST_TASK, gtid.id(), barrier, 0) == 0;
 }
 
@@ -87,6 +87,10 @@ Message Channel::Peek() {
 
   tidx = tail & (nelems - 1);
   return Message(&r->msgs[tidx]);
+}
+
+bool Channel::SetEnclaveDefault() const {
+  return Ghost::SetDefaultQueue(fd_) == 0;
 }
 
 absl::string_view Message::describe_type() const {

@@ -89,7 +89,13 @@ class Channel {
   size_t max_elements() { return header_->nelems; }
 
   // Associate task (identified by 'gtid') with this channel.
-  bool AssociateTask(Gtid gtid, int barrier) const;
+  bool AssociateTask(Gtid gtid, int barrier, int *status = nullptr) const;
+
+  // Set this channel's queue to be the enclave's default queue.  Caller must be
+  // an agent of an enclave.  Returns true on success.
+  bool SetEnclaveDefault() const;
+
+  int GetFd() const { return fd_; }
 
   Channel(const Channel&) = delete;
   Channel(Channel&&) = delete;

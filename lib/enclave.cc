@@ -45,6 +45,14 @@ void Enclave::Ready() {
 
   DerivedReady();
 
+  if (!schedulers_.empty()) {
+    // There can be only one default queue, so take the first scheduler's
+    // default.
+    // There are tests that have agents, but do not have a scheduler.  Those
+    // must call SetEnclaveDefault() manually.
+    CHECK(schedulers_.front()->GetDefaultChannel().SetEnclaveDefault());
+  }
+
   for (auto scheduler : schedulers_) scheduler->EnclaveReady();
 
   // We could use agents_ here, but this allows extra checking.
@@ -166,7 +174,8 @@ int LocalEnclave::GetCpuDataRegion(int dir_fd) {
 void LocalEnclave::DestroyEnclave(int ctl_fd) {
   constexpr const char kCommand[] = "destroy";
   ssize_t msg_sz = sizeof(kCommand) - 1;  // No need for the \0
-  CHECK_EQ(write(ctl_fd, kCommand, msg_sz), msg_sz);
+  // It's possible to get an error if the enclave is concurrently destroyed.
+  write(ctl_fd, kCommand, msg_sz);
 }
 
 // static

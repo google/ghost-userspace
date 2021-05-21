@@ -93,6 +93,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
   ~SolScheduler() final;
 
   void EnclaveReady() final;
+  Channel& GetDefaultChannel() final { return global_channel_; };
 
   // Handles task messages received from the kernel via shared memory queues.
   void TaskNew(SolTask* task, const Message& msg) final;
@@ -209,6 +210,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 
   int global_cpu_core_;
   std::atomic<int32_t> global_cpu_;
+  Channel global_channel_;
   int num_tasks_ = 0;
 
   std::deque<SolTask*> run_queue_;
@@ -227,16 +229,13 @@ std::unique_ptr<SolScheduler> SingleThreadSolScheduler(
 // global_scheduler->GetGlobalCPU callback.
 class SolAgent : public Agent {
  public:
-  SolAgent(Enclave* enclave, Cpu cpu, Channel* channel,
-           SolScheduler* global_scheduler)
-      : Agent(enclave, cpu),
-        channel_(channel),
-        global_scheduler_(global_scheduler) {}
+  SolAgent(Enclave* enclave, Cpu cpu, SolScheduler* global_scheduler)
+      : Agent(enclave, cpu), global_scheduler_(global_scheduler) {}
 
   void AgentThread() override;
+  Scheduler* AgentScheduler() const override { return global_scheduler_; }
 
  private:
-  Channel* channel_;
   SolScheduler* global_scheduler_;
 };
 
@@ -254,8 +253,7 @@ class SolConfig : public AgentConfig {
 template <class ENCLAVE>
 class FullSolAgent : public FullAgent<ENCLAVE> {
  public:
-  explicit FullSolAgent(SolConfig config)
-      : FullAgent<ENCLAVE>(config), global_channel_(GHOST_MAX_QUEUE_ELEMS, 0) {
+  explicit FullSolAgent(SolConfig config) : FullAgent<ENCLAVE>(config) {
     global_scheduler_ = SingleThreadSolScheduler(
         &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id());
     this->StartAgentTasks();
@@ -287,7 +285,7 @@ class FullSolAgent : public FullAgent<ENCLAVE> {
   }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
-    return absl::make_unique<SolAgent>(&this->enclave_, cpu, &global_channel_,
+    return absl::make_unique<SolAgent>(&this->enclave_, cpu,
                                        global_scheduler_.get());
   }
 
@@ -306,7 +304,6 @@ class FullSolAgent : public FullAgent<ENCLAVE> {
 
  private:
   std::unique_ptr<SolScheduler> global_scheduler_;
-  Channel global_channel_;
 };
 
 }  // namespace ghost

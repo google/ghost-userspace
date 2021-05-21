@@ -25,13 +25,14 @@
 #endif
 
 // NOLINTBEGIN
+// clang-format off
 
 /*
  * The version of ghOSt. It is important that the kernel and the userspace
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	26
+#define GHOST_VERSION  29
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -110,11 +111,18 @@ struct ghost_sw_region_header {
 } __ghost_cacheline_aligned;
 #define GHOST_SW_REGION_VERSION	0
 
+/*
+ * Align status words up to the next power of two so we do not cross cache lines
+ * unnecessarily.  At our current size, that is one cache line per status word,
+ * and two status words per cache line.
+ */
 struct ghost_status_word {
 	uint32_t barrier;
 	uint32_t flags;
+	uint64_t gtid;
 	uint64_t runtime;	/* total time spent on the CPU in nsecs */
-};
+} __attribute__((__aligned__(32)));
+
 #define GHOST_SW_F_INUSE	(1U << 0)    /* status_word in use */
 #define GHOST_SW_F_CANFREE	(1U << 1)    /* status_word can be freed */
 
@@ -122,10 +130,10 @@ struct ghost_status_word {
 #define GHOST_SW_CPU_AVAIL	(1U << 8)    /* CPU available hint */
 #define GHOST_SW_BOOST_PRIO     (1U << 9)    /* agent with boosted prio */
 
-
 /* task-specific status_word.flags */
 #define GHOST_SW_TASK_ONCPU	(1U << 16)   /* task is oncpu */
 #define GHOST_SW_TASK_RUNNABLE	(1U << 17)   /* task is runnable */
+#define GHOST_SW_TASK_IS_AGENT  (1U << 18)
 
 /*
  * Queue APIs.
@@ -280,6 +288,7 @@ enum GHOST_OPS {
 	GHOST_NULL,
 	GHOST_CREATE_QUEUE,
 	GHOST_ASSOCIATE_QUEUE,
+	GHOST_SET_DEFAULT_QUEUE,
 	GHOST_CONFIG_QUEUE_WAKEUP,
 	GHOST_SET_OPTION,
 	GHOST_GET_CPU_TIME,
@@ -290,8 +299,9 @@ enum GHOST_OPS {
 	GHOST_GET_GTID,
 };
 
-/* GHOST_CREATE_SW_REGION flags */
-#define GHOST_CSWR_STRICT_CAPACITY	(1 << 0)
+/* status flags for GHOST_ASSOCIATE_QUEUE */
+#define GHOST_ASSOC_SF_ALREADY		(1 << 0) /* Queue already set */
+#define GHOST_ASSOC_SF_BRAND_NEW	(1 << 1) /* TASK_NEW not sent yet */
 
 /* flags accepted by ghost_run() */
 #define RTLA_ON_PREEMPT	  (1 << 0)  /* Return To Local Agent on preemption */
@@ -417,6 +427,7 @@ enum {
 #define GHOST_TID_SEQNUM_BITS	41
 #define GHOST_TID_PID_BITS	22
 
+// clang-format on
 // NOLINTEND
 
 #endif	/* _SCHED_GHOST_H_ */

@@ -26,6 +26,10 @@ FifoScheduler::FifoScheduler(Enclave* enclave, CpuList cpulist,
     CpuState* cs = cpu_state(cpu);
     cs->channel = absl::make_unique<ghost::Channel>(
         GHOST_MAX_QUEUE_ELEMS, node, MachineTopology()->ToCpuList({cpu}));
+    // This channel pointer is valid for the lifetime of FifoScheduler
+    if (!default_channel_) {
+      default_channel_ = cs->channel.get();
+    }
   }
 }
 

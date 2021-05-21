@@ -143,13 +143,17 @@ class Ghost {
 
   static int AssociateQueue(const int queue_fd, const ghost_type type,
                             const uint64_t arg, const int barrier,
-                            const int flags) {
+                            const int flags, int *status = nullptr) {
     ghost_msg_src msg_src = {
         .type = type,
         .arg = arg,
     };
     return syscall(__NR_ghost, GHOST_ASSOCIATE_QUEUE, queue_fd, &msg_src,
-                   barrier, flags);
+                   barrier, flags, status);
+  }
+
+  static int SetDefaultQueue(const int queue_fd) {
+    return syscall(__NR_ghost, GHOST_SET_DEFAULT_QUEUE, queue_fd);
   }
 
   static int GetStatusWordInfo(const ghost_type type, const uint64_t arg,
@@ -437,11 +441,13 @@ class GhostThread {
   std::thread thread_;
 };
 
-// Moves the thread with PID `pid` to the ghOSt scheduling class. Makes the
-// thread an agent if `agent` is set to true. Just moves the thread to ghOSt
-// otherwise if `agent` is false. Note that the calling thread must have the
-// `CAP_SYS_NICE` capability to make a thread an agent.
-int SchedEnterGhost(int pid, bool agent);
+// Moves the thread with PID `pid` to the ghOSt scheduling class, using the
+// enclave ctl_fd.  If ctl_fd is -1, this will use the enclave ctl_fd previously
+// set with SetGlobalEnclaveCtlFd().
+int SchedTaskEnterGhost(pid_t pid, int ctl_fd = -1);
+// Makes the calling thread an agent.  Note that the calling thread must have
+// the `CAP_SYS_NICE` capability to make itself an agent.
+int SchedAgentEnterGhost(int ctl_fd, int queue_fd);
 
 }  // namespace ghost
 

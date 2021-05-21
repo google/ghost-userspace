@@ -145,7 +145,7 @@ class EdfTest : public testing::Test {
 
     CPU_ZERO(&set);
     CPU_SET(kTestCpu, &set);
-    sched_setaffinity(kTestCpu, sizeof(set), &set);
+    sched_setaffinity(0, sizeof(set), &set);
 
     table_ = absl::make_unique<PrioTable>(
         2000, static_cast<int>(WorkClass::kWcNum),

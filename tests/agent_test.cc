@@ -91,6 +91,7 @@ class FullSimpleAgent : public FullAgent<ENCLAVE> {
  public:
   explicit FullSimpleAgent(const AgentConfig& config)
       : FullAgent<ENCLAVE>(config), channel_(GHOST_MAX_QUEUE_ELEMS, 0) {
+    channel_.SetEnclaveDefault();
     // Start an instance of SimpleAgent (above) on each cpu.
     this->StartAgentTasks();
 
@@ -232,6 +233,7 @@ class FullTickAgent : public FullAgent<ENCLAVE> {
       : FullAgent<ENCLAVE>(config),
         default_channel_(GHOST_MAX_QUEUE_ELEMS, config.numa_node_),
         agent_channel_(GHOST_MAX_QUEUE_ELEMS, config.numa_node_) {
+    default_channel_.SetEnclaveDefault();
     this->StartAgentTasks();
     this->enclave_.Ready();
   }
@@ -303,7 +305,9 @@ class CallbackAgent : public Agent {
 
   CallbackAgent(Enclave* enclave, Cpu cpu, Channel* channel,
                 CallbackMap callbacks)
-      : Agent(enclave, cpu), channel_(channel), callbacks_(callbacks) {}
+      : Agent(enclave, cpu), channel_(channel), callbacks_(callbacks) {
+    channel_->SetEnclaveDefault();
+  }
 
   void need_cpu_not_idle() {
     need_cpu_not_idle_ = true;
@@ -369,6 +373,7 @@ TEST(AgentTest, MsgTimerExpired) {
 
   const int numa_node = 0;
   Channel default_channel(GHOST_MAX_QUEUE_ELEMS, numa_node);
+  default_channel.SetEnclaveDefault();
 
   // Create a timerfd.
   int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
@@ -487,6 +492,7 @@ TEST(AgentTest, MsgCpuNotIdle) {
 
   const int numa_node = 0;
   Channel default_channel(GHOST_MAX_QUEUE_ELEMS, numa_node);
+  default_channel.SetEnclaveDefault();
 
   // Per-cpu counter for the number of CPU_NOT_IDLE msgs.
   std::vector<int> cpu_not_idle_msgs(agent_cpus.Size(), 0);
@@ -609,6 +615,7 @@ TEST(AgentTest, SetSched) {
       topology, topology->ToCpuList(std::vector<int>{agent_cpu}));
 
   Channel default_channel(GHOST_MAX_QUEUE_ELEMS, /*node=*/0);
+  default_channel.SetEnclaveDefault();
 
   SetSchedAgent agent(enclave.get(), topology->cpu(agent_cpu));
   agent.Start();

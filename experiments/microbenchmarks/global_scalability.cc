@@ -140,10 +140,55 @@ static void RunSol(SolConfig cfg, int nr_task_cpus, int nr_threads,
 
 }  // namespace ghost
 
-// If we're 2-socket NUMA, then we want the first 1/4 cpus, then the third 1/4
-// of the cpus (the SMT siblings of the first), then the remainder.  nr_cpus
-// includes cpu0.
-std::vector<int> MakeCpuVector(int nr_cpus, int max_cpus, bool skip_zero) {
+static bool ShouldSkipPacked(int i, int global_cpu, bool skip_zero) {
+  if (i == 0 && skip_zero) return true;
+  if (i == global_cpu) return true;
+  return false;
+}
+
+// Assigns CPUs to pack the SMT siblings.  We fill every *core*, one at a time,
+// first the low-id hyperthread, then the high thread.  Fills socket 0 first.
+//
+// Caveat: this adds the global_cpu first to make sure we have it.
+//
+// nr_cpus includes cpu0.
+std::vector<int> MakeCpuVectorPacked(int nr_cpus, int max_cpus, int global_cpu,
+                                     bool skip_zero) {
+  std::vector<int> v;
+  int sofar;
+
+  CHECK_GE(nr_cpus, 2);
+
+  v.push_back(global_cpu);
+  sofar = 1;
+
+  for (int i = 0; i < max_cpus / 2; ++i) {
+    int first_thread = i;
+    if (!ShouldSkipPacked(first_thread, global_cpu, skip_zero)) {
+      v.push_back(first_thread);
+      if (++sofar == nr_cpus) return v;
+    }
+
+    int second_thread = i + max_cpus / 2;
+    if (!ShouldSkipPacked(second_thread, global_cpu, skip_zero)) {
+      v.push_back(second_thread);
+      if (++sofar == nr_cpus) return v;
+    }
+  }
+
+  return v;
+}
+
+// Assigns CPUs such that we do not pack SMT siblings until we would leave the
+// socket.  We do one sibling from each *core* in the socket, and then go and do
+// the siblings for those cores.  Then we move on to the second socket.
+//
+// Assuming we're 2-socket NUMA, then we want the first 1/4 cpus, then the third
+// 1/4 of the cpus (the SMT siblings of the first), then the remainder.
+//
+// nr_cpus includes cpu0.
+std::vector<int> MakeCpuVectorSparse(int nr_cpus, int max_cpus,
+                                     bool skip_zero) {
   std::vector<int> v;
   int sofar = skip_zero ? 1 : 0;
 
@@ -176,6 +221,7 @@ ABSL_FLAG(int32_t, max_cpus, -1, "Max cpus, including agent and cpu0");
 ABSL_FLAG(int32_t, total_loops, 5000000, "Number of loops total");
 ABSL_FLAG(int32_t, threads_per_cpu, 5, "Number of threads per cpu (unpinned)");
 ABSL_FLAG(bool, skip_cpu0, true, "Do not run agents or tasks on cpu0");
+ABSL_FLAG(bool, pack_smt, false, "Pack SMT siblings when assigning cpus");
 
 enum class Sched {
   kEdf,
@@ -194,6 +240,7 @@ int main(int argc, char* argv[]) {
   int nr_threads_per_cpu = absl::GetFlag(FLAGS_threads_per_cpu);
   int global_cpu = absl::GetFlag(FLAGS_global_cpu);
   bool skip_cpu0 = absl::GetFlag(FLAGS_skip_cpu0);
+  bool pack_smt = absl::GetFlag(FLAGS_pack_smt);
   int total_loops = absl::GetFlag(FLAGS_total_loops);
   int num_cpus = absl::GetFlag(FLAGS_max_cpus);
   if (num_cpus == -1) num_cpus = t->num_cpus();
@@ -239,8 +286,11 @@ int main(int argc, char* argv[]) {
     int nr_task_cpus = i - (skip_cpu0 ? 2 : 1);
     int nr_threads = nr_threads_per_cpu * nr_task_cpus;
     int nr_loops = total_loops / nr_threads;
+    ghost::CpuList cpus =
+        pack_smt ? t->ToCpuList(
+                       MakeCpuVectorPacked(i, num_cpus, global_cpu, skip_cpu0))
+                 : t->ToCpuList(MakeCpuVectorSparse(i, num_cpus, skip_cpu0));
 
-    ghost::CpuList cpus = t->ToCpuList(MakeCpuVector(i, num_cpus, skip_cpu0));
     switch (sched_type) {
       case Sched::kEdf: {
         ghost::GlobalConfig cfg(t, cpus, t->cpu(global_cpu));

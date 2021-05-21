@@ -156,6 +156,7 @@ class FullDeadAgent final : public FullAgent<ENCLAVE> {
         satellite_cpu_(config.cpus_.Back()),
         channel_(GHOST_MAX_QUEUE_ELEMS, sched_cpu_.numa_node(),
                  MachineTopology()->ToCpuList({sched_cpu_})) {
+    channel_.SetEnclaveDefault();
     // Start an instance of DeadAgent on each cpu.
     this->StartAgentTasks();
 
@@ -232,6 +233,8 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
         channel_(absl::make_unique<Channel>(
             GHOST_MAX_QUEUE_ELEMS,
             /*node=*/0, MachineTopology()->ToCpuList({sched_cpu_}))) {}
+
+  Channel& GetDefaultChannel() final { return *channel_; };
 
   bool Empty(Cpu cpu) const {
     // Non-scheduling CPUs only look at what's running on the local cpu.
@@ -509,6 +512,7 @@ class SyncGroupAgent final : public FullAgent<ENCLAVE> {
     scheduler_ = absl::make_unique<SyncGroupScheduler>(&this->enclave_,
                                                        config.cpus_,
                                                        std::move(allocator));
+    scheduler_->GetDefaultChannel().SetEnclaveDefault();
     this->StartAgentTasks();
     this->enclave_.Ready();
   }
@@ -650,6 +654,7 @@ class FullIdlingAgent final : public FullAgent<ENCLAVE> {
  public:
   explicit FullIdlingAgent(const AgentConfig& config)
       : FullAgent<ENCLAVE>(config), channel_(GHOST_MAX_QUEUE_ELEMS, 0) {
+    channel_.SetEnclaveDefault();
     // Start an instance of IdlingAgent on each cpu.
     this->StartAgentTasks();
 

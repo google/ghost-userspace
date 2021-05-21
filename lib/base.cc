@@ -257,7 +257,7 @@ ForkedProcess::ForkedProcess() {
     // Drop our parent's children. No need to lock, since we're single threaded.
     ForkedProcess::GetAllChildren().clear();
 
-    prctl(PR_SET_PDEATHSIG, SIGTERM);
+    prctl(PR_SET_PDEATHSIG, SIGKILL);
     // In case parent already died and we were reaped.
     if (getppid() != ppid) {
       exit(1);

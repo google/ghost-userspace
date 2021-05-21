@@ -162,6 +162,7 @@ class ShinjukuScheduler : public BasicDispatchScheduler<ShinjukuTask> {
   ~ShinjukuScheduler() final;
 
   void EnclaveReady() final;
+  Channel& GetDefaultChannel() final { return global_channel_; };
 
   // Handles task messages received from the kernel via shared memory queues.
   void TaskNew(ShinjukuTask* task, const Message& msg) final;
@@ -307,6 +308,7 @@ class ShinjukuScheduler : public BasicDispatchScheduler<ShinjukuTask> {
   CpuState cpu_states_[MAX_CPUS];
 
   std::atomic<int32_t> global_cpu_;
+  Channel global_channel_;
   int num_tasks_ = 0;
 
   // Map from QoS level to runqueue
@@ -330,16 +332,13 @@ std::unique_ptr<ShinjukuScheduler> SingleThreadShinjukuScheduler(
 // global_scheduler->GetGlobalCPU callback.
 class ShinjukuAgent : public Agent {
  public:
-  ShinjukuAgent(Enclave* enclave, Cpu cpu, Channel* channel,
-                ShinjukuScheduler* global_scheduler)
-      : Agent(enclave, cpu),
-        channel_(channel),
-        global_scheduler_(global_scheduler) {}
+  ShinjukuAgent(Enclave* enclave, Cpu cpu, ShinjukuScheduler* global_scheduler)
+      : Agent(enclave, cpu), global_scheduler_(global_scheduler) {}
 
   void AgentThread() override;
+  Scheduler* AgentScheduler() const override { return global_scheduler_; }
 
  private:
-  Channel* channel_;
   ShinjukuScheduler* global_scheduler_;
 };
 
@@ -359,7 +358,7 @@ template <class ENCLAVE>
 class FullShinjukuAgent : public FullAgent<ENCLAVE> {
  public:
   explicit FullShinjukuAgent(ShinjukuConfig config)
-      : FullAgent<ENCLAVE>(config), global_channel_(GHOST_MAX_QUEUE_ELEMS, 0) {
+      : FullAgent<ENCLAVE>(config) {
     global_scheduler_ = SingleThreadShinjukuScheduler(
         &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id(),
         config.preemption_time_slice_);
@@ -392,8 +391,8 @@ class FullShinjukuAgent : public FullAgent<ENCLAVE> {
   }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
-    return absl::make_unique<ShinjukuAgent>(
-        &this->enclave_, cpu, &global_channel_, global_scheduler_.get());
+    return absl::make_unique<ShinjukuAgent>(&this->enclave_, cpu,
+                                            global_scheduler_.get());
   }
 
   int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) override {
@@ -408,7 +407,6 @@ class FullShinjukuAgent : public FullAgent<ENCLAVE> {
 
  private:
   std::unique_ptr<ShinjukuScheduler> global_scheduler_;
-  Channel global_channel_;
 };
 
 }  // namespace ghost

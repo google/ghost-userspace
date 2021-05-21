@@ -74,6 +74,9 @@ class Scheduler {
   // late initialization.  See Enclave::Ready() for full details.
   virtual void EnclaveReady() {}
 
+  // All schedulers must have some channel that is "default".
+  virtual Channel& GetDefaultChannel() = 0;
+
   virtual void DumpState(Cpu cpu, int flags) {}
 
  protected:
@@ -99,11 +102,16 @@ class TaskAllocator {
  public:
   virtual ~TaskAllocator() {}
 
-  // Returns the Task* associated with <gtid>.
+  // Returns the Task* associated with `gtid` if the `gtid` is already known
+  // to the allocator and nullptr otherwise.
   virtual TaskType* GetTask(Gtid gtid) = 0;
-  // Returns the Task* associated with <gtid>.  If no Task exists, then allocate
-  // a task and use the given status word info.
-  virtual TaskType* GetTask(Gtid gtid, struct ghost_sw_info sw_info) = 0;
+
+  // Returns a tuple with the Task* associated with `gtid` and a boolean
+  // indicating whether the Task* was a new allocation (i.e. it was not
+  // already known to the allocator).
+  virtual std::tuple<TaskType*, bool> GetTask(Gtid gtid,
+                                              struct ghost_sw_info sw_info) = 0;
+
   virtual void FreeTask(TaskType* task) = 0;
 
   typedef std::function<bool(Gtid gtid, const TaskType* task)> TaskCallbackFunc;
@@ -157,7 +165,8 @@ class SingleThreadMallocTaskAllocator : public TaskAllocator<TaskType> {
 
  public:
   TaskType* GetTask(Gtid gtid) override;
-  TaskType* GetTask(Gtid gtid, struct ghost_sw_info sw_info) override;
+  std::tuple<TaskType*, bool> GetTask(Gtid gtid,
+                                      struct ghost_sw_info sw_info) override;
   void FreeTask(TaskType* task) override {
     task_map_.erase(task->gtid.id());
     FreeTaskImpl(task);
@@ -187,8 +196,6 @@ class SingleThreadMallocTaskAllocator : public TaskAllocator<TaskType> {
 
 template <typename TaskType>
 TaskType* SingleThreadMallocTaskAllocator<TaskType>::GetTask(Gtid gtid) {
-  if (gtid.id() == 0) return nullptr;
-
   auto it = task_map_.find(gtid.id());
   if (it != task_map_.end()) return it->second;
 
@@ -196,17 +203,15 @@ TaskType* SingleThreadMallocTaskAllocator<TaskType>::GetTask(Gtid gtid) {
 }
 
 template <typename TaskType>
-TaskType* SingleThreadMallocTaskAllocator<TaskType>::GetTask(
+std::tuple<TaskType*, bool> SingleThreadMallocTaskAllocator<TaskType>::GetTask(
     Gtid gtid, struct ghost_sw_info sw_info) {
   TaskType* t = SingleThreadMallocTaskAllocator<TaskType>::GetTask(gtid);
-  if (t) return t;
-
-  if (gtid.id() == 0) return nullptr;
+  if (t) return std::make_tuple(t, false);
 
   TaskType* new_task = AllocTaskImpl(gtid, sw_info);
   auto pair = std::make_pair(gtid.id(), new_task);
   task_map_.insert(pair);
-  return pair.second;
+  return std::make_tuple(pair.second, true);
 }
 
 // A thread-safe Task allocator implementation suitable for use with
@@ -219,7 +224,9 @@ class ThreadSafeMallocTaskAllocator
     absl::MutexLock lock(&mu_);
     return Parent::GetTask(gtid);
   }
-  TaskType* GetTask(Gtid gtid, struct ghost_sw_info sw_info) override {
+
+  std::tuple<TaskType*, bool> GetTask(
+      Gtid gtid, struct ghost_sw_info sw_info) override {
     absl::MutexLock lock(&mu_);
     return Parent::GetTask(gtid, sw_info);
   }
@@ -267,24 +274,32 @@ void BasicDispatchScheduler<TaskType>::DispatchMessage(const Message& msg) {
   GHOST_DPRINT(3, stderr, "%s", msg.stringify());
 
   Gtid gtid = msg.gtid();
+  CHECK_NE(gtid.id(), 0);
+
   TaskType* task;
   if (ABSL_PREDICT_FALSE(msg.type() == MSG_TASK_NEW)) {
-    // Expect to create a new Task for this TaskNew message. If there is already
-    // a task present with a matching GTID, something has gone wrong, for
-    // example:
-    // - GTID collision.
-    // - TaskDeparted has not removed the task yet.
-    CHECK_EQ(allocator()->GetTask(gtid), nullptr);
-
     const ghost_msg_payload_task_new* payload =
         static_cast<const ghost_msg_payload_task_new*>(msg.payload());
-    task = allocator()->GetTask(gtid, payload->sw_info);
+    bool allocated;
+    std::tie(task, allocated) = allocator()->GetTask(gtid, payload->sw_info);
+    if (ABSL_PREDICT_FALSE(!allocated)) {
+      // This probably cannot happen, though we may have corner cases with
+      // in-place upgrades.
+      //
+      // It could also be the sign that something has gone wrong, for example:
+      // - GTID collision.
+      // - TaskDeparted has not removed the task yet.
+      GHOST_DPRINT(0, stderr, "Already had task for gtid %s!", gtid.describe());
+      return;
+    }
   } else {
     task = allocator()->GetTask(gtid);
-  }
-  if (ABSL_PREDICT_FALSE(!task)) {
-    GHOST_ERROR("Unable to find task for msg %s", msg.stringify());
-    return;
+    if (ABSL_PREDICT_FALSE(!task)) {
+      // This probably cannot happen, though we may have corner cases with
+      // in-place upgrades.
+      GHOST_DPRINT(0, stderr, "Unable to find task for msg %s", msg.stringify());
+      return;
+    }
   }
 
   // DEPARTED can be delivered for 'task' regardless of its state. All other

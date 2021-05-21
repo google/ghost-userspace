@@ -88,6 +88,7 @@ class Agent {
   void WaitForEnclaveReady() { enclave_ready_.WaitForNotification(); }
 
   virtual void AgentThread() = 0;
+  virtual Scheduler* AgentScheduler() const { return nullptr; }
 
   const StatusWord& status_word() const { return status_word_; }
 

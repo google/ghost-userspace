@@ -92,6 +92,7 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   void Schedule(Cpu cpu, const StatusWord& sw);
 
   void EnclaveReady() final;
+  Channel& GetDefaultChannel() final { return *default_channel_; };
 
   bool Empty(Cpu cpu) {
     CpuState* cs = cpu_state(cpu);
@@ -141,6 +142,7 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   }
 
   CpuState cpu_states_[MAX_CPUS];
+  Channel* default_channel_ = nullptr;
 };
 
 std::unique_ptr<FifoScheduler> MultiThreadedFifoScheduler(Enclave* enclave,
@@ -151,6 +153,7 @@ class FifoAgent : public Agent {
       : Agent(enclave, cpu), scheduler_(scheduler) {}
 
   void AgentThread() override;
+  Scheduler* AgentScheduler() const override { return scheduler_; }
 
  private:
   FifoScheduler* scheduler_;

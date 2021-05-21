@@ -251,5 +251,124 @@ TEST_F(EnclaveTest, CpuListComma) {
   close(ctl_fd);
 }
 
+void SpinFor(absl::Duration d) {
+  while (d > absl::ZeroDuration()) {
+    absl::Time a = absl::Now();
+    absl::Time b;
+
+    // Try to minimize the contribution of arithmetic/Now() overhead.
+    for (int i = 0; i < 150; ++i) {
+      b = absl::Now();
+    }
+
+    absl::Duration t = b - a;
+
+    // Don't count preempted time
+    if (t < absl::Microseconds(100)) {
+      d -= t;
+    }
+  }
+}
+
+// One thread destroys the enclave while another thread tries to join it.  The
+// race is rare enough that this only failed on a loaded system or one with a
+// hacked kernel to exploit the race.
+TEST_F(EnclaveTest, DestroyAndSetsched) {
+  constexpr int kLoops = 100;
+  constexpr int kClientCpu = 0;
+  constexpr int kDestroyerCpu = 1;
+
+  bool client_won = false;
+  bool destroyer_won = false;
+  bool failed = false;
+
+  // To make the race more likely, both threads run on separate cpus and
+  // synchronize via shared memory.  They vary the amount they SpinFor, such
+  // that each thread should get a chance to win the race.
+  for (int i = 0; i < kLoops; ++i) {
+    int ctl_fd = LocalEnclave::MakeNextEnclave();
+    CHECK_GE(ctl_fd, 0);
+
+    int enclave_fd = LocalEnclave::GetEnclaveDirectory(ctl_fd);
+    CHECK_GE(enclave_fd, 0);
+    int client_fd = openat(enclave_fd, "ctl", O_RDONLY);
+    CHECK_GE(client_fd, 0);
+    close(enclave_fd);
+
+    std::atomic<bool> client_ready = false;
+    std::atomic<bool> destroyer_ready = false;
+
+    std::thread client = std::thread([&] {
+      cpu_set_t set;
+      CPU_ZERO(&set);
+      CPU_SET(kClientCpu, &set);
+      CHECK_EQ(sched_setaffinity(0, sizeof(set), &set), 0);
+
+      client_ready.store(true, std::memory_order_release);
+      while (!destroyer_ready.load(std::memory_order_acquire))
+        ;
+
+      SpinFor(absl::Microseconds(kLoops) - absl::Microseconds(i));
+
+      int ret = SchedTaskEnterGhost(/*pid=*/0, client_fd);
+      if (ret != 0) {
+        switch (errno) {
+          case ENXIO:
+            // The client won the race.  We setsched and grabbed the enclave
+            // lock before it was dying.  There was no queue, which is an
+            // artifact of the test.  The race we are trying to expose is the
+            // enclave structure being freed and reused, particularly the page
+            // fault on the enclave lock.  ENXIO happens after that.
+            client_won = true;
+            break;
+          case EBADF:
+          case EXDEV:
+            // The destroyer won the race and the enclave is dying.
+            // - EBADF is when the enclave died and was removed from kernfs
+            // before we could call kernfs_get_active().
+            // - EXDEV is when we got the reference and were able to get the
+            // struct ghost_enclave pointer, but it was already is_dying.
+            destroyer_won = true;
+            break;
+          default:
+            // We had some unexpected error when entering ghost, possibly
+            // unrelated to the test.  errno is not 0, so EXPECT_EQ will fail
+            // and print the current errno.
+            EXPECT_EQ(errno, 0);
+            failed = true;
+        }
+      }
+    });
+
+    std::thread destroyer = std::thread([&] {
+      cpu_set_t set;
+      CPU_ZERO(&set);
+      CPU_SET(kDestroyerCpu, &set);
+      CHECK_EQ(sched_setaffinity(0, sizeof(set), &set), 0);
+
+      destroyer_ready.store(true, std::memory_order_release);
+      while (!client_ready.load(std::memory_order_acquire))
+        ;
+
+      SpinFor(absl::Microseconds(i));
+
+      LocalEnclave::DestroyEnclave(ctl_fd);
+    });
+
+    client.join();
+    destroyer.join();
+
+    close(client_fd);
+    close(ctl_fd);
+
+    ASSERT_FALSE(failed);
+  }
+
+  // If the client or destroyer never win, we didn't test the race, but it is
+  // not a sign of a bug.
+  EXPECT_TRUE(client_won);
+  EXPECT_TRUE(destroyer_won);
+}
+
 }  // namespace
 }  // namespace ghost

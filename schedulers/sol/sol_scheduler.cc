@@ -30,7 +30,8 @@ SolScheduler::SolScheduler(Enclave* enclave, CpuList cpus,
                            std::shared_ptr<TaskAllocator<SolTask>> allocator,
                            int32_t global_cpu)
     : BasicDispatchScheduler(enclave, std::move(cpus), std::move(allocator)),
-      global_cpu_(global_cpu) {
+      global_cpu_(global_cpu),
+      global_channel_(GHOST_MAX_QUEUE_ELEMS, /*node=*/0) {
   if (!cpus.IsSet(global_cpu_)) {
     Cpu c = cpus.Front();
     CHECK(c.valid());
@@ -531,6 +532,7 @@ std::unique_ptr<SolScheduler> SingleThreadSolScheduler(
 }
 
 void SolAgent::AgentThread() {
+  Channel& global_channel = global_scheduler_->GetDefaultChannel();
   gtid().assign_name("Agent:" + std::to_string(cpu().id()));
   if (verbose() > 1) {
     printf("Agent tid:=%d\n", gtid().tid());
@@ -559,9 +561,9 @@ void SolAgent::AgentThread() {
       global_scheduler_->EnterSchedule();
 
       Message msg;
-      while (!(msg = Peek(channel_)).empty()) {
+      while (!(msg = global_channel.Peek()).empty()) {
         global_scheduler_->DispatchMessage(msg);
-        Consume(channel_, msg);
+        global_channel.Consume(msg);
       }
 
       global_scheduler_->GlobalSchedule(status_word(), agent_barrier);

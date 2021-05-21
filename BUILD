@@ -68,8 +68,6 @@ cc_binary(
         "schedulers/edf/agent_exp.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":agent",
         ":edf_scheduler",
@@ -106,8 +104,6 @@ cc_binary(
         "schedulers/shinjuku/agent_shinjuku.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     visibility = ["//experiments/scripts:__pkg__"],
     deps = [
         ":agent",
@@ -141,8 +137,6 @@ cc_binary(
         "schedulers/sol/agent_sol.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":agent",
         ":sol_scheduler",
@@ -157,8 +151,6 @@ cc_binary(
         "tests/sol_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":ghost",
         "@com_google_absl//absl/random",
@@ -211,20 +203,6 @@ cc_library(
         "lib/logging.h",
     ],
     copts = compiler_flags,
-    # The linkopts are uncommented in the open source code.
-    # ghOSt only runs on Linux v4.15 at the moment but the userspace agent uses
-    # modern C++ features that require a newer distribution of Linux, likely
-    # v5.0 or newer. As a result, it is likely that the kernel used to compile
-    # the ghOSt agent binary will not be the one the binary runs on. Thus, we
-    # need to fully statically link everything.
-    #
-    # This causes an issue on a call to `std::thread::join()`. It turns out that
-    # this is a GCC bug that appears when statically linking libstdc++. The
-    # solution is to use these linker options. See
-    # https://gcc.gnu.org/legacy-ml/gcc-help/2010-05/msg00029.html. I originally
-    # read about this issue at
-    # https://stackoverflow.com/questions/38338136/thread-example-segmentation-fault.
-    linkopts = ["-Wl,--whole-archive -lpthread -Wl,--no-whole-archive"],
     deps = [
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/base:core_headers",
@@ -353,8 +331,6 @@ cc_binary(
         "schedulers/fifo/fifo_agent.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":agent",
         ":fifo_scheduler",
@@ -517,8 +493,6 @@ cc_binary(
         "experiments/rocksdb/request.h",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     visibility = ["//experiments/scripts:__pkg__"],
     deps = [
         ":base",
@@ -685,8 +659,6 @@ cc_binary(
         "experiments/antagonist/results.h",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     visibility = ["//experiments/scripts:__pkg__"],
     deps = [
         ":base",
@@ -767,8 +739,6 @@ cc_binary(
         "experiments/microbenchmarks/global_scalability.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":edf_scheduler",
         ":shinjuku_scheduler",

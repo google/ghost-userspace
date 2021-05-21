@@ -248,25 +248,36 @@ struct sched_attr {
 };
 #define SCHED_FLAG_RESET_ON_FORK 0x01
 
-int SchedEnterGhost(int pid, bool agent) {
-  // Enter ghOSt sched class.
+int SchedTaskEnterGhost(pid_t pid, int ctl_fd) {
   struct sched_attr attr = {
       .size = sizeof(sched_attr),
       .sched_policy = SCHED_GHOST,
-      .sched_runtime = static_cast<uint64_t>(Ghost::GetGlobalEnclaveCtlFd()),
+      .sched_priority = GHOST_SCHED_TASK_PRIO,
   };
-  if (agent) {
-    attr.sched_priority = GHOST_SCHED_AGENT_PRIO;
-    // We don't want to leak ghOSt threads into the agent address space.
-    attr.sched_flags |= SCHED_FLAG_RESET_ON_FORK;
-  } else {
-    attr.sched_priority = GHOST_SCHED_TASK_PRIO;
+  if (ctl_fd == -1) {
+    ctl_fd = Ghost::GetGlobalEnclaveCtlFd();
   }
+  attr.sched_runtime = ctl_fd;
   const int ret = syscall(__NR_sched_setattr, pid, &attr, /*flags=*/0);
-  // Trust but verify.
+  // We used to "Trust but verify" that pid was in ghost.  However, it's
+  // possible that the syscall succeeded, but the enclave was immediately
+  // destroyed, and our task is back in CFS already.
+  return ret;
+}
+
+int SchedAgentEnterGhost(int ctl_fd, int queue_fd) {
+  struct sched_attr attr = {
+      .size = sizeof(sched_attr),
+      .sched_policy = SCHED_GHOST,
+      // We don't want to leak ghOSt threads into the agent address space.
+      .sched_flags = SCHED_FLAG_RESET_ON_FORK,
+      .sched_priority = GHOST_SCHED_AGENT_PRIO,
+  };
+  attr.sched_runtime = ctl_fd;
+  attr.sched_deadline = queue_fd;
+  const int ret = syscall(__NR_sched_setattr, 0, &attr, /*flags=*/0);
   if (!ret) {
-    CHECK_EQ(sched_getscheduler(pid),
-             SCHED_GHOST | (agent ? SCHED_RESET_ON_FORK : 0));
+    CHECK_EQ(sched_getscheduler(0), SCHED_GHOST | SCHED_RESET_ON_FORK);
   }
   return ret;
 }
@@ -304,7 +315,7 @@ GhostThread::GhostThread(KernelScheduler ksched, std::function<void()> work)
     started_.Notify();
 
     if (ksched_ == KernelScheduler::kGhost) {
-      const int ret = SchedEnterGhost(0, false);
+      const int ret = SchedTaskEnterGhost(/*pid=*/0);
       CHECK_EQ(ret, 0);
     }
     std::move(w)();

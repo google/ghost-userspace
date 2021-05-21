@@ -147,7 +147,9 @@ class Enclave {
  protected:
   Topology* topology_;
   CpuList enclave_cpus_;
+  // TODO move these and the "passed in enclave" to LocalEnclave
   int dir_fd_ = -1;
+  int ctl_fd_ = -1;
 
   // Specializations for Attach and Detach must invoke the base method.
   // Note: Invoked by the actual thread associated with the Agent, prior to
@@ -411,7 +413,6 @@ class LocalEnclave : public Enclave {
   CpuRep cpus_[kMaxCpus];
   ghost_cpu_data* data_region_ = nullptr;
   size_t data_region_size_ = 0;
-  int ctl_fd_ = -1;
   bool destroy_when_destructed_;
 };
 

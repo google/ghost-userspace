@@ -54,6 +54,7 @@ ShinjukuScheduler::ShinjukuScheduler(
     absl::Duration preemption_time_slice)
     : BasicDispatchScheduler(enclave, std::move(cpus), std::move(allocator)),
       global_cpu_(global_cpu),
+      global_channel_(GHOST_MAX_QUEUE_ELEMS, /*node=*/0),
       preemption_time_slice_(preemption_time_slice) {
   if (!cpus.IsSet(global_cpu_)) {
     Cpu c = cpus.Front();
@@ -844,6 +845,7 @@ std::unique_ptr<ShinjukuScheduler> SingleThreadShinjukuScheduler(
 }
 
 void ShinjukuAgent::AgentThread() {
+  Channel& global_channel = global_scheduler_->GetDefaultChannel();
   gtid().assign_name("Agent:" + std::to_string(cpu().id()));
   if (verbose() > 1) {
     printf("Agent tid:=%d\n", gtid().tid());
@@ -870,9 +872,9 @@ void ShinjukuAgent::AgentThread() {
       }
 
       Message msg;
-      while (!(msg = Peek(channel_)).empty()) {
+      while (!(msg = global_channel.Peek()).empty()) {
         global_scheduler_->DispatchMessage(msg);
-        Consume(channel_, msg);
+        global_channel.Consume(msg);
       }
 
       // Order matters here: when a worker is PAUSED we defer the

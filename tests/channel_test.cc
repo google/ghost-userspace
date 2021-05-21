@@ -39,7 +39,9 @@ class TestAgent : public Agent {
       : Agent(enclave, cpu),
         default_channel_(default_channel),
         task_channel_(task_channel),
-        task_new_callback_(callback) {}
+        task_new_callback_(callback) {
+    default_channel_->SetEnclaveDefault();
+  }
 
   // Wait for agent to idle.
   void WaitForIdle() { idle_.WaitForNotification(); }

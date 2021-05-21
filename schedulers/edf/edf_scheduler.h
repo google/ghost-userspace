@@ -140,6 +140,7 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
   ~EdfScheduler() final;
 
   void EnclaveReady() final;
+  Channel& GetDefaultChannel() final { return global_channel_; };
 
   void TaskNew(EdfTask* task, const Message& msg) final;
   void TaskRunnable(EdfTask* task, const Message& msg) final;
@@ -207,6 +208,7 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
   CpuState cpu_states_[MAX_CPUS];
 
   std::atomic<int32_t> global_cpu_;
+  Channel global_channel_;
   int num_tasks_ = 0;
   // Heapified runqueue
   std::vector<EdfTask*> run_queue_;
@@ -225,16 +227,13 @@ std::unique_ptr<EdfScheduler> SingleThreadEdfScheduler(Enclave* enclave,
 // global_scheduler->GetGlobalCPU callback.
 class GlobalSatAgent : public Agent {
  public:
-  GlobalSatAgent(Enclave* enclave, Cpu cpu, Channel* channel,
-                 EdfScheduler* global_scheduler)
-      : Agent(enclave, cpu),
-        channel_(channel),
-        global_scheduler_(global_scheduler) {}
+  GlobalSatAgent(Enclave* enclave, Cpu cpu, EdfScheduler* global_scheduler)
+      : Agent(enclave, cpu), global_scheduler_(global_scheduler) {}
 
   void AgentThread() override;
+  Scheduler* AgentScheduler() const override { return global_scheduler_; }
 
  private:
-  Channel* channel_;
   EdfScheduler* global_scheduler_;
 };
 
@@ -254,8 +253,7 @@ class GlobalConfig : public AgentConfig {
 template <class ENCLAVE>
 class GlobalEdfAgent : public FullAgent<ENCLAVE> {
  public:
-  explicit GlobalEdfAgent(GlobalConfig config)
-      : FullAgent<ENCLAVE>(config), global_channel_(GHOST_MAX_QUEUE_ELEMS, 0) {
+  explicit GlobalEdfAgent(GlobalConfig config) : FullAgent<ENCLAVE>(config) {
     global_scheduler_ = SingleThreadEdfScheduler(
         &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id());
     this->StartAgentTasks();
@@ -287,8 +285,8 @@ class GlobalEdfAgent : public FullAgent<ENCLAVE> {
   }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
-    return absl::make_unique<GlobalSatAgent>(
-        &this->enclave_, cpu, &global_channel_, global_scheduler_.get());
+    return absl::make_unique<GlobalSatAgent>(&this->enclave_, cpu,
+                                             global_scheduler_.get());
   }
 
   int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) override {
@@ -303,7 +301,6 @@ class GlobalEdfAgent : public FullAgent<ENCLAVE> {
 
  private:
   std::unique_ptr<EdfScheduler> global_scheduler_;
-  Channel global_channel_;
 };
 
 }  // namespace ghost
