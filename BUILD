@@ -165,8 +165,6 @@ cc_test(
         "tests/agent_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":agent",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -182,8 +180,6 @@ cc_test(
         "tests/api_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":agent",
         ":fifo_scheduler",
@@ -223,8 +219,6 @@ cc_test(
         "tests/base_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":base",
         "@com_google_absl//absl/synchronization",
@@ -239,8 +233,6 @@ cc_test(
         "tests/capabilities_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":agent",
         ":capabilities_test_lib",
@@ -266,8 +258,6 @@ cc_test(
         "tests/channel_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":agent",
         "@com_google_googletest//:gtest_main",
@@ -302,8 +292,6 @@ cc_test(
         "tests/edf_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":edf_scheduler",
         "@com_google_googletest//:gtest_main",
@@ -317,8 +305,6 @@ cc_test(
         "tests/enclave_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":agent",
         "@com_google_googletest//:gtest_main",
@@ -378,8 +364,6 @@ cc_test(
         "tests/prio_table_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":shared",
         "@com_google_googletest//:gtest_main",
@@ -410,8 +394,6 @@ cc_test(
         "tests/topology_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":agent",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -460,8 +442,6 @@ cc_test(
         "experiments/shared/thread_pool_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":base",
         ":ghost",
@@ -517,8 +497,6 @@ cc_test(
         "experiments/rocksdb/request.h",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":base",
         "@com_google_absl//absl/random",
@@ -548,8 +526,6 @@ cc_test(
         "experiments/rocksdb/request.h",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":base",
         ":experiments_shared",
@@ -584,8 +560,6 @@ cc_test(
         "experiments/rocksdb/request.h",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":base",
         ":experiments_shared",
@@ -608,8 +582,6 @@ cc_test(
         "experiments/rocksdb/database_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":base",
         "//third_party:rocksdb",
@@ -631,8 +603,6 @@ cc_test(
         "experiments/rocksdb/synthetic_network_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":base",
         "//third_party:rocksdb",
@@ -682,8 +652,6 @@ cc_test(
         "experiments/antagonist/results.h",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":base",
         ":experiments_shared",
@@ -703,8 +671,6 @@ cc_test(
         "experiments/antagonist/results.h",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":base",
         ":experiments_shared",
@@ -723,8 +689,6 @@ cc_test(
         "experiments/antagonist/results_test.cc",
     ],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":base",
         "@com_google_absl//absl/strings",
@@ -753,8 +717,6 @@ cc_test(
     size = "small",
     srcs = ["experiments/microbenchmarks/ioctl_test.cc"],
     copts = compiler_flags,
-    features = ["fully_static_link"],
-    linkstatic = 1,
     deps = [
         ":agent",
         ":ghost",
