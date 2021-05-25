@@ -93,13 +93,10 @@ pid_t Gtid::tid() const {
 
 int64_t GetGtid() {
   int64_t gtid;
-  int ret = syscall(__NR_ghost, GHOST_GET_GTID, &gtid);
+  int ret = syscall(__NR_ghost, GHOST_BASE_GET_GTID, &gtid);
   if (ABSL_PREDICT_FALSE(ret < 0)) {
-    CHECK_EQ(errno, ENOSYS);
     return (int64_t)GetTID() << GHOST_TID_SEQNUM_BITS;
   }
-  CHECK_EQ(ret, 0);
-  CHECK_GT(gtid, 0);
   return gtid;
 }
 

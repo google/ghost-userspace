@@ -32,7 +32,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION  29
+#define GHOST_VERSION	30
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -94,7 +94,7 @@ struct ghost_ioc_sw_get_info {
 	struct ghost_sw_info response;
 };
 
-#define GHOST_IOC_NULL                  _IO('g', 0)
+#define GHOST_IOC_NULL			_IO('g', 0)
 #define GHOST_IOC_SW_GET_INFO		_IOWR('g', 1, struct ghost_ioc_sw_get_info *)
 #define GHOST_IOC_SW_FREE		_IOW('g', 2, struct ghost_sw_info *)
 
@@ -284,11 +284,10 @@ struct ghost_ring {
 /*
  * 'ops' supported by gsys_ghost().
  */
-enum GHOST_OPS {
+enum ghost_ops {
 	GHOST_NULL,
 	GHOST_CREATE_QUEUE,
 	GHOST_ASSOCIATE_QUEUE,
-	GHOST_SET_DEFAULT_QUEUE,
 	GHOST_CONFIG_QUEUE_WAKEUP,
 	GHOST_SET_OPTION,
 	GHOST_GET_CPU_TIME,
@@ -296,7 +295,32 @@ enum GHOST_OPS {
 	GHOST_SYNC_GROUP_TXN,
 	GHOST_TIMERFD_SETTIME,
 	GHOST_GTID_LOOKUP,
-	GHOST_GET_GTID,
+	GHOST_GET_GTID_10,	/* TODO: deprecate */
+	GHOST_GET_GTID_11,	/* TODO: deprecate */
+	GHOST_SET_DEFAULT_QUEUE,
+};
+
+/*
+ * 'ops' supported by gsys_ghost() that are used by the 'base' library in
+ * userspace. Arbitrary applications may use the 'base' library requiring
+ * these 'ops' to be immutable (both in terms of the entry-point and the
+ * functionality).
+ *
+ * The 'base' library can detect support for a particular op as follows:
+ * - return value 0 indicates that the 'op' was successful.
+ * - return value of -1 indicates that 'op' was not successful:
+ *   - ENOSYS: kernel does not support ghost.
+ *   - EOPNOTSUPP: kernel supports ghost but doesn't recognize this op.
+ *     (for e.g. newer binary running on an older kernel).
+ *   - any other errno indicates an op-specific error.
+ */
+enum ghost_base_ops {
+	_GHOST_BASE_OP_FIRST = 65536,	/* avoid overlap with 'ghost_ops' */
+	GHOST_BASE_GET_GTID = _GHOST_BASE_OP_FIRST,
+
+	/*
+	 * New ops must be added to the end of this enumeration.
+	 */
 };
 
 /* status flags for GHOST_ASSOCIATE_QUEUE */
