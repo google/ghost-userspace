@@ -18,13 +18,9 @@
 
 namespace ghost {
 
-void SolScheduler::CpuTick(const Message& msg) {
-  // Nothing for now.
-}
+void SolScheduler::CpuNotIdle(const Message& msg) { CHECK(0); }
 
-void SolScheduler::CpuNotIdle(const Message& msg) {
-  CHECK(0);
-}
+void SolScheduler::CpuTimerExpired(const Message& msg) { CHECK(0); }
 
 SolScheduler::SolScheduler(Enclave* enclave, CpuList cpus,
                            std::shared_ptr<TaskAllocator<SolTask>> allocator,
@@ -42,14 +38,14 @@ SolScheduler::SolScheduler(Enclave* enclave, CpuList cpus,
 SolScheduler::~SolScheduler() {}
 
 void SolScheduler::EnclaveReady() {
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
     cs->agent = enclave()->GetAgent(cpu);
     CHECK_NE(cs->agent, nullptr);
   }
 }
 
-bool SolScheduler::Available(Cpu cpu) {
+bool SolScheduler::Available(const Cpu& cpu) {
   CpuState* cs = cpu_state(cpu);
 
   if (cs->agent) return cs->agent->cpu_avail();
@@ -72,7 +68,7 @@ void SolScheduler::DumpAllTasks() {
   });
 }
 
-void SolScheduler::DumpState(Cpu agent_cpu, int flags) {
+void SolScheduler::DumpState(const Cpu& agent_cpu, int flags) {
   if (flags & kDumpAllTasks) {
     DumpAllTasks();
   }
@@ -82,7 +78,7 @@ void SolScheduler::DumpState(Cpu agent_cpu, int flags) {
   }
 
   fprintf(stderr, "SchedState: ");
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
     fprintf(stderr, "%d:", cpu.id());
     if (!cs->current) {
@@ -131,9 +127,7 @@ void SolScheduler::TaskRunnable(SolTask* task, const Message& msg) {
   Enqueue(task);
 }
 
-void SolScheduler::TaskDeparted(SolTask* task, const Message& msg) {
-  CHECK(0);
-}
+void SolScheduler::TaskDeparted(SolTask* task, const Message& msg) { CHECK(0); }
 
 void SolScheduler::TaskDead(SolTask* task, const Message& msg) {
   CHECK_EQ(task->run_state, SolTask::RunState::kBlocked);
@@ -141,7 +135,7 @@ void SolScheduler::TaskDead(SolTask* task, const Message& msg) {
   num_tasks_--;
 }
 
-bool SolScheduler::SyncCpuState(Cpu cpu) {
+bool SolScheduler::SyncCpuState(const Cpu& cpu) {
   CHECK(cpu.valid());
   CpuState* cs = cpu_state(cpu);
   CHECK_NE(cs->next, nullptr);
@@ -315,12 +309,12 @@ bool SolScheduler::PreemptTask(SolTask* prev, SolTask* next,
 }
 
 void SolScheduler::GlobalSchedule(const StatusWord& agent_sw,
-                                       StatusWord::BarrierToken agent_sw_last) {
+                                  StatusWord::BarrierToken agent_sw_last) {
   const int global_cpu_id = GetGlobalCPUId();
   CpuList available = topology()->EmptyCpuList();
   CpuList assigned = topology()->EmptyCpuList();
 
-  for (const Cpu& cpu: cpus()) {
+  for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
     RunRequest* req = enclave()->GetRunRequest(cpu);
 
@@ -413,8 +407,8 @@ void SolScheduler::GlobalSchedule(const StatusWord& agent_sw,
 
     RunRequest* req = enclave()->GetRunRequest(next->cpu);
     req->Open({
-      .target = next->gtid,
-      .target_barrier = next->seqnum,
+        .target = next->gtid,
+        .target_barrier = next->seqnum,
     });
 
     cs->next = next;
@@ -447,8 +441,7 @@ bool SolScheduler::PickNextGlobalCPU(StatusWord::BarrierToken agent_barrier,
   int numa_node = global_cpu.numa_node();
 
   // Let's make sure we do some useful work before moving to another cpu.
-  if (iterations_ & 0xff)
-    return false;
+  if (iterations_ & 0xff) return false;
 
   for (const Cpu& cpu : global_cpu.siblings()) {
     if (cpu.id() == global_cpu.id()) continue;
@@ -494,7 +487,7 @@ found:
   RunRequest* req = enclave()->GetRunRequest(target);
   if (cs->next) {
     if (!req->Abort()) {
-      enclave()->CompleteRunRequest(req);   // XXX try to avoid?
+      enclave()->CompleteRunRequest(req);  // XXX try to avoid?
     }
     SyncCpuState(cs->next->cpu);
   }
@@ -522,10 +515,10 @@ found:
   return true;
 }
 
-std::unique_ptr<SolScheduler> SingleThreadSolScheduler(
-    Enclave* enclave, CpuList cpus, int32_t global_cpu) {
-  auto allocator =
-      std::make_shared<SingleThreadMallocTaskAllocator<SolTask>>();
+std::unique_ptr<SolScheduler> SingleThreadSolScheduler(Enclave* enclave,
+                                                       CpuList cpus,
+                                                       int32_t global_cpu) {
+  auto allocator = std::make_shared<SingleThreadMallocTaskAllocator<SolTask>>();
   auto scheduler = absl::make_unique<SolScheduler>(
       enclave, std::move(cpus), std::move(allocator), global_cpu);
   return scheduler;

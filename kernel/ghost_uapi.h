@@ -32,7 +32,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	30
+#define GHOST_VERSION	35
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -120,6 +120,7 @@ struct ghost_status_word {
 	uint32_t barrier;
 	uint32_t flags;
 	uint64_t gtid;
+	int64_t switch_time;	/* time at which task was context-switched onto CPU */
 	uint64_t runtime;	/* total time spent on the CPU in nsecs */
 } __attribute__((__aligned__(32)));
 
@@ -176,6 +177,7 @@ enum {
 	MSG_TASK_YIELD,
 	MSG_TASK_DEPARTED,
 	MSG_TASK_SWITCHTO,
+	MSG_TASK_AFFINITY_CHANGED,
 
 	/* cpu messages */
 	MSG_CPU_TICK		= _MSG_CPU_FIRST,
@@ -222,9 +224,27 @@ struct ghost_msg_payload_task_departed {
 	char from_switchto;
 };
 
+struct ghost_msg_payload_task_affinity_changed {
+	uint64_t gtid;
+};
+
 struct ghost_msg_payload_task_wakeup {
 	uint64_t gtid;
 	char deferrable;	/* bool: 0 or 1 */
+
+	int last_ran_cpu;	/*
+				 * CPU that task last ran on (may be different
+				 * than where it was last scheduled by the
+				 * agent due to switchto).
+				 */
+
+	int wake_up_cpu;	/*
+				 * CPU where the task was woken up (this is
+				 * typically where the task last ran but it
+				 * may also be the waker's cpu).
+				 */
+
+	int waker_cpu;		/* CPU of the waker task */
 };
 
 struct ghost_msg_payload_task_switchto {
@@ -359,45 +379,6 @@ enum txn_commit_at {
 /* ghost transaction */
 
 /*
- * _ghost_txn_state_t is not expected to be used anywhere except as the type
- * of ghost_txn::state below. See cl/350179823 as an example of unintentional
- * consequences.
- */
-#ifdef __cplusplus
-#include <atomic>
-typedef std::atomic<int32_t> _ghost_txn_state_t;
-typedef std::atomic<int32_t> _ghost_txn_owner_t;
-#else
-typedef int32_t _ghost_txn_state_t;
-typedef int32_t _ghost_txn_owner_t;
-#endif
-
-struct ghost_txn {
-	int32_t version;
-	int32_t cpu;		/* readonly-after-init */
-	_ghost_txn_state_t state;
-	uint32_t agent_barrier;
-	uint32_t task_barrier;
-	uint16_t run_flags;
-	uint8_t commit_flags;
-	uint8_t unused;
-	int64_t gtid;
-	/*
-	 * Context-dependent fields.
-	 */
-	union {
-		/* only used during a sync-group commit */
-		_ghost_txn_owner_t sync_group_owner;
-	} u;
-} __ghost_cacheline_aligned;
-
-struct ghost_cpu_data {
-	struct ghost_txn	txn;
-} __ghost_page_aligned;
-
-#define GHOST_TXN_VERSION	0
-
-/*
  * (txn->state == GHOST_TXN_READY)		    transaction is ready
  * (txn->state >= 0 && txn->state < nr_cpu_ids)	    transaction is claimed
  * (txn->state < 0)				    transaction is committed
@@ -427,6 +408,51 @@ enum ghost_txn_state {
 
 	GHOST_TXN_READY			= INT_MAX,
 };
+
+/*
+ * _ghost_txn_state_t is not expected to be used anywhere except as the type
+ * of ghost_txn::state below. See cl/350179823 as an example of unintentional
+ * consequences.
+ */
+#ifdef __cplusplus
+#include <atomic>
+typedef std::atomic<ghost_txn_state> _ghost_txn_state_t;
+/*
+ * To be safe, check that the size of '_ghost_txn_state_t' is equal to the size
+ * of 'int32_t', which is the size that the kernel assumes the state is.
+ */
+static_assert(sizeof(_ghost_txn_state_t) == sizeof(int32_t));
+typedef std::atomic<int32_t> _ghost_txn_owner_t;
+#else
+typedef int32_t _ghost_txn_state_t;
+typedef int32_t _ghost_txn_owner_t;
+#endif
+
+struct ghost_txn {
+	int32_t version;
+	int32_t cpu;		/* readonly-after-init */
+	_ghost_txn_state_t state;
+	uint32_t agent_barrier;
+	uint32_t task_barrier;
+	uint16_t run_flags;
+	uint8_t commit_flags;
+	uint8_t unused;
+	int64_t gtid;
+	int64_t commit_time;	/* the time that the txn commit succeeded/failed */
+	/*
+	 * Context-dependent fields.
+	 */
+	union {
+		/* only used during a sync-group commit */
+		_ghost_txn_owner_t sync_group_owner;
+	} u;
+} __ghost_cacheline_aligned;
+
+struct ghost_cpu_data {
+	struct ghost_txn	txn;
+} __ghost_page_aligned;
+
+#define GHOST_TXN_VERSION	0
 
 /* GHOST_TIMERFD_SETTIME */
 struct timerfd_ghost {

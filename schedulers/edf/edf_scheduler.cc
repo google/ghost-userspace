@@ -18,14 +18,6 @@
 
 namespace ghost {
 
-void EdfScheduler::CpuTick(const Message& msg) {
-  // Nothing for now.
-}
-
-void EdfScheduler::CpuNotIdle(const Message& msg) {
-  // Nothing for now.
-}
-
 void EdfTask::SetRuntime(absl::Duration new_runtime,
                          bool update_elapsed_runtime) {
   CHECK_GE(new_runtime, runtime);
@@ -86,24 +78,16 @@ EdfScheduler::EdfScheduler(Enclave* enclave, CpuList cpus,
 EdfScheduler::~EdfScheduler() {}
 
 void EdfScheduler::EnclaveReady() {
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
     cs->agent = enclave()->GetAgent(cpu);
     CHECK_NE(cs->agent, nullptr);
   }
 }
 
-bool EdfScheduler::Available(Cpu cpu) {
+bool EdfScheduler::Available(const Cpu& cpu) {
   CpuState* cs = cpu_state(cpu);
   return cs->agent->cpu_avail();
-}
-
-// We validate state is consistent before actually tearing anything down since
-// tear-down involves pings and agents potentially becoming non-coherent as they
-// are removed sequentially.
-void EdfScheduler::ValidatePreExitState() {
-  CHECK_EQ(num_tasks_, 0);
-  CHECK_EQ(run_queue_.size(), 0);
 }
 
 void EdfScheduler::DumpAllTasks() {
@@ -118,7 +102,7 @@ void EdfScheduler::DumpAllTasks() {
   for (auto const& it : orchs_) it.second->DumpSchedParams();
 }
 
-void EdfScheduler::DumpState(Cpu agent_cpu, int flags) {
+void EdfScheduler::DumpState(const Cpu& agent_cpu, int flags) {
   if (flags & kDumpAllTasks) {
     DumpAllTasks();
   }
@@ -128,7 +112,7 @@ void EdfScheduler::DumpState(Cpu agent_cpu, int flags) {
   }
 
   fprintf(stderr, "SchedState: ");
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
     fprintf(stderr, "%d:", cpu.id());
     if (!cs->current) {
@@ -150,12 +134,22 @@ EdfScheduler::CpuState* EdfScheduler::cpu_state_of(const EdfTask* task) {
 }
 
 // Map the leader's shared memory region if we haven't already done so.
-void EdfScheduler::HandleNewGtid(pid_t tgid) {
+void EdfScheduler::HandleNewGtid(EdfTask* task, pid_t tgid) {
   CHECK_GE(tgid, 0);
 
   if (orchs_.find(tgid) == orchs_.end()) {
     auto orch = absl::make_unique<Orchestrator>();
-    CHECK(orch->Init(tgid));
+    if (!orch->Init(tgid)) {
+      // If the task's group leader has already exited and closed the PrioTable
+      // fd while we are handling TaskNew, it is possible that we cannot find
+      // the PrioTable.
+      // Just set has_work so that we schedule this task and allow it to exit.
+      // We also need to give it an sp; various places call task->sp->qos_.
+      static SchedParams dummy_sp;
+      task->has_work = true;
+      task->sp = &dummy_sp;
+      return;
+    }
     auto pair = std::make_pair(tgid, std::move(orch));
     orchs_.insert(std::move(pair));
   }
@@ -191,16 +185,18 @@ void EdfScheduler::TaskNew(EdfTask* task, const Message& msg) {
 
   const Gtid gtid(payload->gtid);
   const pid_t tgid = gtid.tgid();
-  HandleNewGtid(tgid);
+  HandleNewGtid(task, tgid);
   if (payload->runnable) Enqueue(task);
 
   num_tasks_++;
 
-  // Get the task's scheduling parameters (potentially updating its position
-  // in the runqueue).
-  auto iter = orchs_.find(tgid);
-  if (iter != orchs_.end()) {
-    iter->second->GetSchedParams(task->gtid, kSchedCallbackFunc);
+  if (!in_discovery_) {
+    // Get the task's scheduling parameters (potentially updating its position
+    // in the runqueue).
+    auto iter = orchs_.find(tgid);
+    if (iter != orchs_.end()) {
+      iter->second->GetSchedParams(task->gtid, kSchedCallbackFunc);
+    }
   }
 }
 
@@ -218,8 +214,7 @@ void EdfScheduler::TaskRunnable(EdfTask* task, const Message& msg) {
   Enqueue(task);
 }
 
-void EdfScheduler::TaskDeparted(EdfTask* task, const Message& msg) {
-}
+void EdfScheduler::TaskDeparted(EdfTask* task, const Message& msg) {}
 
 void EdfScheduler::TaskDead(EdfTask* task, const Message& msg) {
   CHECK_EQ(task->run_state,
@@ -304,6 +299,15 @@ void EdfScheduler::TaskYield(EdfTask* task, const Message& msg) {
   }
 }
 
+void EdfScheduler::DiscoveryStart() { in_discovery_ = true; }
+
+void EdfScheduler::DiscoveryComplete() {
+  for (auto& scraper : orchs_) {
+    scraper.second->RefreshAllSchedParams(kSchedCallbackFunc);
+  }
+  in_discovery_ = false;
+}
+
 bool EdfScheduler::PreemptTask(EdfTask* prev, EdfTask* next,
                                StatusWord::BarrierToken agent_barrier) {
   GHOST_DPRINT(2, stderr, "PREEMPT(%d)\n", prev->cpu);
@@ -321,9 +325,9 @@ bool EdfScheduler::PreemptTask(EdfTask* prev, EdfTask* next,
   RunRequest* req = enclave()->GetRunRequest(cpu);
   if (next) {
     req->Open({
-      .target = next->gtid,
-      .target_barrier = next->seqnum,
-      .agent_barrier = agent_barrier,
+        .target = next->gtid,
+        .target_barrier = next->seqnum,
+        .agent_barrier = agent_barrier,
     });
 
     if (!req->Commit()) {
@@ -517,6 +521,13 @@ void EdfScheduler::SchedParamsCallback(Orchestrator& orch,
     return;
   }
 
+  // Normally, the agent writes the Runnable bit in the PrioTable for
+  // Repeatables (see Case C, below).  However, the old agent may have crashed
+  // before it could set the bit, so we must do it.
+  if (in_discovery_ && orch.Repeating(sp) && !sp->HasWork()) {
+    orch.MakeEngineRunnable(sp);
+  }
+
   EdfTask* task = allocator()->GetTask(gtid);
   if (!task) {
     // We are too early (i.e. haven't seen MSG_TASK_NEW for gtid) in which
@@ -629,7 +640,7 @@ void EdfScheduler::GlobalSchedule(const StatusWord& agent_sw,
                                   StatusWord::BarrierToken agent_sw_last) {
   CpuList updated_cpus = MachineTopology()->EmptyCpuList();
 
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
 
     if (!Available(cpu) || cpu.id() == GetGlobalCPUId()) continue;
@@ -660,7 +671,7 @@ void EdfScheduler::GlobalSchedule(const StatusWord& agent_sw,
   }
 
   bool in_sync = true;
-  for (auto cpu : updated_cpus) {
+  for (const Cpu& cpu : updated_cpus) {
     CpuState* cs = cpu_state(cpu);
 
     EdfTask* next = cs->next;
@@ -721,7 +732,7 @@ void EdfScheduler::GlobalSchedule(const StatusWord& agent_sw,
 
 void EdfScheduler::PickNextGlobalCPU() {
   // TODO: Select CPUs more intelligently.
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     if (Available(cpu) && cpu.id() != GetGlobalCPUId()) {
       CpuState* cs = cpu_state(cpu);
       EdfTask* prev = cs->current;
@@ -769,7 +780,7 @@ void GlobalSatAgent::AgentThread() {
 
   PeriodicEdge debug_out(absl::Seconds(1));
 
-  while (!Finished() || !global_scheduler_->Empty()) {
+  while (!Finished()) {
     StatusWord::BarrierToken agent_barrier = status_word().barrier();
     // Check if we're assigned as the Global agent.
     if (cpu().id() != global_scheduler_->GetGlobalCPUId()) {

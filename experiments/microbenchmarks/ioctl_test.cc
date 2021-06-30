@@ -24,10 +24,10 @@ namespace ghost {
 void BM_ghost_null_ioctl(benchmark::State& state) {
   Ghost::InitCore();
   Topology* topology = MachineTopology();
-  LocalEnclave enclave(topology, CpuList(*topology));
+  LocalEnclave enclave(AgentConfig(topology, CpuList(*topology)));
   int ctl = Ghost::GetGlobalEnclaveCtlFd();
 
-  for (auto s : state) {
+  for (auto _ : state) {
     CHECK_EQ(ioctl(ctl, GHOST_IOC_NULL), 0);
   }
 }
@@ -36,9 +36,9 @@ BENCHMARK(BM_ghost_null_ioctl);
 void BM_ghost_null_gsys_lookup(benchmark::State& state) {
   Ghost::InitCore();
   Topology* topology = MachineTopology();
-  LocalEnclave enclave(topology, CpuList(*topology));
+  LocalEnclave enclave(AgentConfig(topology, CpuList(*topology)));
 
-  for (auto s : state) {
+  for (auto _ : state) {
     CHECK_EQ(Ghost::Null(true), 0);
   }
 }
@@ -47,15 +47,15 @@ BENCHMARK(BM_ghost_null_gsys_lookup);
 void BM_ghost_null_gsys_nolookup(benchmark::State& state) {
   Ghost::InitCore();
   Topology* topology = MachineTopology();
-  LocalEnclave enclave(topology, CpuList(*topology));
+  LocalEnclave enclave(AgentConfig(topology, CpuList(*topology)));
 
-  for (auto s : state) {
+  for (auto _ : state) {
     CHECK_EQ(Ghost::Null(false), 0);
   }
 }
 BENCHMARK(BM_ghost_null_gsys_nolookup);
 
-} // namespace ghost
+}  // namespace ghost
 
 int main(int argc, char** argv) {
   ::benchmark::RunSpecifiedBenchmarks();

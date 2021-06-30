@@ -23,6 +23,7 @@
 #include <sys/mman.h>
 
 #include <atomic>
+#include <cstddef>
 #include <functional>
 #include <thread>
 
@@ -31,11 +32,6 @@
 #include "lib/ghost.h"
 #include "lib/topology.h"
 #include "shared/shmem.h"
-
-namespace {
-// eBPF is excluded in open source for now.
-inline void bpf_init() {}
-}  // namespace
 
 namespace ghost {
 
@@ -50,17 +46,29 @@ class Agent {
   }
   virtual ~Agent();
 
-  // Initiates binding of *this to the constructor passed CPU.  All methods are
-  // valid to call on return.
+  // Initiates binding of *this to the constructor passed CPU.  Must call
+  // StartComplete.
   // REQUIRES: AgentThread() implementation must call SignalReady().
-  void Start();
+  void StartBegin();
+  // All methods are valid to call when StartComplete returns.
+  void StartComplete();
+  void Start() {
+    StartBegin();
+    StartComplete();
+  }
 
   // Signals Finished() and guarantees that the agent will wake to observe it.
+  // REQUIRES: May only be called once, and must call TerminateComplete.
+  void TerminateBegin();
   // Returns when the thread associated with *this has completed its tear-down.
-  // REQUIRES: May only be called once.
-  void Terminate();
+  // REQUIRES: May only be called once after TerminateBegin.
+  void TerminateComplete();
+  void Terminate() {
+    TerminateBegin();
+    TerminateComplete();
+  }
 
-  // Returns true iff Terminate() has been called.
+  // Returns true iff TerminateBegin() has been called.
   // Agents should test Finished() before each call to Run()
   inline bool Finished() { return finished_.HasBeenNotified(); }
 
@@ -68,12 +76,12 @@ class Agent {
 
   // Schedule the Agent to run on its CPU.  Can fail only if the CPU is
   // currently unavailable.
-  // REQUIRES: Start() has been called.
+  // REQUIRES: StartComplete() has been called.
   bool Ping();
 
   Gtid gtid() const { return gtid_; }
 
-  // REQUIRES: Start() has been called.
+  // REQUIRES: StartComplete() has been called.
   bool cpu_avail() const { return status_word().cpu_avail(); }
   bool boosted_priority() const { return status_word().boosted_priority(); }
   StatusWord::BarrierToken barrier() const { return status_word().barrier(); }
@@ -81,10 +89,10 @@ class Agent {
 
  protected:
   // Used by AgentThread() to signal that any internal, e.g. subclassed,
-  // initialization is complete and that Start() can return.
+  // initialization is complete and that StartComplete() can return.
   void SignalReady() { ready_.Notify(); }
 
-  // Optionally invoked by AgentThread() to synchronize on enclave readiness.
+  // Must be invoked by AgentThread() to synchronize on enclave readiness.
   void WaitForEnclaveReady() { enclave_ready_.WaitForNotification(); }
 
   virtual void AgentThread() = 0;
@@ -119,22 +127,6 @@ class Agent {
   friend class Enclave;
 };
 
-// Contains the configuration for an Agent, including the topology, the list of
-// cpus, etc.  Pass this to FullAgent.
-class AgentConfig {
- public:
-  Topology* topology_;
-  // If enclave_fd_ is set, then cpus_ is ignored.
-  CpuList cpus_;
-  int enclave_fd_ = -1;
-  bool use_bpf_ = false;
-
-  explicit AgentConfig(Topology* topology = nullptr,
-                       CpuList cpus = MachineTopology()->EmptyCpuList())
-      : topology_(topology), cpus_(cpus) {}
-  virtual ~AgentConfig() {}
-};
-
 // Encapsulation for any arguments that might need to be passed as part of an
 // RPC. These will be included in the shared memory region, which the
 // AgentProcess uses to communicate with the main agent thread.
@@ -144,6 +136,67 @@ class AgentConfig {
 struct AgentRpcArgs {
   int64_t arg0 = 0;
   int64_t arg1 = 0;
+};
+
+// Encapsulates the response for an RPC. Notably, in addition to an integer
+// response code this includes a fixed space for the RPC to respond with some
+// arbitrary bytes of data.
+//
+// Template parameter N determines the size of the response buffer (in bytes).
+//
+// DISCLAIMER: The serialization scheme here is only meant to be used for the
+// RPC mechanism operating over the shared memory region on a single machine.
+// Otherwise, it is not guaranteed that two arbitrary processes will be able
+// to serialize/deserialize the data in a consistent manner (for instance, due
+// to differences in struct padding, endianness, etc.).
+template <size_t BufferBytes = 1024 /* 1 KiB */>
+struct AgentRpcResponse {
+  // Converts the input to raw bytes and stores them in the internal data array.
+  // Note that T shouldn't contain any pointers, since these pointers will not
+  // have meaning for the process on the other side of the shared memory region.
+  // See disclaimer attached to the comment for this struct.
+  template <class T>
+  void Serialize(const T& t) {
+    static_assert(std::is_trivially_copyable<T>::value,
+                  "Template type needs to be trivially copyable.");
+    static_assert(!std::is_pointer<T>::value,
+                  "Template type must not be a pointer.");
+    static_assert(sizeof(T) <= BufferBytes,
+                  "Template type cannot be larger than the buffer.");
+
+    const std::byte* serialized =
+        reinterpret_cast<const std::byte*>(&t);
+    std::copy_n(serialized, sizeof(T), std::begin(data));
+  }
+
+  // Converts the raw bytes in the internal data array to the given type.
+  // See disclaimer attached to the comment for this struct.
+  template <class T>
+  T Deserialize() const {
+    static_assert(std::is_trivially_copyable<T>::value,
+                  "Template type needs to be trivially copyable.");
+    static_assert(!std::is_pointer<T>::value,
+                  "Template type must not be a pointer.");
+    static_assert(sizeof(T) <= BufferBytes,
+                  "Template type cannot be larger than the buffer.");
+
+    T t;
+    std::byte* deserialized = reinterpret_cast<std::byte*>(&t);
+    std::copy_n(std::begin(data), sizeof(T), deserialized);
+
+    return t;
+  }
+
+  // Most RPC functions will only need to return a value via this response_code.
+  int64_t response_code = -1;
+
+  // This is a region where arbitrary bytes of data can be written (ie. when the
+  // RPC mechanism needs to return more than just a response code). Intended to
+  // be used with the Serialize/Deserialize methods. We use a byte array instead
+  // of typing this as a templated type, since a given agent might want
+  // different RPCs to return different types of responses (all of which must
+  // fit within the shared memory region).
+  std::array<std::byte, BufferBytes> data;
 };
 
 // A full Agent entity, not to be confused with individual Agent tasks.
@@ -159,18 +212,8 @@ struct AgentRpcArgs {
 template <class ENCLAVE = LocalEnclave>
 class FullAgent {
  public:
-  ENCLAVE MakeEnclave(AgentConfig config) {
-    if (config.enclave_fd_ == -1) {
-      return ENCLAVE(config.topology_, config.cpus_);
-    }
-    return ENCLAVE(config.topology_, config.enclave_fd_);
-  }
-  explicit FullAgent(AgentConfig config)
-      : config_(config), enclave_(MakeEnclave(config)) {
+  explicit FullAgent(AgentConfig config) : enclave_(config) {
     Ghost::InitCore();
-    if (config.use_bpf_) {
-      bpf_init();
-    }
   }
   virtual ~FullAgent() {
     // Derived dtors should have called TerminateAgentTasks().
@@ -179,7 +222,8 @@ class FullAgent {
     }
   }
 
-  virtual int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) = 0;
+  virtual void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                          AgentRpcResponse<>& response) = 0;
 
   FullAgent(const FullAgent&) = delete;
   FullAgent& operator=(const FullAgent&) = delete;
@@ -201,20 +245,39 @@ class FullAgent {
   // Other member variables and functions in this class also need to
   // be adorned with 'this' when referenced by the derived class.
   void StartAgentTasks() {
-    for (auto cpu : *enclave_.cpus()) {
+    // We split start into StartBegin and StartComplete to speed up
+    // initialization.  We create all agent tasks, and they all migrate to their
+    // cpus and wait until the old agent (if any) dies.
+    for (const Cpu& cpu : *enclave_.cpus()) {
       agents_.push_back(MakeAgent(cpu));
-      agents_.back()->Start();
+      agents_.back()->StartBegin();
+    }
+    for (auto& agent : agents_) {
+      agent->StartComplete();
     }
   }
 
   // Called by derived dtors
   void TerminateAgentTasks() {
+    enclave_.PrepareToExit();
+    // Terminating an agent takes O(100us), much of which is due to the
+    // munlock_vma_pages_range in the kernel for the agent's stack.  Start to
+    // terminate in parallel so that the agent tasks get off cpu quickly in case
+    // of an inplace upgrade.  Then during TerminateComplete we'll join on the
+    // threads and munmap their stacks.
     for (auto& agent : agents_) {
-      agent->Terminate();
+      agent->TerminateBegin();
     }
+    for (auto& agent : agents_) {
+      agent->TerminateComplete();
+    }
+    // Explicitly destroy all Agents, which is when they are finally detached
+    // from the enclave.  Agent threads may call GetAgent on other cpus, so we
+    // must join on *all* agent threads to be sure it is safe to detach *any*
+    // agent thread.
+    agents_.clear();
   }
 
-  const AgentConfig config_;
   ENCLAVE enclave_;
   std::vector<std::unique_ptr<Agent>> agents_;
 };
@@ -279,7 +342,7 @@ class AgentProcess {
     // Child posts response, then notifies rpc_done_.
     int64_t rpc_req_;
     AgentRpcArgs rpc_args_;
-    int64_t rpc_res_;
+    AgentRpcResponse<> rpc_res_;
     Notification rpc_pending_;  // parent to child
     Notification rpc_done_;     // child_to_parent
 
@@ -302,7 +365,7 @@ class AgentProcess {
 
     full_agent_ = absl::make_unique<FULL_AGENT>(config);
 
-    GhostSignals::IgnoreAll();
+    GhostSignals::IgnoreCommon();
 
     // This spawns another CFS task.  We don't need to join on it, since we (the
     // child from fork) never leave this function.  The rpc_handler thread never
@@ -315,7 +378,8 @@ class AgentProcess {
       for (;;) {
         sb_->rpc_pending_.WaitForNotification();
         sb_->rpc_pending_.Reset();
-        sb_->rpc_res_ = full_agent_->RpcHandler(sb_->rpc_req_, sb_->rpc_args_);
+        sb_->rpc_res_ = AgentRpcResponse<>();  // Reset the response.
+        full_agent_->RpcHandler(sb_->rpc_req_, sb_->rpc_args_, sb_->rpc_res_);
         sb_->rpc_done_.Notify();
       }
     });
@@ -338,18 +402,31 @@ class AgentProcess {
     agent_proc_->WaitForChildExit();
   }
 
-  uint64_t Rpc(uint64_t req, const AgentRpcArgs& args = AgentRpcArgs()) {
-    // Need to prevent concurrent use of the shared memory region.
-    static absl::Mutex mtx(absl::kConstInit);
-    absl::MutexLock lock(&mtx);
+  // Issues the given RPC and returns the RPC response code. This does not
+  // return the full response data; RPCs that do not use the full response data
+  // don't need to suffer the overhead of copying the full response data.
+  //
+  // DISCLAIMER: This RPC mechanism is only meant to be used for the shared
+  // memory region on a single machine. See AgentRpcResponse for more details.
+  int64_t Rpc(uint64_t req, const AgentRpcArgs& args = AgentRpcArgs()) {
+    absl::MutexLock lock(&rpc_mutex_);
 
-    CHECK(!agent_proc_->IsChild());
+    PerformRpc(req, args);
+    return sb_->rpc_res_.response_code;
+  }
 
-    sb_->rpc_req_ = req;
-    sb_->rpc_args_ = args;
-    sb_->rpc_pending_.Notify();
-    sb_->rpc_done_.WaitForNotification();
-    sb_->rpc_done_.Reset();
+  // Issues the given RPC and returns the full response data. Since this is
+  // higher overhead than simply returning the response code, this should only
+  // be used by RPCs that actually use the full response data.
+  //
+  // DISCLAIMER: This RPC mechanism is naturally only meant to be used for the
+  // shared memory region on a single machine. See AgentRpcResponse for more
+  // details.
+  AgentRpcResponse<> RpcWithResponse(uint64_t req,
+                                   const AgentRpcArgs& args = AgentRpcArgs()) {
+    absl::MutexLock lock(&rpc_mutex_);
+
+    PerformRpc(req, args);
     return sb_->rpc_res_;
   }
 
@@ -370,7 +447,23 @@ class AgentProcess {
   std::unique_ptr<FULL_AGENT> full_agent_;
 
   // set in both
-  std::unique_ptr<SharedBlob> sb_;
+  std::unique_ptr<SharedBlob> sb_ ABSL_GUARDED_BY(rpc_mutex_);
+
+ private:
+  // Sends the RPC notification.
+  void PerformRpc(uint64_t req, const AgentRpcArgs& args)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(rpc_mutex_) {
+    CHECK(!agent_proc_->IsChild());
+
+    sb_->rpc_req_ = req;
+    sb_->rpc_args_ = args;
+    sb_->rpc_pending_.Notify();
+    sb_->rpc_done_.WaitForNotification();
+    sb_->rpc_done_.Reset();
+  }
+
+  // Prevents concurrent use of the shared memory region.
+  absl::Mutex rpc_mutex_;
 };
 
 }  // namespace ghost

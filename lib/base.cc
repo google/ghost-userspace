@@ -87,9 +87,7 @@ pid_t Gtid::tgid() const {
   return tgid;
 }
 
-pid_t Gtid::tid() const {
-  return gtid_raw_ >> GHOST_TID_SEQNUM_BITS;
-}
+pid_t Gtid::tid() const { return gtid_raw_ >> GHOST_TID_SEQNUM_BITS; }
 
 int64_t GetGtid() {
   int64_t gtid;
@@ -157,12 +155,13 @@ static std::string DecodeAddr(void* addr) {
   return std::string(symbol);
 }
 
-void PrintBacktrace(FILE* f) {
+void PrintBacktrace(FILE* f, void* uctx) {
   constexpr int kMaxDepth = 20;
   void* array[kMaxDepth];
   size_t size;
 
-  size = absl::GetStackTrace(array, ABSL_ARRAYSIZE(array), 1);
+  size = absl::GetStackTraceWithContext(array, ABSL_ARRAYSIZE(array), 1, uctx,
+                                        /*min_dropped_frames=*/nullptr);
   for (int i = 0; i < size; i++) {
     absl::FPrintF(f, "[%d] %p : %s\n", i, array[i], DecodeAddr(array[i]));
   }
@@ -170,8 +169,7 @@ void PrintBacktrace(FILE* f) {
 
 void Exit(int code) {
   if (code != 0) {
-    // Calling describe isn't perfectly safe but, useful.
-    std::cerr << Gtid::Current().describe() << " Backtrace:" << std::endl;
+    std::cerr << "PID " << Gtid::Current().tid() << " Backtrace:" << std::endl;
     PrintBacktrace(stderr);
   }
   std::exit(code);

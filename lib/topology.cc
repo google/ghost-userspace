@@ -95,8 +95,8 @@ absl::flat_hash_map<int, CpuList> Topology::GetAllSiblings(
   absl::flat_hash_map<std::string, std::vector<int>> sibling_map;
 
   for (uint32_t cpu = 0; cpu < num_cpus_; cpu++) {
-    std::filesystem::path path = path_prefix / absl::StrFormat("cpu%d", cpu) /
-        path_suffix;
+    std::filesystem::path path =
+        path_prefix / absl::StrFormat("cpu%d", cpu) / path_suffix;
     std::ifstream stream(path);
     std::string sibling_list;
     std::getline(stream, sibling_list);
@@ -185,8 +185,7 @@ Topology::Topology(InitHost) : num_cpus_(std::thread::hardware_concurrency()) {
     for (int c = 0; c < MAX_CPUS; ++c) {
       if (rep->siblings->IsSet(c)) {
         idx++;
-        if (c == rep->cpu)
-          break;
+        if (c == rep->cpu) break;
       }
     }
     CHECK_GE(idx, 0);
@@ -202,8 +201,7 @@ Topology::Topology(InitHost) : num_cpus_(std::thread::hardware_concurrency()) {
 
 void Topology::CreateTestSibling(
     int cpu, const std::filesystem::path& topology_test_directory,
-    const std::string& kernel_mapping,
-    const std::string& dir_path,
+    const std::string& kernel_mapping, const std::string& dir_path,
     const std::string& file_name) const {
   std::filesystem::path path =
       topology_test_directory / absl::StrFormat("cpu%d", cpu) / dir_path;
@@ -231,10 +229,10 @@ std::filesystem::path Topology::SetUpTestSiblings(
     std::string kernel_mapping =
         absl::StrFormat("kernel_mapping_iteration_%d", i);
 
-    CreateTestSibling(/*cpu=*/sibling0, topology_test_directory,
-                      kernel_mapping, "topology", "thread_siblings");
-    CreateTestSibling(/*cpu=*/sibling1, topology_test_directory,
-                      kernel_mapping, "topology", "thread_siblings");
+    CreateTestSibling(/*cpu=*/sibling0, topology_test_directory, kernel_mapping,
+                      "topology", "thread_siblings");
+    CreateTestSibling(/*cpu=*/sibling1, topology_test_directory, kernel_mapping,
+                      "topology", "thread_siblings");
   }
 
   // Construct an L3 siblings topology.
@@ -263,12 +261,11 @@ std::filesystem::path Topology::SetUpTestSiblings(
 
   for (int i = 0; i < sibling_offset; i += l3_offset) {
     for (int j = i; j < (i + l3_offset); j++) {
-      std::string sibling_list =
-          absl::StrFormat("%d-%d, %d-%d", i, i + (l3_offset - 1),
-                          i + sibling_offset,
-                          i + sibling_offset - 1 + l3_offset);
-      CreateTestSibling(j, topology_test_directory,
-                        sibling_list, "cache/index3", "shared_cpu_list");
+      std::string sibling_list = absl::StrFormat(
+          "%d-%d, %d-%d", i, i + (l3_offset - 1), i + sibling_offset,
+          i + sibling_offset - 1 + l3_offset);
+      CreateTestSibling(j, topology_test_directory, sibling_list,
+                        "cache/index3", "shared_cpu_list");
       CreateTestSibling(j + sibling_offset, topology_test_directory,
                         sibling_list, "cache/index3", "shared_cpu_list");
     }
@@ -308,8 +305,8 @@ Topology::Topology(InitTest, const std::filesystem::path& test_directory)
 
   const std::filesystem::path siblings_prefix =
       SetUpTestSiblings(test_directory);
-  absl::flat_hash_map<int, CpuList> siblings = GetAllSiblings(siblings_prefix,
-                                                    "topology/thread_siblings");
+  absl::flat_hash_map<int, CpuList> siblings =
+      GetAllSiblings(siblings_prefix, "topology/thread_siblings");
   absl::flat_hash_map<int, CpuList> l3_siblings =
       GetAllSiblings(siblings_prefix, "cache/index3/shared_cpu_list");
   CHECK_EQ(l3_siblings.size(), num_cpus_);
@@ -339,8 +336,7 @@ Topology::Topology(InitTest, const std::filesystem::path& test_directory)
     for (int c = 0; c < MAX_CPUS; ++c) {
       if (rep->siblings->IsSet(c)) {
         idx++;
-        if (c == rep->cpu)
-          break;
+        if (c == rep->cpu) break;
       }
     }
 

@@ -29,7 +29,6 @@
 ABSL_FLAG(std::string, ghost_cpus, "1-5", "cpulist");
 ABSL_FLAG(int32_t, globalcpu, -1,
           "Global cpu. If -1, then defaults to the first cpu in <cpus>");
-ABSL_FLAG(bool, bpf, true, "Load BPF programs");
 
 namespace ghost {
 
@@ -49,7 +48,6 @@ void ParseSolConfig(SolConfig* config) {
   Topology* topology = MachineTopology();
   config->topology_ = topology;
   config->cpus_ = ghost_cpus;
-  config->use_bpf_ = absl::GetFlag(FLAGS_bpf);
   config->global_cpu_ = topology->cpu(globalcpu);
 }
 
@@ -66,9 +64,9 @@ int main(int argc, char* argv[]) {
   printf("Core map\n");
 
   int n = 0;
-  for (auto c : config.topology_->all_cores()) {
+  for (const ghost::Cpu& c : config.topology_->all_cores()) {
     printf("( ");
-    for (auto s : c.siblings()) printf("%2d ", s.id());
+    for (const ghost::Cpu& s : c.siblings()) printf("%2d ", s.id());
     printf(")%c", ++n % 8 == 0 ? '\n' : '\t');
   }
   printf("\n");

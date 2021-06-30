@@ -109,7 +109,7 @@ TEST(CapabilitiesTest, AgentNice) {
   constexpr int kAgentCpu = 0;
   Topology* topology = MachineTopology();
   auto enclave = absl::make_unique<LocalEnclave>(
-      topology, topology->ToCpuList(std::vector<int>{kAgentCpu}));
+      AgentConfig(topology, topology->ToCpuList(std::vector<int>{kAgentCpu})));
   Channel default_channel(GHOST_MAX_QUEUE_ELEMS, /*node=*/0);
   default_channel.SetEnclaveDefault();
 

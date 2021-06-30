@@ -24,15 +24,15 @@
 namespace ghost {
 namespace {
 
+using ::testing::AnyOf;
 using ::testing::Eq;
 using ::testing::Ge;
 using ::testing::Gt;
-using ::testing::Lt;
-using ::testing::Ne;
-using ::testing::AnyOf;
+using ::testing::IsFalse;
 using ::testing::IsNull;
 using ::testing::IsTrue;
-using ::testing::IsFalse;
+using ::testing::Lt;
+using ::testing::Ne;
 using ::testing::NotNull;
 
 // DeadAgent tries to induce a race in stage_commit() such that task_rq_lock
@@ -119,12 +119,10 @@ class DeadAgent : public Agent {
       } else {
         // Schedule `task` on `other_cpu_`.
         RunRequest* req = enclave()->GetRunRequest(other_cpu_);
-        req->Open({
-          .target = task->gtid,
-          .target_barrier = task->seqnum,
-          .agent_barrier = agent_barrier,
-          .commit_flags = COMMIT_AT_TXN_COMMIT
-        });
+        req->Open({.target = task->gtid,
+                   .target_barrier = task->seqnum,
+                   .agent_barrier = agent_barrier,
+                   .commit_flags = COMMIT_AT_TXN_COMMIT});
 
         // We expect the Submit() to fail most of the time since we don't
         // track whether `task` can be legitimately scheduled but it does
@@ -177,14 +175,15 @@ class FullDeadAgent final : public FullAgent<ENCLAVE> {
                                         channel_ptr);
   }
 
-  int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) final {
-    return -1;
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse<>& response) final {
+    response.response_code = -1;
   }
 
  private:
-  Cpu sched_cpu_;                 // CPU running the main scheduling loop.
-  Cpu satellite_cpu_;             // Satellite agent CPU.
-  Channel channel_;               // Channel configured to wakeup `sched_cpu_`.
+  Cpu sched_cpu_;      // CPU running the main scheduling loop.
+  Cpu satellite_cpu_;  // Satellite agent CPU.
+  Channel channel_;    // Channel configured to wakeup `sched_cpu_`.
 };
 
 TEST(ApiTest, RunDeadTask) {
@@ -236,7 +235,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
 
   Channel& GetDefaultChannel() final { return *channel_; };
 
-  bool Empty(Cpu cpu) const {
+  bool Empty(const Cpu& cpu) const {
     // Non-scheduling CPUs only look at what's running on the local cpu.
     if (cpu != sched_cpu_) {
       const CpuState* cs = cpu_state(cpu);
@@ -255,7 +254,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
     return rq_.Empty();
   }
 
-  void Schedule(Cpu this_cpu, StatusWord::BarrierToken agent_barrier,
+  void Schedule(const Cpu& this_cpu, StatusWord::BarrierToken agent_barrier,
                 bool prio_boost, bool finished) {
     RunRequest* req = enclave()->GetRunRequest(this_cpu);
 
@@ -278,8 +277,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
       return;
     }
 
-    if (finished && Empty(this_cpu))
-      return;
+    if (finished && Empty(this_cpu)) return;
 
     // Populate 'cs->next' for each cpu in the enclave.
     for (const Cpu& cpu : cpus()) {
@@ -287,7 +285,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
       ASSERT_THAT(cs->next, IsNull());
 
       if (cs->current) {
-        cs->next = cs->current;     // exercise ALLOW_TASK_ONCPU.
+        cs->next = cs->current;  // exercise ALLOW_TASK_ONCPU.
       } else {
         cs->next = rq_.Dequeue();
       }
@@ -302,13 +300,13 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
       }
 
       req->Open({
-        .target = target,
-        .target_barrier = target_barrier,
-        .agent_barrier = agent_barrier,
-        .commit_flags = COMMIT_AT_TXN_COMMIT,
-        .run_flags = ALLOW_TASK_ONCPU,
-        .sync_group_owner = sync_group_owner,
-        .allow_txn_target_on_cpu = true,
+          .target = target,
+          .target_barrier = target_barrier,
+          .agent_barrier = agent_barrier,
+          .commit_flags = COMMIT_AT_TXN_COMMIT,
+          .run_flags = ALLOW_TASK_ONCPU,
+          .sync_group_owner = sync_group_owner,
+          .allow_txn_target_on_cpu = true,
       });
       ASSERT_THAT(req->sync_group_owned(), IsTrue());
       ASSERT_THAT(req->sync_group_owner_get(), Eq(sync_group_owner));
@@ -334,9 +332,9 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
         ASSERT_THAT(cs->next, NotNull());
         ASSERT_THAT(cs->current, IsNull());
         if (successful) {
-          TaskOnCpu(cs->next, cpu);   // task is oncpu.
+          TaskOnCpu(cs->next, cpu);  // task is oncpu.
         } else {
-          rq_.Enqueue(cs->next);      // put task back to the runqueue.
+          rq_.Enqueue(cs->next);  // put task back to the runqueue.
 
           // This is not intuitive but even though the overall sync_group
           // failed to commit it is possible for 'cs->next' to get oncpu
@@ -356,7 +354,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
         }
       }
 
-      cs->next = nullptr;             // reset for next scheduling round.
+      cs->next = nullptr;  // reset for next scheduling round.
     }
   }
 
@@ -415,23 +413,19 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
     allocator()->FreeTask(task);
   }
 
-  void CpuTick(const Message& msg) final {}
-
-  void CpuNotIdle(const Message& msg) final {}
-
  private:
   struct CpuState final {
     FifoTask* current = nullptr;
     FifoTask* next = nullptr;
   } ABSL_CACHELINE_ALIGNED;
 
-  CpuState* cpu_state(Cpu cpu) {
+  CpuState* cpu_state(const Cpu& cpu) {
     CHECK_GE(cpu.id(), 0);
     CHECK_LT(cpu.id(), cpu_states_.size());
     return &cpu_states_[cpu.id()];
   }
 
-  const CpuState* cpu_state(Cpu cpu) const {
+  const CpuState* cpu_state(const Cpu& cpu) const {
     CHECK_GE(cpu.id(), 0);
     CHECK_LT(cpu.id(), cpu_states_.size());
     return &cpu_states_[cpu.id()];
@@ -453,8 +447,8 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
       ASSERT_THAT(rq_.Erase(task), IsTrue());
     }
 
-    task->run_state = blocked ? FifoTaskState::kBlocked :
-                                FifoTaskState::kRunnable;
+    task->run_state =
+        blocked ? FifoTaskState::kBlocked : FifoTaskState::kRunnable;
   }
 
   void TaskOnCpu(FifoTask* task, const Cpu& cpu) {
@@ -473,7 +467,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
   std::unique_ptr<Channel> channel_;
 };
 
-template<typename T>
+template <typename T>
 class TestAgent : public Agent {
  public:
   TestAgent(Enclave* enclave, Cpu cpu, T* scheduler)
@@ -492,8 +486,7 @@ class TestAgent : public Agent {
       const bool prio_boost = status_word().boosted_priority();
       const bool finished = Finished();
 
-      if (finished && scheduler_->Empty(cpu()))
-        break;
+      if (finished && scheduler_->Empty(cpu())) break;
 
       scheduler_->Schedule(cpu(), agent_barrier, prio_boost, finished);
     }
@@ -509,25 +502,23 @@ class SyncGroupAgent final : public FullAgent<ENCLAVE> {
   explicit SyncGroupAgent(AgentConfig config) : FullAgent<ENCLAVE>(config) {
     auto allocator =
         std::make_shared<ThreadSafeMallocTaskAllocator<FifoTask>>();
-    scheduler_ = absl::make_unique<SyncGroupScheduler>(&this->enclave_,
-                                                       config.cpus_,
-                                                       std::move(allocator));
+    scheduler_ = absl::make_unique<SyncGroupScheduler>(
+        &this->enclave_, config.cpus_, std::move(allocator));
     scheduler_->GetDefaultChannel().SetEnclaveDefault();
     this->StartAgentTasks();
     this->enclave_.Ready();
   }
 
-  ~SyncGroupAgent() final {
-    this->TerminateAgentTasks();
-  }
+  ~SyncGroupAgent() final { this->TerminateAgentTasks(); }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) final {
     return absl::make_unique<TestAgent<SyncGroupScheduler>>(
         &this->enclave_, cpu, scheduler_.get());
   }
 
-  int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) final {
-    return -1;
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse<>& response) final {
+    response.response_code = -1;
   }
 
  private:
@@ -540,25 +531,27 @@ void SpinFor(absl::Duration d) {
     absl::Time b;
 
     // Try to minimize the contribution of arithmetic/Now() overhead.
-    for (int i = 0; i < 150; i++)
-      b = absl::Now();
+    for (int i = 0; i < 150; i++) b = absl::Now();
 
-    absl::Duration t = b-a;
+    absl::Duration t = b - a;
 
     // Don't count preempted time.
-    if (t < absl::Microseconds(100))
-      d -= t;
+    if (t < absl::Microseconds(100)) d -= t;
   }
 }
 
 // std:tuple<int,int> contains the test parameters:
 // - first field of tuple is number of cpus.
 // - second field of tuple is number of threads.
-class SyncGroupTest : public testing::TestWithParam<std::tuple<int, int>> {
-};
+class SyncGroupTest : public testing::TestWithParam<std::tuple<int, int>> {};
 
 TEST_P(SyncGroupTest, Commit) {
   const auto [num_cpus, num_threads] = GetParam();  // test parameters.
+
+  if (MachineTopology()->num_cpus() < num_cpus) {
+    GTEST_SKIP() << "must have at least " << num_cpus << " cpus";
+    return;
+  }
 
   // Create a 'cpulist' containing 'num_cpus' CPUs.
   const int first_cpu = 0;
@@ -584,17 +577,16 @@ TEST_P(SyncGroupTest, Commit) {
   }
 
   // Wait for all threads to finish.
-  for (auto& t : threads)
-    t->Join();
+  for (auto& t : threads) t->Join();
 
   Ghost::CloseGlobalEnclaveCtlFd();
 }
 
-INSTANTIATE_TEST_SUITE_P(SyncGroupTestConfig, SyncGroupTest,
-                         testing::Combine(
-                             testing::Values(1, 2, 4, 8),   // num_cpus
-                             testing::Values(1, 4, 8, 16))  // num_threads
-                         );
+INSTANTIATE_TEST_SUITE_P(
+    SyncGroupTestConfig, SyncGroupTest,
+    testing::Combine(testing::Values(1, 2, 4, 8),   // num_cpus
+                     testing::Values(1, 4, 8, 16))  // num_threads
+);
 
 class IdlingAgent : public Agent {
  public:
@@ -662,16 +654,15 @@ class FullIdlingAgent final : public FullAgent<ENCLAVE> {
     this->enclave_.Ready();
   }
 
-  ~FullIdlingAgent() final {
-    this->TerminateAgentTasks();
-  }
+  ~FullIdlingAgent() final { this->TerminateAgentTasks(); }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) final {
     const bool schedule = (cpu.id() == 0);  // schedule on the first cpu.
     return absl::make_unique<IdlingAgent>(&this->enclave_, cpu, schedule);
   }
 
-  int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) final {
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse<>& response) final {
     if (req == kNeedCpuNotIdle) {
       const int num_cpus = this->enclave_.cpus()->Size();
       std::vector<int> not_idle_msg_count(num_cpus);
@@ -708,16 +699,17 @@ class FullIdlingAgent final : public FullAgent<ENCLAVE> {
           }
         }
       }
-      return num_failures;
+      response.response_code = num_failures;
+      return;
     } else {
-      return -1;
+      response.response_code = -1;
+      return;
     }
   }
 
  private:
   Channel channel_;
 };
-
 
 TEST(IdleTest, NeedCpuNotIdle) {
   // cpu0   Spinning agent scheduling on cpus 1 and 2.
@@ -758,8 +750,7 @@ TEST(IdleTest, NeedCpuNotIdle) {
   }
 
   // Wait for all threads to finish.
-  for (auto& t : threads)
-    t->Join();
+  for (auto& t : threads) t->Join();
 
   // Verify that the kernel produces MSG_CPU_NOT_IDLE depending on whether
   // NEED_CPU_NOT_IDLE is set in `run_flags`.
@@ -801,7 +792,7 @@ class CoreScheduler {
     // the task last ran on.
   }
 
-  bool Empty(Cpu cpu) const {
+  bool Empty(const Cpu& cpu) const {
     absl::MutexLock lock(&mu_);
     return task_ == nullptr;
   }
@@ -817,16 +808,16 @@ class CoreScheduler {
     task_ = absl::make_unique<CoreSchedTask>(Gtid(gtid), sw_info);
     task_->run_state = CoreSchedTask::RunState::kRunnable;
     task_->seqnum = seqnum;
-    task_->sibling = 0;   // arbitrary.
+    task_->sibling = 0;  // arbitrary.
 
-    ASSERT_THAT(
-        task_channel_.AssociateTask(task_->gtid, task_->seqnum), IsTrue());
+    ASSERT_THAT(task_channel_.AssociateTask(task_->gtid, task_->seqnum),
+                IsTrue());
 
     const Cpu cpu = siblings_[task_->sibling];
     ASSERT_THAT(enclave_->GetAgent(cpu)->Ping(), IsTrue());
   }
 
-  void Schedule(Cpu agent_cpu, uint32_t agent_barrier, bool prio_boost,
+  void Schedule(const Cpu& agent_cpu, uint32_t agent_barrier, bool prio_boost,
                 bool finished) {
     // MutexLock cannot be used because we must drop the lock before
     // calling scheduling functions like LocalYield() that block in
@@ -928,8 +919,8 @@ class CoreScheduler {
     if (prio_boost || !task_ || !task_->runnable()) {
       // Don't yield CPU indefinitely if we have useful work to do:
       // e.g. schedule a runnable task or terminate.
-      const int run_flags = (task_ && task_->runnable()) || finished ?
-          RTLA_ON_IDLE : 0;
+      const int run_flags =
+          (task_ && task_->runnable()) || finished ? RTLA_ON_IDLE : 0;
       mu_.Unlock();
       RunRequest* req = enclave_->GetRunRequest(agent_cpu);
       req->LocalYield(agent_barrier, run_flags);
@@ -961,10 +952,10 @@ class CoreScheduler {
     next_sibling_ = other_sibling;
     RunRequest* other_req = enclave_->GetRunRequest(other_cpu);
     other_req->Open({
-      .target = cs->next->gtid,
-      .target_barrier = cs->next->seqnum,
-      .commit_flags = COMMIT_AT_TXN_COMMIT,
-      .sync_group_owner = sync_group_owner,
+        .target = cs->next->gtid,
+        .target_barrier = cs->next->seqnum,
+        .commit_flags = COMMIT_AT_TXN_COMMIT,
+        .sync_group_owner = sync_group_owner,
     });
     EXPECT_THAT(other_req->sync_group_owned(), IsTrue());
     EXPECT_THAT(other_req->sync_group_owner_get(), Eq(sync_group_owner));
@@ -1014,6 +1005,190 @@ TEST(ApiTest, CheckVersion) {
   // this test doesn't fail if the number we choose happens to be the current
   // kernel ABI version.
   ASSERT_THAT(kernel_abi_version, testing::Ne(GHOST_VERSION + 1));
+}
+
+// Bare-bones agent implementation that can schedule exactly one task.
+// TODO: Put agent and test thread into separate address spaces to
+// avoid potential deadlock.
+class TimeAgent : public Agent {
+ public:
+  TimeAgent(Enclave* enclave, Cpu cpu)
+      : Agent(enclave, cpu),
+        channel_(GHOST_MAX_QUEUE_ELEMS, kNumaNode,
+                 MachineTopology()->ToCpuList({cpu})) {
+    channel_.SetEnclaveDefault();
+  }
+
+  // Wait for agent to idle.
+  void WaitForIdle() { idle_.WaitForNotification(); }
+
+ protected:
+  void AgentThread() override {
+    // Boilerplate to synchronize startup until all agents are ready
+    // (mostly redundant since we only have a single agent in the test).
+    SignalReady();
+    WaitForEnclaveReady();
+
+    std::unique_ptr<Task> task(nullptr);
+    bool runnable = false;
+    while (true) {
+      while (true) {
+        Message msg = Peek(&channel_);
+        if (msg.empty()) break;
+
+        // Ignore all types other than task messages (e.g. CPU_TICK).
+        if (msg.is_task_msg() && msg.type() != MSG_TASK_NEW) {
+          ASSERT_THAT(task, NotNull());
+          task->Advance(msg.seqnum());
+        }
+
+        // Scheduling is simple: we track whether the task is runnable
+        // or blocked. If the task is runnable the agent switches to it
+        // and idles otherwise.
+        switch (msg.type()) {
+          case MSG_TASK_NEW: {
+            const ghost_msg_payload_task_new* payload =
+                static_cast<const ghost_msg_payload_task_new*>(msg.payload());
+
+            ASSERT_THAT(task, IsNull());
+            task =
+                absl::make_unique<Task>(Gtid(payload->gtid), payload->sw_info);
+            task->seqnum = msg.seqnum();
+            runnable = payload->runnable;
+            break;
+          }
+
+          case MSG_TASK_WAKEUP:
+            ASSERT_THAT(task, NotNull());
+            ASSERT_FALSE(runnable);
+            runnable = true;
+            break;
+
+          case MSG_TASK_BLOCKED:
+            ASSERT_THAT(task, NotNull());
+            ASSERT_TRUE(runnable);
+            runnable = false;
+            break;
+
+          case MSG_TASK_YIELD: {
+            ASSERT_THAT(task, NotNull());
+            ASSERT_TRUE(runnable);
+            runnable = true;
+            ASSERT_THAT(commit_time_, Ne(absl::UnixEpoch()));
+            absl::Duration switch_delay =
+                task->status_word.switch_time() - commit_time_;
+            EXPECT_THAT(switch_delay, Gt(absl::ZeroDuration()));
+            EXPECT_THAT(switch_delay, Lt(absl::Microseconds(100)));
+            break;
+          }
+
+          case MSG_TASK_DEAD:
+            ASSERT_THAT(task, NotNull());
+            ASSERT_FALSE(runnable);
+            task = nullptr;
+            break;
+
+          default:
+            // This includes task messages like TASK_PREEMPTED and cpu messages
+            // like CPU_TICK that don't influence runnability. We do handle
+            // MSG_TASK_YIELD as a special case above since we want to check the
+            // context switch time.
+            break;
+        }
+        Consume(&channel_, msg);
+      }
+
+      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      const bool prio_boost = status_word().boosted_priority();
+
+      if (Finished() && !task) break;
+
+      RunRequest* req = enclave()->GetRunRequest(cpu());
+      if (!task || !runnable || prio_boost) {
+        NotifyIdle();
+        req->LocalYield(agent_barrier, prio_boost ? RTLA_ON_IDLE : 0);
+      } else {
+        absl::Time now = MonotonicNow();
+        req->Open({
+            .target = task->gtid,
+            .target_barrier = task->seqnum,
+            .agent_barrier = agent_barrier,
+            .commit_flags = COMMIT_AT_TXN_COMMIT,
+        });
+        req->Commit();
+
+        commit_time_ = req->commit_time();
+        absl::Duration commit_delay = commit_time_ - now;
+        EXPECT_THAT(commit_delay, Gt(absl::ZeroDuration()));
+        EXPECT_THAT(commit_delay, Lt(absl::Microseconds(100)));
+      }
+    }
+  }
+
+ private:
+  // The NUMA node that the channel is on.
+  static constexpr int kNumaNode = 0;
+
+  // Notify the main thread when agent idles for the first time.
+  void NotifyIdle() {
+    if (first_idle_) {
+      first_idle_ = false;
+      idle_.Notify();
+    }
+  }
+
+  Channel channel_;
+
+  Notification idle_;
+  absl::Time commit_time_;
+  bool first_idle_ = true;
+};
+
+// Tests that the kernel writes plausible commit times to transactions and
+// plausible context switch times to task status words.
+TEST(ApiTest, KernelTimes) {
+  Ghost::InitCore();
+
+  // Arbitrary but safe because there must be at least one CPU.
+  constexpr int kCpuNum = 0;
+  Topology* topology = MachineTopology();
+  auto enclave = absl::make_unique<LocalEnclave>(
+      AgentConfig(topology, topology->ToCpuList(std::vector<int>{kCpuNum})));
+  const Cpu kAgentCpu = topology->cpu(kCpuNum);
+
+  TimeAgent agent(enclave.get(), kAgentCpu);
+  agent.Start();
+  enclave->Ready();
+
+  agent.WaitForIdle();
+
+  GhostThread t(GhostThread::KernelScheduler::kGhost, [] {
+    sched_yield();  // MSG_TASK_YIELD.
+  });
+  t.Join();
+
+  agent.Terminate();
+}
+
+// Tests that `Ghost::SchedGetAffinity()` returns the correct affinity mask for
+// a thread.
+TEST(ApiTest, SchedGetAffinity) {
+  // This test requires at least 4 CPUs.
+  if (MachineTopology()->num_cpus() < 4) {
+    GTEST_SKIP() << "must have at least 4 cpus";
+    return;
+  }
+
+  cpu_set_t set;
+  CPU_ZERO(&set);
+  CPU_SET(0, &set);
+  CPU_SET(2, &set);
+  CPU_SET(3, &set);
+  ASSERT_THAT(sched_setaffinity(0, sizeof(set), &set), Eq(0));
+
+  CpuList cpus = MachineTopology()->EmptyCpuList();
+  ASSERT_THAT(Ghost::SchedGetAffinity(Gtid::Current(), cpus), IsTrue());
+  EXPECT_THAT(cpus, Eq(MachineTopology()->ToCpuList(set)));
 }
 
 }  // namespace

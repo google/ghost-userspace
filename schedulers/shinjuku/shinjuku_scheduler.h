@@ -173,17 +173,10 @@ class ShinjukuScheduler : public BasicDispatchScheduler<ShinjukuTask> {
   void TaskBlocked(ShinjukuTask* task, const Message& msg) final;
   void TaskPreempted(ShinjukuTask* task, const Message& msg) final;
 
-  // Handles a timer tick. Currently a nop.
-  void CpuTick(const Message& msg) final;
-
-  // Handles cpu "not idle" message. Currently a nop.
-  void CpuNotIdle(const Message& msg) final;
+  void DiscoveryStart() final;
+  void DiscoveryComplete() final;
 
   bool Empty() { return num_tasks_ == 0; }
-  // We validate state is consistent before actually tearing anything down since
-  // tear-down involves pings and agents potentially becoming non-coherent as
-  // they are removed sequentially.
-  void ValidatePreExitState();
 
   // Refreshes updated sched items. Note that all sched items may be refreshed,
   // regardless of whether they have been updated or not, if the stream has
@@ -206,7 +199,7 @@ class ShinjukuScheduler : public BasicDispatchScheduler<ShinjukuTask> {
     return global_cpu_.load(std::memory_order_acquire);
   }
 
-  void SetGlobalCPU(Cpu cpu) {
+  void SetGlobalCPU(const Cpu& cpu) {
     global_cpu_.store(cpu.id(), std::memory_order_release);
   }
 
@@ -218,7 +211,7 @@ class ShinjukuScheduler : public BasicDispatchScheduler<ShinjukuTask> {
 
   // Print debug details about the current tasks managed by the global agent,
   // CPU state, and runqueue stats.
-  void DumpState(Cpu cpu, int flags) final;
+  void DumpState(const Cpu& cpu, int flags) final;
   std::atomic<bool> debug_runqueue_ = false;
 
   static constexpr int kDebugRunqueue = 1;
@@ -268,16 +261,16 @@ class ShinjukuScheduler : public BasicDispatchScheduler<ShinjukuTask> {
 
   // Handles a new process that has at least one of its threads enter the ghOSt
   // scheduling class (e.g., via sched_setscheduler()).
-  void HandleNewGtid(pid_t tgid);
+  void HandleNewGtid(ShinjukuTask* task, pid_t tgid);
 
   // Returns 'true' if a CPU can be scheduled by ghOSt. Returns 'false'
   // otherwise, usually because a higher-priority scheduling class (e.g., CFS)
   // is currently using the CPU.
-  bool Available(Cpu cpu);
+  bool Available(const Cpu& cpu);
 
   CpuState* cpu_state_of(const ShinjukuTask* task);
 
-  CpuState* cpu_state(Cpu cpu) { return &cpu_states_[cpu.id()]; }
+  CpuState* cpu_state(const Cpu& cpu) { return &cpu_states_[cpu.id()]; }
 
   size_t RunqueueSize() const {
     size_t size = 0;
@@ -310,6 +303,7 @@ class ShinjukuScheduler : public BasicDispatchScheduler<ShinjukuTask> {
   std::atomic<int32_t> global_cpu_;
   Channel global_channel_;
   int num_tasks_ = 0;
+  bool in_discovery_ = false;
 
   // Map from QoS level to runqueue
   // We use an 'std::map' rather than 'absl::flat_hash_map' because we need to
@@ -367,8 +361,6 @@ class FullShinjukuAgent : public FullAgent<ENCLAVE> {
   }
 
   ~FullShinjukuAgent() override {
-    global_scheduler_->ValidatePreExitState();
-
     // Terminate global agent before satellites to avoid a false negative error
     // from ghost_run(). e.g. when the global agent tries to schedule on a CPU
     // without an active satellite agent.
@@ -395,13 +387,16 @@ class FullShinjukuAgent : public FullAgent<ENCLAVE> {
                                             global_scheduler_.get());
   }
 
-  int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) override {
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse<>& response) override {
     switch (req) {
       case ShinjukuScheduler::kDebugRunqueue:
         global_scheduler_->debug_runqueue_ = true;
-        return 0;
+        response.response_code = 0;
+        return;
       default:
-        return -1;
+        response.response_code = -1;
+        return;
     }
   }
 

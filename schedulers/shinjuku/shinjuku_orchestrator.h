@@ -49,6 +49,8 @@ class ShinjukuSchedParams {
 
   // Copy the sched item's options from its 'sched_item' and 'work_class'.
   // Handles the synchronization required to copy the options out.
+  // Returns true if the SchedParams changed, necessitating running the
+  // SchedParamsCallback.
   inline bool SeqCopyParams(const sched_item* src, const work_class* wc) {
     uint32_t begin;
     bool success;
@@ -57,32 +59,47 @@ class ShinjukuSchedParams {
     // Elide copy if nothing changed. Should be the common case.
     if (begin == seqcount_) return false;
 
-    // If writer is in the middle of an update then make sure the agent
-    // doesn't yank the CPU from underneath it.
-    if ((begin & seqcount::kLocked) && !(flags_ & SCHED_ITEM_RUNNABLE)) {
-      seqcount_ = begin;
-      flags_ |= SCHED_ITEM_RUNNABLE;
-      return true;
-    }
+    // If we fail to read_end(), we could read intermediate state due to
+    // concurrent writes.  We'll only save them into the SchedParams on success;
+    // hence the stack variables.
+    uint32_t sid_l = src->sid;
+    uint32_t wcid_l = src->wcid;
+    uint64_t gpid_l = src->gpid;
+    uint32_t flags_l = src->flags;
+    uint64_t deadline_l = src->deadline;
 
-    sid_ = src->sid;
-    wcid_ = src->wcid;
-    gpid_ = src->gpid;
-    flags_ = src->flags;
-    deadline_ = src->deadline;
     success = src->seqcount.read_end(begin);
 
     qos_ = wc->qos;
-    CHECK_EQ(wcid_, wc->id);
 
-    // The Client may have concurrently clobbered various fields in the
-    // row while we were copying them individually. On !success, ensure
-    // that the next SeqCopyParams() call picks up all the fields again.
-    if (success) {
-      seqcount_ = begin;
-      return true;
+    if (!success) {
+      // If writer is in the middle of an update then make sure the agent
+      // doesn't yank the CPU from underneath it.  This is in case the writer
+      // *is* the task itself.  It may be modifying fields other than its
+      // runnability.  See cl/322185592 for an example.
+      if (!(flags_ & SCHED_ITEM_RUNNABLE)) {
+        // When we set seqcount_ = begin, we elide future copies from the
+        // sched_item into the SchedParams (see above).  It is safe to elide
+        // future copies in this case: once flags_ is marked runnable, it will
+        // not be cleared until we detect the seqcounter has changed and reread
+        // the PrioTable.  Since it is runnable, we do not need to worry about
+        // yanking the CPU from the sched_item writer.
+        seqcount_ = begin;
+        flags_ |= SCHED_ITEM_RUNNABLE;
+        return true;
+      }
+      // Otherwise, we don't update seqcount_ to ensure that the next
+      // SeqCopyParams() call picks up all the fields again.
+      return false;
     }
-    return false;
+
+    seqcount_ = begin;
+    sid_ = sid_l;
+    wcid_ = wcid_l;
+    gpid_ = gpid_l;
+    flags_ = flags_l;
+    deadline_ = deadline_l;
+    return true;
   }
 
  private:
@@ -129,6 +146,10 @@ class ShinjukuOrchestrator {
   // callback regardless of whether they have been updated or not.
   void RefreshSchedParams(const SchedCallbackFunc& SchedCallback);
 
+  // Calls 'RefreshSchedParam' with 'SchedCallback' on all sched items in the
+  // PrioTable.
+  void RefreshAllSchedParams(const SchedCallbackFunc& SchedCallback);
+
   // Returns 'true' if the sched item is a repeatable.
   inline bool Repeating(const ShinjukuSchedParams* sp) {
     const work_class* wc = table_.work_class(sp->GetWorkClass());
@@ -150,10 +171,6 @@ class ShinjukuOrchestrator {
   // Copies the options for the sched item corresponding to 'sid' out of the
   // PrioTable and then calls 'SchedCallback'.
   void RefreshSchedParam(uint32_t sid, const SchedCallbackFunc& SchedCallback);
-
-  // Calls 'RefreshSchedParam' with 'SchedCallback' on all sched items in the
-  // PrioTable.
-  void RefreshAllSchedParams(const SchedCallbackFunc& SchedCallback);
 
   PrioTable table_;
   uint32_t num_sched_items_ = 0;

@@ -280,7 +280,7 @@ int main(int argc, char* argv[]) {
   // min_cpus to num_cpus.  The minimum number of cpus depends on whether or not
   // we are skipping cpu0.  cpu0 counts for 1 cpu (conditionally).  We need two
   // cpus regardless of cpu0: one cpu for the agent, and another cpu to run the
-  // ghost tasks. 
+  // ghost tasks.
   int min_cpus = skip_cpu0 ? 3 : 2;
   for (int i = min_cpus; i <= num_cpus; ++i) {
     int nr_task_cpus = i - (skip_cpu0 ? 2 : 1);

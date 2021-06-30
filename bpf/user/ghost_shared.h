@@ -29,17 +29,16 @@
 // We can't just include the uapi header directly, since the uapi header pulls
 // in extra things that will conflict when BPF builds.  The long term fix is to
 // use a vmlinux generated against the ghost kernel.
-struct bpf_scheduler {
-};
+struct bpf_ghost_sched {};
 
-#define BPF_PROG_TYPE_SCHEDULER 35
-#define BPF_SCHEDULER_TICK 50
+#define BPF_PROG_TYPE_GHOST_SCHED 35
+#define BPF_GHOST_SCHED_SKIP_TICK 50
 
 // end uapi/linux/bpf.h
 
 #include <stdint.h>
 
-struct per_cpu_data {
+struct ghost_per_cpu_data {
   uint8_t want_tick;
 } __attribute__((aligned(64)));
 

@@ -24,7 +24,6 @@
 
 ABSL_FLAG(int32_t, firstcpu, 1, "First cpu to start scheduling from.");
 ABSL_FLAG(int32_t, ncpus, 5, "Schedule on <ncpus> starting from <firstcpu>");
-ABSL_FLAG(bool, bpf, false, "Load BPF programs");
 
 namespace ghost {
 
@@ -47,7 +46,6 @@ static void ParseAgentConfig(AgentConfig* config) {
   Topology* topology = MachineTopology();
   config->topology_ = topology;
   config->cpus_ = topology->ToCpuList(std::move(all_cpus_v));
-  config->use_bpf_ = absl::GetFlag(FLAGS_bpf);
 }
 
 }  // namespace ghost

@@ -123,10 +123,10 @@ class TestAgent : public Agent {
         req->LocalYield(agent_barrier, prio_boost ? RTLA_ON_IDLE : 0);
       } else {
         req->Open({
-          .target = task->gtid,
-          .target_barrier = task->seqnum,
-          .agent_barrier = agent_barrier,
-          .commit_flags = COMMIT_AT_TXN_COMMIT,
+            .target = task->gtid,
+            .target_barrier = task->seqnum,
+            .agent_barrier = agent_barrier,
+            .commit_flags = COMMIT_AT_TXN_COMMIT,
         });
         req->Commit();
       }
@@ -157,7 +157,7 @@ TEST(ChannelTest, Wakeup) {
   const int cpu_num = 0;
   Topology* topology = MachineTopology();
   auto enclave = absl::make_unique<LocalEnclave>(
-      topology, topology->ToCpuList(std::vector<int>{cpu_num}));
+      AgentConfig(topology, topology->ToCpuList(std::vector<int>{cpu_num})));
   Cpu agent_cpu = topology->cpu(cpu_num);
 
   // Configure 'chan0' to wakeup agent.
@@ -188,7 +188,7 @@ TEST(ChannelTest, Associate) {
   const int cpu_num = 0;
   Topology* topology = MachineTopology();
   auto enclave = absl::make_unique<LocalEnclave>(
-      topology, topology->ToCpuList(std::vector<int>{cpu_num}));
+      AgentConfig(topology, topology->ToCpuList(std::vector<int>{cpu_num})));
   Cpu agent_cpu = topology->cpu(cpu_num);
 
   // Configure both 'chan0' and 'chan1' to wakeup agent.
@@ -224,8 +224,8 @@ TEST(ChannelTest, Associate) {
 TEST(ChannelTest, MaxElements) {
   // Need an enclave to make a channel.
   Topology* topology = MachineTopology();
-  auto enclave =
-      absl::make_unique<LocalEnclave>(topology, topology->all_cpus());
+  auto enclave = absl::make_unique<LocalEnclave>(
+      AgentConfig(topology, topology->all_cpus()));
   for (int elems = GHOST_MAX_QUEUE_ELEMS; elems > 0; elems >>= 1) {
     Channel chan(elems, /*node=*/0);
     EXPECT_EQ(chan.max_elements(), elems);

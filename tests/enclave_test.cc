@@ -29,10 +29,10 @@ class EnclaveTest : public ::testing::Test {
 
 TEST_F(EnclaveTest, TxnRegionFree) {
   Topology* topology = MachineTopology();
-  const CpuList& all_cpus = topology->all_cpus();
+  const AgentConfig config(topology, topology->all_cpus());
 
   // Create an enclave.
-  auto enclave = absl::make_unique<LocalEnclave>(topology, all_cpus);
+  auto enclave = absl::make_unique<LocalEnclave>(config);
 
   // Destroy the enclave - this should release the transaction region
   // buffers in the destructor.
@@ -42,7 +42,7 @@ TEST_F(EnclaveTest, TxnRegionFree) {
   //
   // The constructor will CHECK fail if it cannot allocate the txn region
   // so if this succeeds the destructor is properly releasing the resource.
-  enclave = absl::make_unique<LocalEnclave>(topology, all_cpus);
+  enclave = absl::make_unique<LocalEnclave>(config);
 
   SUCCEED();
 }
@@ -103,9 +103,8 @@ static void TestSetCpus(int cpumask_fd, std::string mask, int cpulist_fd,
 }
 
 TEST_F(EnclaveTest, SetCpus) {
-  // These tests are on the LocalEnclave, which means they apply to actual cpus.
-  // Many tests require a certain number of cpus.  The tests below require at
-  // least 8.
+  // This test is on the LocalEnclave, which means it applies to actual cpus.
+  // Many tests require a certain number of cpus. This test requires at least 8.
   if (MachineTopology()->num_cpus() < 8) {
     GTEST_SKIP() << "must have at least 8 cpus";
     return;
@@ -195,6 +194,13 @@ static void CheckCpuMmap(void* mmap_addr, unsigned int cpuid) {
 }
 
 TEST_F(EnclaveTest, MmapTxn) {
+  // This test is on the LocalEnclave, which means it applies to actual cpus.
+  // Many tests require a certain number of cpus. This test requires at least 5.
+  if (MachineTopology()->num_cpus() < 5) {
+    GTEST_SKIP() << "must have at least 5 cpus";
+    return;
+  }
+
   int ctl_fd = LocalEnclave::MakeNextEnclave();
   // TODO: Change all of these CHECKs to ASSERT/EXPECTS
   CHECK_GE(ctl_fd, 0);
@@ -231,8 +237,8 @@ TEST_F(EnclaveTest, CpuListComma) {
 
   // Linux's cpumask requires a comma between every 32 bit chunk (8 hex
   // nibbles).  We want to test having at least one comma. (1,84218421)
-  CpuList comma_list =
-      MachineTopology()->ToCpuList({0, 5, 10, 15, 16, 21, 26, 31, 32});
+  CpuList comma_list = MachineTopology()->ToCpuList(
+      std::vector<int>{0, 5, 10, 15, 16, 21, 26, 31, 32});
   std::string comma_str = comma_list.CpuMaskStr();
 
   ssize_t ret = write(cpumask_fd, comma_str.c_str(), comma_str.length());
@@ -278,6 +284,13 @@ TEST_F(EnclaveTest, DestroyAndSetsched) {
   constexpr int kClientCpu = 0;
   constexpr int kDestroyerCpu = 1;
 
+  // This test is on the LocalEnclave, which means it applies to actual cpus.
+  // Many tests require a certain number of cpus. This test requires at least 2.
+  if (MachineTopology()->num_cpus() < 2) {
+    GTEST_SKIP() << "must have at least 2 cpus";
+    return;
+  }
+
   bool client_won = false;
   bool destroyer_won = false;
   bool failed = false;
@@ -314,11 +327,18 @@ TEST_F(EnclaveTest, DestroyAndSetsched) {
       if (ret != 0) {
         switch (errno) {
           case ENXIO:
+          case ENOMEM:
             // The client won the race.  We setsched and grabbed the enclave
-            // lock before it was dying.  There was no queue, which is an
-            // artifact of the test.  The race we are trying to expose is the
-            // enclave structure being freed and reused, particularly the page
-            // fault on the enclave lock.  ENXIO happens after that.
+            // lock before it was dying.
+            //
+            // The race we are trying to expose is the enclave structure being
+            // freed and reused, particularly the page fault on the enclave
+            // lock.  ENXIO/ENOMEM happens after that.
+            //
+            // ENXIO happens on older kernels where we required the enclave had
+            // a default queue to join.  ENOMEM happens on newer kernels, where
+            // we fail to get a status word.  Both of these cases are artifacts
+            // of the test: the enclave doesn't have queue nor a SW region
             client_won = true;
             break;
           case EBADF:
@@ -368,6 +388,14 @@ TEST_F(EnclaveTest, DestroyAndSetsched) {
   // not a sign of a bug.
   EXPECT_TRUE(client_won);
   EXPECT_TRUE(destroyer_won);
+}
+
+TEST_F(EnclaveTest, GetNrTasks) {
+  Topology* topology = MachineTopology();
+  auto enclave = absl::make_unique<LocalEnclave>(
+      AgentConfig(topology, topology->all_cpus()));
+
+  EXPECT_EQ(enclave->GetNrTasks(), 0);
 }
 
 }  // namespace

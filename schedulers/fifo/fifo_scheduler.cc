@@ -20,7 +20,7 @@ FifoScheduler::FifoScheduler(Enclave* enclave, CpuList cpulist,
                              std::shared_ptr<TaskAllocator<FifoTask>> allocator)
     : BasicDispatchScheduler(enclave, std::move(cpulist),
                              std::move(allocator)) {
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     // TODO: extend Cpu to get numa node.
     int node = 0;
     CpuState* cs = cpu_state(cpu);
@@ -43,7 +43,7 @@ void FifoScheduler::DumpAllTasks() {
   });
 }
 
-void FifoScheduler::DumpState(Cpu cpu, int flags) {
+void FifoScheduler::DumpState(const Cpu& cpu, int flags) {
   if (flags & Scheduler::kDumpAllTasks) {
     DumpAllTasks();
   }
@@ -147,8 +147,7 @@ void FifoScheduler::TaskRunnable(FifoTask* task, const Message& msg) {
   }
 }
 
-void FifoScheduler::TaskDeparted(FifoTask* task, const Message& msg) {
-}
+void FifoScheduler::TaskDeparted(FifoTask* task, const Message& msg) {}
 
 void FifoScheduler::TaskDead(FifoTask* task, const Message& msg) {
   CHECK(task->blocked());
@@ -203,16 +202,8 @@ void FifoScheduler::TaskSwitchto(FifoTask* task, const Message& msg) {
   TaskOffCpu(task, /*blocked=*/true, /*from_switchto=*/false);
 }
 
-void FifoScheduler::CpuTick(const Message& msg) {
-  // Nothing for now.
-}
-
-void FifoScheduler::CpuNotIdle(const Message& msg) {
-  // Nothing for now.
-}
-
 void FifoScheduler::ValidatePreExitState() {
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
     CHECK(cs->run_queue.Empty());
   }
@@ -248,15 +239,14 @@ void FifoScheduler::TaskOnCpu(FifoTask* task, Cpu cpu) {
   task->prio_boost = false;
 }
 
-void FifoScheduler::FifoSchedule(Cpu cpu,
+void FifoScheduler::FifoSchedule(const Cpu& cpu,
                                  StatusWord::BarrierToken agent_barrier,
                                  bool prio_boost) {
   CpuState* cs = cpu_state(cpu);
   FifoTask* next = nullptr;
   if (!prio_boost) {
     next = cs->current;
-    if (!next)
-      next = cs->run_queue.Dequeue();
+    if (!next) next = cs->run_queue.Dequeue();
   }
 
   GHOST_DPRINT(3, stderr, "FifoSchedule %s on %s cpu %d ",
@@ -279,10 +269,10 @@ void FifoScheduler::FifoSchedule(Cpu cpu,
     while (next->status_word.on_cpu()) asm volatile("pause");
 
     req->Open({
-      .target = next->gtid,
-      .target_barrier = next->seqnum,
-      .agent_barrier = agent_barrier,
-      .commit_flags = COMMIT_AT_TXN_COMMIT,
+        .target = next->gtid,
+        .target_barrier = next->seqnum,
+        .agent_barrier = agent_barrier,
+        .commit_flags = COMMIT_AT_TXN_COMMIT,
     });
 
     if (req->Commit()) {
@@ -311,7 +301,7 @@ void FifoScheduler::FifoSchedule(Cpu cpu,
   }
 }
 
-void FifoScheduler::Schedule(Cpu cpu, const StatusWord& agent_sw) {
+void FifoScheduler::Schedule(const Cpu& cpu, const StatusWord& agent_sw) {
   StatusWord::BarrierToken agent_barrier = agent_sw.barrier();
   CpuState* cs = cpu_state(cpu);
 

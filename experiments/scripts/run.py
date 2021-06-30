@@ -271,7 +271,8 @@ def GhostArgs(experiment: Experiment):
 def StartApp(args: List[str], cgroup: str):
   """Forks and execs an application with the command line arguments `args`.
 
-  Creates a CPU cgroup and a memory cgroup with names `cgroup`. Moves the process to the created cgroup(s).
+  Creates a CPU cgroup and a memory cgroup with names `cgroup`. Moves the
+  process to the created cgroup(s).
 
   Args:
     args: The command line arguments to start the application.

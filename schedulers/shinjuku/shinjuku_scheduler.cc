@@ -18,14 +18,6 @@
 
 namespace ghost {
 
-void ShinjukuScheduler::CpuTick(const Message& msg) {
-  // Nothing for now.
-}
-
-void ShinjukuScheduler::CpuNotIdle(const Message& msg) {
-  // Nothing for now.
-}
-
 void ShinjukuTask::SetRuntime(absl::Duration new_runtime,
                               bool update_elapsed_runtime) {
   CHECK_GE(new_runtime, runtime);
@@ -66,21 +58,16 @@ ShinjukuScheduler::ShinjukuScheduler(
 ShinjukuScheduler::~ShinjukuScheduler() {}
 
 void ShinjukuScheduler::EnclaveReady() {
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
     cs->agent = enclave()->GetAgent(cpu);
     CHECK_NE(cs->agent, nullptr);
   }
 }
 
-bool ShinjukuScheduler::Available(Cpu cpu) {
+bool ShinjukuScheduler::Available(const Cpu& cpu) {
   CpuState* cs = cpu_state(cpu);
   return cs->agent->cpu_avail();
-}
-
-void ShinjukuScheduler::ValidatePreExitState() {
-  CHECK_EQ(num_tasks_, 0);
-  CHECK_EQ(RunqueueSize(), 0);
 }
 
 void ShinjukuScheduler::DumpAllTasks() {
@@ -95,7 +82,7 @@ void ShinjukuScheduler::DumpAllTasks() {
   for (auto const& it : orchs_) it.second->DumpSchedParams();
 }
 
-void ShinjukuScheduler::DumpState(Cpu agent_cpu, int flags) {
+void ShinjukuScheduler::DumpState(const Cpu& agent_cpu, int flags) {
   if (flags & kDumpAllTasks) {
     DumpAllTasks();
   }
@@ -105,7 +92,7 @@ void ShinjukuScheduler::DumpState(Cpu agent_cpu, int flags) {
   }
 
   fprintf(stderr, "SchedState: ");
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
     fprintf(stderr, "%d:", cpu.id());
     if (!cs->current) {
@@ -128,12 +115,22 @@ ShinjukuScheduler::CpuState* ShinjukuScheduler::cpu_state_of(
 }
 
 // Map the leader's shared memory region if we haven't already done so.
-void ShinjukuScheduler::HandleNewGtid(pid_t tgid) {
+void ShinjukuScheduler::HandleNewGtid(ShinjukuTask* task, pid_t tgid) {
   CHECK_GE(tgid, 0);
 
   if (orchs_.find(tgid) == orchs_.end()) {
     auto orch = std::make_shared<ShinjukuOrchestrator>();
-    CHECK(orch->Init(tgid));
+    if (!orch->Init(tgid)) {
+      // If the task's group leader has already exited and closed the PrioTable
+      // fd while we are handling TaskNew, it is possible that we cannot find
+      // the PrioTable.
+      // Just set has_work so that we schedule this task and allow it to exit.
+      // We also need to give it an sp; various places call task->sp->qos_.
+      static ShinjukuSchedParams dummy_sp;
+      task->has_work = true;
+      task->sp = &dummy_sp;
+      return;
+    }
     auto pair = std::make_pair(tgid, std::move(orch));
     orchs_.insert(std::move(pair));
   }
@@ -167,18 +164,25 @@ void ShinjukuScheduler::TaskNew(ShinjukuTask* task, const Message& msg) {
 
   const Gtid gtid(payload->gtid);
   const pid_t tgid = gtid.tgid();
-  HandleNewGtid(tgid);
+  HandleNewGtid(task, tgid);
   if (payload->runnable) Enqueue(task);
 
   num_tasks_++;
 
-  // Get the task's scheduling parameters (potentially updating its position
-  // in the runqueue).
   auto iter = orchs_.find(tgid);
-  CHECK(iter != orchs_.end());
-  task->orch = iter->second;
+  if (iter != orchs_.end()) {
+    task->orch = iter->second;
+  } else {
+    // It's possible to have no orch if the task died and closed its fds before
+    // we found its PrioTable.
+    task->orch = nullptr;
+  }
 
-  task->orch->GetSchedParams(task->gtid, kSchedCallbackFunc);
+  if (!in_discovery_) {
+    // Get the task's scheduling parameters (potentially updating its position
+    // in the runqueue).
+    task->orch->GetSchedParams(task->gtid, kSchedCallbackFunc);
+  }
 }
 
 void ShinjukuScheduler::TaskRunnable(ShinjukuTask* task, const Message& msg) {
@@ -195,8 +199,7 @@ void ShinjukuScheduler::TaskRunnable(ShinjukuTask* task, const Message& msg) {
   Enqueue(task, /* back = */ false);
 }
 
-void ShinjukuScheduler::TaskDeparted(ShinjukuTask* task, const Message& msg) {
-}
+void ShinjukuScheduler::TaskDeparted(ShinjukuTask* task, const Message& msg) {}
 
 void ShinjukuScheduler::TaskDead(ShinjukuTask* task, const Message& msg) {
   CHECK_EQ(task->run_state,
@@ -286,6 +289,15 @@ void ShinjukuScheduler::TaskYield(ShinjukuTask* task, const Message& msg) {
   } else {
     CHECK(task->queued() || task->paused());
   }
+}
+
+void ShinjukuScheduler::DiscoveryStart() { in_discovery_ = true; }
+
+void ShinjukuScheduler::DiscoveryComplete() {
+  for (auto& scraper : orchs_) {
+    scraper.second->RefreshAllSchedParams(kSchedCallbackFunc);
+  }
+  in_discovery_ = false;
 }
 
 void ShinjukuScheduler::Yield(ShinjukuTask* task) {
@@ -381,8 +393,8 @@ void ShinjukuScheduler::UnscheduleTask(ShinjukuTask* task) {
   Cpu cpu = topology()->cpu(task->cpu);
   RunRequest* req = enclave()->GetRunRequest(cpu);
   req->Open({
-    .target = Gtid(0),  // redundant but emphasize that this is a preemption.
-    .commit_flags = COMMIT_AT_TXN_COMMIT,
+      .target = Gtid(0),  // redundant but emphasize that this is a preemption.
+      .commit_flags = COMMIT_AT_TXN_COMMIT,
   });
   CHECK(req->Commit());
 
@@ -405,6 +417,13 @@ void ShinjukuScheduler::SchedParamsCallback(ShinjukuOrchestrator& orch,
 
   if (!gtid) {  // empty sched_item.
     return;
+  }
+
+  // Normally, the agent writes the Runnable bit in the PrioTable for
+  // Repeatables (see Case C, below).  However, the old agent may have crashed
+  // before it could set the bit, so we must do it.
+  if (in_discovery_ && orch.Repeating(sp) && !sp->HasWork()) {
+    orch.MakeEngineRunnable(sp);
   }
 
   ShinjukuTask* task = allocator()->GetTask(gtid);
@@ -621,6 +640,7 @@ void ShinjukuScheduler::GlobalSchedule(const StatusWord& agent_sw,
             should_preempt = true;
           } else if (current_qos == peek_qos) {
             if (elapsed_runtime >= preemption_time_slice_ &&
+                cs->current->orch &&
                 !cs->current->orch->Repeating(cs->current->sp)) {
               should_preempt = true;
             } else if (cs->current->unschedule_level >=
@@ -706,7 +726,7 @@ void ShinjukuScheduler::GlobalSchedule(const StatusWord& agent_sw,
       }
     }
 
-    for (auto cpu : updated_cpus) {
+    for (const Cpu& cpu : updated_cpus) {
       CpuState* cs = cpu_state(cpu);
 
       ShinjukuTask* next = cs->next;
@@ -716,9 +736,9 @@ void ShinjukuScheduler::GlobalSchedule(const StatusWord& agent_sw,
 
       RunRequest* req = enclave()->GetRunRequest(cpu);
       req->Open({
-        .target = next->gtid,
-        .target_barrier = next->seqnum,
-        .commit_flags = COMMIT_AT_TXN_COMMIT,
+          .target = next->gtid,
+          .target_barrier = next->seqnum,
+          .commit_flags = COMMIT_AT_TXN_COMMIT,
       });
 
       open_cpus.Set(cpu.id());
@@ -728,7 +748,7 @@ void ShinjukuScheduler::GlobalSchedule(const StatusWord& agent_sw,
     enclave()->CommitRunRequests(open_cpus);
   }
 
-  for (auto cpu : open_cpus) {
+  for (const Cpu& cpu : open_cpus) {
     CpuState* cs = cpu_state(cpu);
     ShinjukuTask* next = cs->next;
     cs->next = nullptr;
@@ -809,7 +829,7 @@ void ShinjukuScheduler::GlobalSchedule(const StatusWord& agent_sw,
 void ShinjukuScheduler::PickNextGlobalCPU(
     StatusWord::BarrierToken agent_barrier) {
   // TODO: Select CPUs more intelligently.
-  for (auto cpu : cpus()) {
+  for (const Cpu& cpu : cpus()) {
     if (Available(cpu) && cpu.id() != GetGlobalCPUId()) {
       CpuState* cs = cpu_state(cpu);
       ShinjukuTask* prev = cs->current;
@@ -855,7 +875,7 @@ void ShinjukuAgent::AgentThread() {
 
   PeriodicEdge debug_out(absl::Seconds(1));
 
-  while (!Finished() || !global_scheduler_->Empty()) {
+  while (!Finished()) {
     StatusWord::BarrierToken agent_barrier = status_word().barrier();
     // Check if we're assigned as the Global agent.
     if (cpu().id() != global_scheduler_->GetGlobalCPUId()) {

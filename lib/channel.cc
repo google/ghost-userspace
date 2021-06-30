@@ -52,7 +52,7 @@ Channel::~Channel() {
   close(fd_);
 }
 
-bool Channel::AssociateTask(Gtid gtid, int barrier, int *status) const {
+bool Channel::AssociateTask(Gtid gtid, int barrier, int* status) const {
   return Ghost::AssociateQueue(fd_, GHOST_TASK, gtid.id(), barrier, 0) == 0;
 }
 
@@ -111,6 +111,10 @@ absl::string_view Message::describe_type() const {
       return "MSG_TASK_YIELD";
     case MSG_CPU_TICK:
       return "MSG_CPU_TICK";
+    case MSG_CPU_NOT_IDLE:
+      return "MSG_CPU_NOT_IDLE";
+    case MSG_CPU_TIMER_EXPIRED:
+      return "MSG_CPU_TIMER_EXPIRED";
     case MSG_TASK_DEPARTED:
       return "MSG_TASK_DEPARTED";
     case MSG_TASK_SWITCHTO:
@@ -148,8 +152,7 @@ std::string Message::stringify() const {
       const ghost_msg_payload_task_blocked* blocked =
           static_cast<const ghost_msg_payload_task_blocked*>(payload());
       absl::StrAppend(&result, " on cpu ", blocked->cpu);
-      if (blocked->from_switchto)
-        absl::StrAppend(&result, " (from_switchto)");
+      if (blocked->from_switchto) absl::StrAppend(&result, " (from_switchto)");
       break;
     }
 
@@ -157,8 +160,7 @@ std::string Message::stringify() const {
       const ghost_msg_payload_task_yield* yield =
           static_cast<const ghost_msg_payload_task_yield*>(payload());
       absl::StrAppend(&result, " on cpu ", yield->cpu);
-      if (yield->from_switchto)
-        absl::StrAppend(&result, " (from_switchto)");
+      if (yield->from_switchto) absl::StrAppend(&result, " (from_switchto)");
       break;
     }
 
@@ -166,8 +168,7 @@ std::string Message::stringify() const {
       const ghost_msg_payload_task_preempt* preempt =
           static_cast<const ghost_msg_payload_task_preempt*>(payload());
       absl::StrAppend(&result, " on cpu ", preempt->cpu);
-      if (preempt->from_switchto)
-        absl::StrAppend(&result, " (from_switchto)");
+      if (preempt->from_switchto) absl::StrAppend(&result, " (from_switchto)");
       break;
     }
 
@@ -175,8 +176,7 @@ std::string Message::stringify() const {
       const ghost_msg_payload_task_departed* departed =
           static_cast<const ghost_msg_payload_task_departed*>(payload());
       absl::StrAppend(&result, " on cpu ", departed->cpu);
-      if (departed->from_switchto)
-        absl::StrAppend(&result, " (from_switchto)");
+      if (departed->from_switchto) absl::StrAppend(&result, " (from_switchto)");
       break;
     }
 

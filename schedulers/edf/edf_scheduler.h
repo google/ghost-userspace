@@ -121,7 +121,7 @@ struct EdfTask : public Task {
   // Estimated runtime in ns.
   // This value is first set to the estimate in the corresponding sched item's
   // work class, but is later set to a weighted average of observed runtimes
-  absl::Duration estimated_runtime = absl::ZeroDuration();
+  absl::Duration estimated_runtime = absl::Milliseconds(1);
   // Absolute deadline by which the sched item must finish.
   absl::Time deadline = absl::InfiniteFuture();
   // Absolute deadline by which the sched item must be scheduled.
@@ -150,11 +150,10 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
   void TaskBlocked(EdfTask* task, const Message& msg) final;
   void TaskPreempted(EdfTask* task, const Message& msg) final;
 
-  void CpuTick(const Message& msg) final;
-  void CpuNotIdle(const Message& msg) final;
+  void DiscoveryStart() final;
+  void DiscoveryComplete() final;
 
   bool Empty() { return num_tasks_ == 0; }
-  void ValidatePreExitState();
 
   void UpdateSchedParams();
 
@@ -169,12 +168,12 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
   int32_t GetGlobalCPUId() {
     return global_cpu_.load(std::memory_order_acquire);
   }
-  void SetGlobalCPU(Cpu cpu) {
+  void SetGlobalCPU(const Cpu& cpu) {
     global_cpu_.store(cpu.id(), std::memory_order_release);
   }
   void PickNextGlobalCPU();
 
-  void DumpState(Cpu cpu, int flags) final;
+  void DumpState(const Cpu& cpu, int flags) final;
   std::atomic<bool> debug_runqueue_ = false;
 
   static const int kDebugRunqueue = 1;
@@ -194,9 +193,9 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
   void SchedParamsCallback(Orchestrator& orch, const SchedParams* sp,
                            Gtid oldgtid);
 
-  void HandleNewGtid(pid_t tgid);
+  void HandleNewGtid(EdfTask* task, pid_t tgid);
 
-  bool Available(Cpu cpu);
+  bool Available(const Cpu& cpu);
 
   struct CpuState {
     EdfTask* current = nullptr;
@@ -204,12 +203,13 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
     const Agent* agent = nullptr;
   } ABSL_CACHELINE_ALIGNED;
   CpuState* cpu_state_of(const EdfTask* task);
-  inline CpuState* cpu_state(Cpu cpu) { return &cpu_states_[cpu.id()]; }
+  inline CpuState* cpu_state(const Cpu& cpu) { return &cpu_states_[cpu.id()]; }
   CpuState cpu_states_[MAX_CPUS];
 
   std::atomic<int32_t> global_cpu_;
   Channel global_channel_;
   int num_tasks_ = 0;
+  bool in_discovery_ = false;
   // Heapified runqueue
   std::vector<EdfTask*> run_queue_;
   std::vector<EdfTask*> yielding_tasks_;
@@ -261,8 +261,6 @@ class GlobalEdfAgent : public FullAgent<ENCLAVE> {
   }
 
   ~GlobalEdfAgent() override {
-    global_scheduler_->ValidatePreExitState();
-
     // Terminate global agent before satellites to avoid a false negative error
     // from ghost_run(). e.g. when the global agent tries to schedule on a CPU
     // without an active satellite agent.
@@ -289,13 +287,16 @@ class GlobalEdfAgent : public FullAgent<ENCLAVE> {
                                              global_scheduler_.get());
   }
 
-  int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) override {
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse<>& response) override {
     switch (req) {
       case EdfScheduler::kDebugRunqueue:
         global_scheduler_->debug_runqueue_ = true;
-        return 0;
+        response.response_code = 0;
+        return;
       default:
-        return -1;
+        response.response_code = -1;
+        return;
     }
   }
 

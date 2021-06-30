@@ -55,12 +55,11 @@ int BPF_PROG(sched_switch, bool preempt, struct task_struct *prev,
 	     struct task_struct *next)
 {
 	u64 *start_time, *class_time;
-	u32 prev_policy, next_policy;
+	u32 prev_policy;
 	u32 zero = 0;
 	u64 now;
 
 	prev_policy = task_sched_policy(prev);
-	next_policy = task_sched_policy(next);
 
 	start_time = bpf_map_lookup_elem(&start_times, &zero);
 	/* This lookup always succeeds, but the verifier needs proof. */

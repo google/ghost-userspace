@@ -63,6 +63,9 @@ struct sched_item {
 } ABSL_CACHELINE_ALIGNED;
 
 /* sched_item.flags */
+// If we ever have more than one flag, we will need to change all accessors to
+// be atomic.  Currently, both the agent and the application use non-atomic
+// accesses.
 #define SCHED_ITEM_RUNNABLE (1U << 0) /* worker thread is runnable */
 
 /*
@@ -179,7 +182,7 @@ inline bool seqcount::read_end(uint32_t begin) const {
 
 inline struct sched_item* PrioTable::sched_item(int i) const {
   DCHECK_GE(i, 0);
-  DCHECK_LT(i, hdr()->si_num);
+  CHECK_LT(i, hdr()->si_num);
 
   char* bytes = reinterpret_cast<char*>(hdr_);
   return reinterpret_cast<struct sched_item*>(bytes + hdr()->si_off +

@@ -30,8 +30,8 @@ namespace {
 using ::testing::Eq;
 using ::testing::Ge;
 using ::testing::Gt;
-using ::testing::Ne;
 using ::testing::IsTrue;
+using ::testing::Ne;
 
 // A simple agent that just idles.
 template <size_t max_notifications = 1>
@@ -82,6 +82,7 @@ class SimpleAgent : public Agent {
 
 constexpr int kWaitForIdle = 1;
 constexpr int kPingAgents = 2;
+constexpr int kRpcSerialize = 3;
 
 template <size_t MAX_NOTIFICATIONS = 1, class ENCLAVE = LocalEnclave>
 class FullSimpleAgent : public FullAgent<ENCLAVE> {
@@ -89,6 +90,26 @@ class FullSimpleAgent : public FullAgent<ENCLAVE> {
   agent_down_cast<SimpleAgent<MAX_NOTIFICATIONS>*>((agent).get())
 
  public:
+  // Simple container for testing RPC serialization.
+  struct RpcTestData {
+    bool operator==(const RpcTestData& rhs) const {
+      return a == rhs.a && three == rhs.three && is_true == rhs.is_true &&
+             counter == rhs.counter;
+    }
+
+    char a = '\0';
+    int three = 0;
+    bool is_true = false;
+    std::array<int, 5> counter;
+  };
+
+  static constexpr RpcTestData kRpcTestData = {
+      .a = 'a',
+      .three = 3,
+      .is_true = true,
+      .counter = {1, 2, 3, 4, 5},
+  };
+
   explicit FullSimpleAgent(const AgentConfig& config)
       : FullAgent<ENCLAVE>(config), channel_(GHOST_MAX_QUEUE_ELEMS, 0) {
     channel_.SetEnclaveDefault();
@@ -106,7 +127,8 @@ class FullSimpleAgent : public FullAgent<ENCLAVE> {
                                                              cpu);
   }
 
-  int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) override {
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse<>& response) override {
     switch (req) {
       case kWaitForIdle:
         // Wait for all agents to enter scheduling loop.
@@ -123,10 +145,14 @@ class FullSimpleAgent : public FullAgent<ENCLAVE> {
           }
         }
         break;
+      case kRpcSerialize:
+        response.Serialize<RpcTestData>(kRpcTestData);
+        break;
       default:
-        return -1;
+        response.response_code = -1;
+        return;
     }
-    return 0;
+    response.response_code = 0;
   }
 
  private:
@@ -155,6 +181,55 @@ TEST(AgentTest, Ping) {
       AgentConfig(MachineTopology(), MachineTopology()->all_cpus()));
 
   ASSERT_EQ(ap.Rpc(kPingAgents), 0);
+}
+
+// Basic test of serialization/deserialization, doing these operations in-place
+// rather than via the RPC interface.
+TEST(AgentTest, RpcSerializationSimple) {
+  struct MyStruct {
+    int x, y, z;
+  };
+  const MyStruct s = {
+    .x = 3,
+    .y = 5,
+    .z = INT_MIN,
+  };
+  AgentRpcResponse<> response;
+  response.Serialize<MyStruct>(s);
+  MyStruct deserialized = response.Deserialize<MyStruct>();
+
+  EXPECT_EQ(s.x, deserialized.x);
+  EXPECT_EQ(s.y, deserialized.y);
+  EXPECT_EQ(s.z, deserialized.z);
+}
+
+// Tests the serialization mechanism over the RPC interface.
+TEST(AgentTest, RpcSerialization) {
+  auto ap = AgentProcess<FullSimpleAgent<>, AgentConfig>(
+      AgentConfig(MachineTopology(), MachineTopology()->all_cpus()));
+
+  const AgentRpcResponse<>& response = ap.RpcWithResponse(kRpcSerialize);
+  ASSERT_EQ(response.response_code, 0);
+
+  FullSimpleAgent<>::RpcTestData data =
+      response.Deserialize<FullSimpleAgent<>::RpcTestData>();
+  EXPECT_EQ(data, FullSimpleAgent<>::kRpcTestData);
+}
+
+// Test serialization of an object the same size as the buffer.
+TEST(AgentTest, RpcSerializationMaxSize) {
+  constexpr size_t kResponseSize = 1024;
+  struct LargeStruct {
+    std::array<std::byte, kResponseSize> arr;
+  };
+  AgentRpcResponse<kResponseSize> response;
+  constexpr std::byte val{10};
+  const LargeStruct s = {
+    .arr = {val},
+  };
+  response.Serialize<LargeStruct>(s);
+  LargeStruct deserialized = response.Deserialize<LargeStruct>();
+  EXPECT_EQ(s.arr, deserialized.arr);
 }
 
 TEST(AgentTest, ExitHandler) {
@@ -196,6 +271,12 @@ class SpinningAgent : public Agent {
     // Spin so kernel emits MSG_CPU_TICK on the channel associated with
     // this agent.
     while (!Finished()) {
+      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      bool prio_boost = status_word().boosted_priority();
+      if (prio_boost) {
+        RunRequest* req = enclave()->GetRunRequest(cpu());
+        req->LocalYield(agent_barrier, RTLA_ON_IDLE);
+      }
       asm volatile("pause");
     }
   }
@@ -204,7 +285,9 @@ class SpinningAgent : public Agent {
 class TickConfig : public AgentConfig {
  public:
   TickConfig(Topology* topology, CpuList cpus, int numa_node)
-      : AgentConfig(topology, cpus), numa_node_(numa_node) {}
+      : AgentConfig(topology, cpus), numa_node_(numa_node) {
+        tick_config_ = CpuTickConfig::kAllTicks;
+  }
 
   int numa_node_;
 };
@@ -244,7 +327,8 @@ class FullTickAgent : public FullAgent<ENCLAVE> {
     return absl::make_unique<SpinningAgent>(&this->enclave_, cpu);
   }
 
-  int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) override {
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse<>& response) override {
     switch (req) {
       case kTickChecker: {
         SpinningAgent& agent = *AGENT_AS(this->agents_.front());
@@ -274,9 +358,10 @@ class FullTickAgent : public FullAgent<ENCLAVE> {
         break;
       }
       default:
-        return -1;
+        response.response_code = -1;
+        return;
     }
-    return 0;
+    response.response_code = 0;
   }
 
  private:
@@ -309,9 +394,7 @@ class CallbackAgent : public Agent {
     channel_->SetEnclaveDefault();
   }
 
-  void need_cpu_not_idle() {
-    need_cpu_not_idle_ = true;
-  }
+  void need_cpu_not_idle() { need_cpu_not_idle_ = true; }
 
  protected:
   void AgentThread() override {
@@ -337,10 +420,10 @@ class CallbackAgent : public Agent {
         req->LocalYield(agent_barrier, RTLA_ON_IDLE);
       } else if (need_cpu_not_idle_) {
         req->Open({
-          .target = Gtid(GHOST_IDLE_GTID),
-          .agent_barrier = agent_barrier,
-          .commit_flags = COMMIT_AT_TXN_COMMIT,
-          .run_flags = NEED_CPU_NOT_IDLE,
+            .target = Gtid(GHOST_IDLE_GTID),
+            .agent_barrier = agent_barrier,
+            .commit_flags = COMMIT_AT_TXN_COMMIT,
+            .run_flags = NEED_CPU_NOT_IDLE,
         });
         req->Commit();
       } else {
@@ -364,7 +447,7 @@ TEST(AgentTest, MsgTimerExpired) {
 
   // Boilerplate so we can create agents.
   auto enclave =
-      absl::make_unique<LocalEnclave>(topology, agent_cpus);
+      absl::make_unique<LocalEnclave>(AgentConfig(topology, agent_cpus));
 
   // Randomly assign one agent as the designated receiver of
   // CPU_TIMER_EXPIRED msg when timer expires.
@@ -379,8 +462,8 @@ TEST(AgentTest, MsgTimerExpired) {
   int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
   ASSERT_THAT(fd, Ge(0));
 
-  std::vector<int> msgs(agent_cpus.Size(), 0);    // TIMER_EXPIRED msgs.
-  std::vector<int> ticks(agent_cpus.Size(), 0);   // number of timer ticks.
+  std::vector<int> msgs(agent_cpus.Size(), 0);   // TIMER_EXPIRED msgs.
+  std::vector<int> ticks(agent_cpus.Size(), 0);  // number of timer ticks.
 
   auto timer_callback = [fd, &msgs, &ticks](Message msg, Cpu cpu) {
     ASSERT_THAT(msg.is_cpu_msg(), IsTrue());
@@ -411,16 +494,18 @@ TEST(AgentTest, MsgTimerExpired) {
 
   std::vector<std::unique_ptr<Channel>> channels;
   std::vector<std::unique_ptr<CallbackAgent>> agents;
-  for (auto cpu : agent_cpus) {
+  for (const Cpu& cpu : agent_cpus) {
     // Associate each agent with its own channel.
     //
     // The channel is configured to wakeup the agent when the kernel produces
     // a message into it.
     auto channel = absl::make_unique<Channel>(
         GHOST_MAX_QUEUE_ELEMS, numa_node, MachineTopology()->ToCpuList({cpu}));
-    agents.emplace_back(new CallbackAgent(enclave.get(), cpu, channel.get(), {
-                              { MSG_CPU_TIMER_EXPIRED, timer_callback },
-    }));
+    agents.emplace_back(
+        new CallbackAgent(enclave.get(), cpu, channel.get(),
+                          {
+                              {MSG_CPU_TIMER_EXPIRED, timer_callback},
+                          }));
     agents.back()->Start();
 
     // Associate the agent with 'channel' (thereby breaking the implicit
@@ -439,14 +524,14 @@ TEST(AgentTest, MsgTimerExpired) {
   // Timer expiring every millisecond.
   const absl::Duration kPeriod = absl::Milliseconds(1);
   struct itimerspec itimerspec = {
-    .it_interval = absl::ToTimespec(kPeriod),   // initial expiration.
-    .it_value = absl::ToTimespec(kPeriod),      // periodic expiration.
+      .it_interval = absl::ToTimespec(kPeriod),  // initial expiration.
+      .it_value = absl::ToTimespec(kPeriod),     // periodic expiration.
   };
 
   const uint64_t cookie = fd;
-  ASSERT_THAT(Ghost::TimerFdSettime(fd, /*flags=*/0, &itimerspec,
-                                    target_cpu.id(), cookie),
-              Eq(0));
+  ASSERT_THAT(
+      Ghost::TimerFdSettime(fd, /*flags=*/0, &itimerspec, target_cpu, cookie),
+      Eq(0));
 
   // Sleep for 50 msec.
   const absl::Duration kDelay = absl::Milliseconds(50);
@@ -454,20 +539,19 @@ TEST(AgentTest, MsgTimerExpired) {
 
   // Stop timer and disassociate from ghost before terminating agent.
   struct itimerspec itimerzero = {
-    .it_interval = { 0 },
-    .it_value = { 0 },
+      .it_interval = {0},
+      .it_value = {0},
   };
   ASSERT_THAT(Ghost::TimerFdSettime(fd, /*flags=*/0, &itimerzero), Eq(0));
 
   // Terminate all agents.
-  for (auto& a : agents)
-    a->Terminate();
+  for (auto& a : agents) a->Terminate();
 
-  for (auto cpu : agent_cpus) {
+  for (const Cpu& cpu : agent_cpus) {
     if (cpu == target_cpu) {
       // Each 'msg' accounts for one or more 'ticks'.
       EXPECT_THAT(ticks[cpu.id()], Ge(msgs[cpu.id()]));
-      EXPECT_THAT(ticks[cpu.id()], Ge(kDelay/kPeriod));
+      EXPECT_THAT(ticks[cpu.id()], Ge(kDelay / kPeriod));
     } else {
       EXPECT_THAT(ticks[cpu.id()], Eq(0));
       EXPECT_THAT(msgs[cpu.id()], Eq(0));
@@ -484,7 +568,8 @@ TEST(AgentTest, MsgCpuNotIdle) {
   const CpuList agent_cpus = topology->all_cpus();
   ASSERT_THAT(agent_cpus.Size(), Gt(0));
 
-  auto enclave = absl::make_unique<LocalEnclave>(topology, agent_cpus);
+  auto enclave =
+      absl::make_unique<LocalEnclave>(AgentConfig(topology, agent_cpus));
 
   // Randomly assign one agent as the designated receiver of MSG_CPU_NOT_IDLE.
   absl::BitGen rng;
@@ -512,12 +597,13 @@ TEST(AgentTest, MsgCpuNotIdle) {
 
   std::vector<std::unique_ptr<Channel>> channels;
   std::vector<std::unique_ptr<CallbackAgent>> agents;
-  for (auto cpu : agent_cpus) {
+  for (const Cpu& cpu : agent_cpus) {
     auto channel = absl::make_unique<Channel>(
         GHOST_MAX_QUEUE_ELEMS, numa_node, MachineTopology()->ToCpuList({cpu}));
-    agents.emplace_back(new CallbackAgent(enclave.get(), cpu, channel.get(), {
-                              { MSG_CPU_NOT_IDLE, callback },
-    }));
+    agents.emplace_back(new CallbackAgent(enclave.get(), cpu, channel.get(),
+                                          {
+                                              {MSG_CPU_NOT_IDLE, callback},
+                                          }));
 
     if (cpu == target_cpu) {
       agents.back()->need_cpu_not_idle();
@@ -546,10 +632,9 @@ TEST(AgentTest, MsgCpuNotIdle) {
   thread.join();
 
   // Terminate all agents.
-  for (auto& a : agents)
-    a->Terminate();
+  for (auto& a : agents) a->Terminate();
 
-  for (auto cpu : agent_cpus) {
+  for (const Cpu& cpu : agent_cpus) {
     if (cpu == target_cpu) {
       EXPECT_THAT(cpu_not_idle_msgs[cpu.id()], Gt(0));
     } else {
@@ -576,7 +661,7 @@ class SetSchedAgent : public Agent {
     WaitForEnclaveReady();
 
     constexpr int my_pid = 0;
-    constexpr sched_param param = { 0 };
+    constexpr sched_param param = {0};
 
     // Kernel ensures 'reset_on_fork' is set for an agent.
     EXPECT_THAT(sched_getscheduler(my_pid),
@@ -612,7 +697,7 @@ TEST(AgentTest, SetSched) {
   constexpr int agent_cpu = 0;
   Topology* topology = MachineTopology();
   auto enclave = absl::make_unique<LocalEnclave>(
-      topology, topology->ToCpuList(std::vector<int>{agent_cpu}));
+      AgentConfig(topology, topology->ToCpuList(std::vector<int>{agent_cpu})));
 
   Channel default_channel(GHOST_MAX_QUEUE_ELEMS, /*node=*/0);
   default_channel.SetEnclaveDefault();

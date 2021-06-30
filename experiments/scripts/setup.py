@@ -78,7 +78,8 @@ def MountCgroups():
 def CopyBinary(copy_from: str, copy_to: str):
   """Copy a binary data dependency to an external path.
 
-  This is used to copy a binary included as a data dependency at `copy_from` to a tmpfs mount backed by hugepages at `copy_to`.
+  This is used to copy a binary included as a data dependency at `copy_from` to
+  a tmpfs mount backed by hugepages at `copy_to`.
 
   Note that this function is meant specifically for *binaries*. It sets the
   execute permission bit on the copied file, which should only be done for

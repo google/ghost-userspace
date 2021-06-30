@@ -28,7 +28,7 @@ ABSL_FLAG(int32_t, firstcpu, 1, "First cpu to start scheduling from.");
 ABSL_FLAG(int32_t, globalcpu, -1,
           "Global cpu. If -1, then defaults to <firstcpu>)");
 ABSL_FLAG(int32_t, ncpus, 5, "Schedule on <ncpus> starting from <firstcpu>");
-ABSL_FLAG(bool, bpf, false, "Load BPF programs");
+ABSL_FLAG(bool, ticks, false, "Generate cpu tick messages");
 ABSL_FLAG(std::string, enclave, "", "Connect to preexisting enclave directory");
 
 namespace ghost {
@@ -60,7 +60,8 @@ void ParseGlobalConfig(GlobalConfig* config) {
   Topology* topology = MachineTopology();
   config->topology_ = topology;
   config->cpus_ = topology->ToCpuList(std::move(all_cpus_v));
-  config->use_bpf_ = absl::GetFlag(FLAGS_bpf);
+  config->tick_config_ = absl::GetFlag(FLAGS_ticks) ? CpuTickConfig::kAllTicks
+                                                    : CpuTickConfig::kNoTicks;
 
   config->global_cpu_ = topology->cpu(globalcpu);
 
@@ -87,9 +88,9 @@ int main(int argc, char* argv[]) {
   printf("Core map\n");
 
   int n = 0;
-  for (auto c : config.topology_->all_cores()) {
+  for (const ghost::Cpu& c : config.topology_->all_cores()) {
     printf("( ");
-    for (auto s : c.siblings()) printf("%2d ", s.id());
+    for (const ghost::Cpu& s : c.siblings()) printf("%2d ", s.id());
     printf(")%c", ++n % 8 == 0 ? '\n' : '\t');
   }
   printf("\n");
@@ -111,13 +112,20 @@ int main(int argc, char* argv[]) {
   fflush(stdout);
 
   ghost::Notification exit;
+  static bool first = true;
   ghost::GhostSignals::AddHandler(SIGINT, [&exit](int) {
-    static bool first = true;  // We only modify the first SIGINT.
-
     if (first) {
       exit.Notify();
       first = false;
-      return false;  // We'll exit on subsequent SIGTERMs.
+      return false;  // We'll exit on subsequent signals.
+    }
+    return true;
+  });
+  ghost::GhostSignals::AddHandler(SIGTERM, [&exit](int) {
+    if (first) {
+      exit.Notify();
+      first = false;
+      return false;  // We'll exit on subsequent signals.
     }
     return true;
   });

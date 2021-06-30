@@ -23,15 +23,15 @@ struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(max_entries, 1024);
 	__type(key, u32);
-	__type(value, struct per_cpu_data);
+	__type(value, struct ghost_per_cpu_data);
 	__uint(map_flags, BPF_F_MMAPABLE);
 } cpu_data SEC(".maps");
 
 
-SEC("scheduler/tick")
-int sched_tick(struct bpf_scheduler *ctx)
+SEC("ghost_sched/skip_tick")
+int ghost_sched_skip_tick(struct bpf_ghost_sched *ctx)
 {
-	struct per_cpu_data *my_data;
+	struct ghost_per_cpu_data *my_data;
 	u32 cpu = bpf_get_smp_processor_id();
 
 	my_data = bpf_map_lookup_elem(&cpu_data, &cpu);

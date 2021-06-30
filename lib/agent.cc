@@ -21,14 +21,14 @@
 namespace ghost {
 
 Agent::~Agent() {
+  enclave_->DetachAgent(this);
   CHECK(!thread_.joinable());
   status_word_.Free();
 }
 
-void Agent::Start() {
-  thread_ = std::thread(&Agent::ThreadBody, this);
-  ready_.WaitForNotification();
-}
+void Agent::StartBegin() { thread_ = std::thread(&Agent::ThreadBody, this); }
+
+void Agent::StartComplete() { ready_.WaitForNotification(); }
 
 void Agent::ThreadBody() {
   int queue_fd;
@@ -45,8 +45,18 @@ void Agent::ThreadBody() {
   }
 
   gtid_ = Gtid::Current();
-  SchedSetAffinity(0, cpu_.id());
-  const int ret = SchedAgentEnterGhost(enclave_->ctl_fd_, queue_fd);
+  CHECK_EQ(SchedSetAffinity(0, cpu_.id()), 0);
+  enclave_->WaitForOldAgent();
+
+  // setsched may fail with EBUSY, which is when there is an old agent that has
+  // not left the cpu yet.  Spin until we can.  The old agent has priority; the
+  // kernel will preempt us when it is runnable, since we are still in CFS.  We
+  // know that the old agent is gone or in the act of dying, because we called
+  // WaitForOldAgent.
+  int ret;
+  do {
+    ret = SchedAgentEnterGhost(enclave_->GetCtlFd(), queue_fd);
+  } while (ret && errno == EBUSY);
   CHECK_EQ(ret, 0);
 
   status_word_ = StatusWord(StatusWord::AgentSW{});
@@ -63,15 +73,16 @@ bool Agent::Ping() {
   return req->Ping();
 }
 
-void Agent::Terminate() {
-  enclave_->DetachAgent(this);
+void Agent::TerminateBegin() {
   finished_.Notify();
 
   // Ensure that we return control to agent to observe finished.
   Ping();
 
   do_exit_.Notify();
+}
 
+void Agent::TerminateComplete() {
   thread_.join();
 
   // pthread_join() can return before the dying task has released all

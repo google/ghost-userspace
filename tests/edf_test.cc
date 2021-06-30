@@ -296,3 +296,15 @@ TEST_F(EdfTest, BusyRunFor) {
 
 }  // namespace
 }  // namespace ghost
+
+int main(int argc, char **argv) {
+  testing::InitGoogleMock(&argc, argv);
+
+  if (ghost::MachineTopology()->num_cpus() < 2) {
+    GTEST_MESSAGE_("", ::testing::TestPartResult::kSkip)
+        << "must have at least 2 cpus";
+    return 0;
+  }
+
+  return RUN_ALL_TESTS();
+}

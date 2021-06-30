@@ -49,7 +49,7 @@ class SimpleOrchestrator : public Orchestrator {
   }
 
   ~SimpleOrchestrator() final {
-    thread_pool().MarkExit(/*i=*/0);
+    thread_pool().MarkExit(/*sid=*/0);
     notification_.Notify();
     thread_pool().Join();
   }

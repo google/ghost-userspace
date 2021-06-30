@@ -19,6 +19,7 @@
 
 #include "bpf/iovisor_bcc/bits.bpf.h"
 #include "bpf/bpf/schedlat_shared_bpf.h"
+#include "bpf/bpf/common.bpf.h"
 
 /*
  * vmlinux.h does not include #defines.  We can't include the kernel headers,
@@ -42,16 +43,6 @@ struct {
 	__type(value, struct hist);
 } hists SEC(".maps");
 
-static bool is_agent(struct task_struct *p)
-{
-	struct sched_ghost_entity *p_ghost;
-
-	/* Gotta love bitfields... */
-	p_ghost = (void*)p + __CORE_RELO(p, ghost, BYTE_OFFSET);
-
-	return BPF_CORE_READ_BITFIELD(p_ghost, agent) == 1;
-}
-
 static void task_runnable(struct task_struct *p)
 {
 	struct task_stat stat[1] = {0};
@@ -61,7 +52,7 @@ static void task_runnable(struct task_struct *p)
 		return;
 
 	pid = BPF_CORE_READ(p, pid);
-	stat->runnable_at = bpf_ktime_get_ns() / 1000;
+	stat->runnable_at = bpf_ktime_get_us();
 
 	bpf_map_update_elem(&task_stats, &pid, stat, BPF_ANY);
 }
@@ -74,7 +65,7 @@ static void task_latched(struct task_struct *p)
 	stat = bpf_map_lookup_elem(&task_stats, &pid);
 	if (!stat)
 		return;
-	stat->latched_at = bpf_ktime_get_ns() / 1000;
+	stat->latched_at = bpf_ktime_get_us();
 }
 
 static void increment_hist(u32 hist_id, u64 value)
@@ -99,7 +90,7 @@ static void task_ran(struct task_struct *p)
 	stat = bpf_map_lookup_elem(&task_stats, &pid);
 	if (!stat)
 		return;
-	stat->ran_at = bpf_ktime_get_ns() / 1000;
+	stat->ran_at = bpf_ktime_get_us();
 
 	/*
 	 * Not all tasks are latched/committed.  The agent can yield and
@@ -114,11 +105,6 @@ static void task_ran(struct task_struct *p)
 	increment_hist(RUNNABLE_TO_RUN, stat->ran_at - stat->runnable_at);
 
 	bpf_map_delete_elem(&task_stats, &pid);
-}
-
-static bool task_has_ghost_policy(struct task_struct *p)
-{
-	return BPF_CORE_READ(p, policy) == SCHED_GHOST;
 }
 
 SEC("tp_btf/sched_wakeup")

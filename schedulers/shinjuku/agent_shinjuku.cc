@@ -28,7 +28,7 @@ ABSL_FLAG(int32_t, firstcpu, 1, "First cpu to start scheduling from.");
 ABSL_FLAG(int32_t, globalcpu, -1,
           "Global cpu. If -1, then defaults to <firstcpu>)");
 ABSL_FLAG(int32_t, ncpus, 5, "Schedule on <ncpus> starting from <firstcpu>");
-ABSL_FLAG(bool, bpf, false, "Load BPF programs");
+ABSL_FLAG(std::string, enclave, "", "Connect to preexisting enclave directory");
 ABSL_FLAG(absl::Duration, preemption_time_slice, absl::Microseconds(50),
           "Shinjuku preemption time slice");
 
@@ -61,9 +61,15 @@ void ParseShinjukuConfig(ShinjukuConfig* config) {
   Topology* topology = MachineTopology();
   config->topology_ = topology;
   config->cpus_ = topology->ToCpuList(std::move(all_cpus_v));
-  config->use_bpf_ = absl::GetFlag(FLAGS_bpf);
   config->global_cpu_ = topology->cpu(globalcpu);
   config->preemption_time_slice_ = absl::GetFlag(FLAGS_preemption_time_slice);
+
+  std::string enclave = absl::GetFlag(FLAGS_enclave);
+  if (!enclave.empty()) {
+    int fd = open(enclave.c_str(), O_PATH);
+    CHECK_GE(fd, 0);
+    config->enclave_fd_ = fd;
+  }
 }
 
 }  // namespace ghost
@@ -81,9 +87,9 @@ int main(int argc, char* argv[]) {
   printf("Core map\n");
 
   int n = 0;
-  for (auto c : config.topology_->all_cores()) {
+  for (const ghost::Cpu& c : config.topology_->all_cores()) {
     printf("( ");
-    for (auto s : c.siblings()) printf("%2d ", s.id());
+    for (const ghost::Cpu& s : c.siblings()) printf("%2d ", s.id());
     printf(")%c", ++n % 8 == 0 ? '\n' : '\t');
   }
   printf("\n");

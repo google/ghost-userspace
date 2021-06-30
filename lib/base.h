@@ -46,7 +46,58 @@ static inline int GetTID();
 void Exit(int code);
 int SchedSetAffinity(pid_t pid, int cpu);
 size_t GetFileSize(int fd);
-void PrintBacktrace(FILE* f);
+void PrintBacktrace(FILE* f, void* uctx = nullptr);
+
+// This is useful for reading non-atomic variables that may be changed by the
+// kernel or by other threads. There are three main advantages to wrapping a
+// read to a variable `x` in `READ_ONCE()`:
+//
+// 1. The read is performed as though `x` were volatile. In other words, a read
+// to `x` actually occurs; you do not need to worry that the compiler has cached
+// the value of `x` in a register and that you are actually using a stale value
+// of `x`.
+//
+// 2. Without `READ_ONCE` and `WRITE_ONCE`, some compilers may split up a
+// read/write to/from a variable into multiple reads/writes (i.e., "load
+// tearing" and "store tearing"). Thus, if one thread is writing to a variable
+// while another thread is reading from the variable, the reader may load a
+// corrupted value. Wrapping a read to `x` in `READ_ONCE()` ensures that the
+// entire read happens in one operation rather than be split up into multiple
+// read operations.
+//
+// 3. The variable will not be reloaded if you access it later on without
+// wrapping it in `READ_ONCE()`.
+// Example:
+// T* y = READ_ONCE(x);
+// if (y) {
+//   y->DoSomething();  // Without a `READ_ONCE()` above, the compiler is
+//                      // allowed to reload `x` here (i.e., the compiler is not
+//                      // required to create a variable `y` and copy `x` into
+//                      // `y` if you do not use `READ_ONCE()` above). If this
+//                      // were to happen, the pointer could then be a nullptr
+//                      // here and the process would segfault.
+// }
+//
+// See `Documentation/memory-barriers.txt` in the Linux kernel for more details.
+template <typename T>
+static inline T READ_ONCE(const T& x) {
+  return reinterpret_cast<const std::atomic<T>*>(&x)->load(
+      std::memory_order_relaxed);
+}
+
+// You can pass the `-Wunused-result` flag to some compilers, which generates a
+// warning if you do not use the return value of some functions. There may be
+// functions whose return values we do want to ignore, so we can wrap each
+// function call in the function below to suppress the warning.
+//
+// Example:
+// int SomeFunction() { ... }
+//
+// SomeFunction();  // Generates a warning.
+//
+// IGNORE_RETURN_VALUE(SomeFunction());  // Does not generate a warning.
+template <typename T>
+static inline void IGNORE_RETURN_VALUE(const T& x) {}
 
 static inline absl::Time MonotonicNow() {
   struct timespec ts;
@@ -105,8 +156,8 @@ class Gtid {
   // has this GTID.
   pid_t tgid() const;
 
-  bool operator==(const Gtid &b) const { return id() == b.id(); }
-  bool operator!=(const Gtid &b) const { return id() != b.id(); }
+  bool operator==(const Gtid& b) const { return id() == b.id(); }
+  bool operator!=(const Gtid& b) const { return id() != b.id(); }
   bool operator!() const { return id() == 0; }
 
   friend std::ostream& operator<<(std::ostream& os, const Gtid& gtid) {
@@ -225,8 +276,8 @@ class Notification {
   Notification() {}
 
   // Disallow copy and assign.
-  Notification(const Notification &) = delete;
-  Notification &operator=(const Notification &) = delete;
+  Notification(const Notification&) = delete;
+  Notification& operator=(const Notification&) = delete;
 
   ~Notification();
 

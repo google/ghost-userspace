@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <stdio.h>
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <sys/sysinfo.h>
-
-#include <stdio.h>
 
 #include <atomic>
 #include <memory>
@@ -45,8 +44,8 @@ void Spin(absl::Duration duration, absl::Duration start_duration) {
   }
 }
 
-void doit_cfs(absl::Duration spin_for, absl::Duration sleep_for,
-                int iterations, int num_cpus, int overcommit) {
+void doit_cfs(absl::Duration spin_for, absl::Duration sleep_for, int iterations,
+              int num_cpus, int overcommit) {
   std::atomic<int64_t> duration = 0;
   std::vector<std::unique_ptr<GhostThread>> threads;
 
@@ -59,8 +58,8 @@ void doit_cfs(absl::Duration spin_for, absl::Duration sleep_for,
 #endif
 
   const struct timespec tv = {
-    .tv_sec = sleep_for / absl::Seconds(1),
-    .tv_nsec = ToInt64Nanoseconds(sleep_for) % 1'000'000'000L,
+      .tv_sec = sleep_for / absl::Seconds(1),
+      .tv_nsec = ToInt64Nanoseconds(sleep_for) % 1'000'000'000L,
   };
 
   // Set timer_slack to some ridiculously low, non-zero value (otherwise
@@ -73,9 +72,9 @@ void doit_cfs(absl::Duration spin_for, absl::Duration sleep_for,
   absl::Barrier* barrier = new absl::Barrier(num_threads);
 
   for (int i = 0; i < num_threads; i++) {
-    threads.emplace_back(
-        new GhostThread(GhostThread::KernelScheduler::kCfs,
-                        [spin_for, iterations, tv, &barrier, &duration] {
+    threads.emplace_back(new GhostThread(
+        GhostThread::KernelScheduler::kCfs,
+        [spin_for, iterations, tv, &barrier, &duration] {
           if (barrier->Block()) {
             delete barrier;
           }
@@ -116,7 +115,7 @@ void doit_ghost(absl::Duration spin_for, absl::Duration sleep_for,
                 int iterations, int num_cpus) {
   std::vector<std::unique_ptr<GhostThread>> threads;
   std::vector<absl::Duration> durations;
-  int num_threads = num_cpus - 1;   // leave one cpu for global agent.
+  int num_threads = num_cpus - 1;  // leave one cpu for global agent.
 
 #if 0
   printf("ghost: num_threads = %d, num_cpus = %d\n", num_threads, num_cpus);
@@ -126,8 +125,8 @@ void doit_ghost(absl::Duration spin_for, absl::Duration sleep_for,
   durations.reserve(num_threads);
 
   const struct timespec tv = {
-    .tv_sec = sleep_for / absl::Seconds(1),
-    .tv_nsec = ToInt64Nanoseconds(sleep_for) % 1'000'000'000L,
+      .tv_sec = sleep_for / absl::Seconds(1),
+      .tv_nsec = ToInt64Nanoseconds(sleep_for) % 1'000'000'000L,
   };
 
   // Set timer_slack to some ridiculously low, non-zero value (otherwise
@@ -139,11 +138,10 @@ void doit_ghost(absl::Duration spin_for, absl::Duration sleep_for,
 
   absl::Barrier* barrier = new absl::Barrier(num_threads);
 
-
   for (int i = 0; i < num_threads; i++) {
-    threads.emplace_back(
-        new GhostThread(GhostThread::KernelScheduler::kGhost,
-                        [spin_for, iterations, i, tv, &barrier, &durations] {
+    threads.emplace_back(new GhostThread(
+        GhostThread::KernelScheduler::kGhost,
+        [spin_for, iterations, i, tv, &barrier, &durations] {
           if (barrier->Block()) {
             delete barrier;
           }
@@ -179,25 +177,25 @@ void doit_ghost(absl::Duration spin_for, absl::Duration sleep_for,
 }  // namespace
 }  // namespace ghost
 
-#define DEFAULT_TEST_DURATION   5   // seconds.
-#define DEFAULT_OVERCOMMIT      5
+#define DEFAULT_TEST_DURATION 5  // seconds.
+#define DEFAULT_OVERCOMMIT 5
 
-static const char *progname;
+static const char* progname;
 static int verbose;
 
 static void usage(int rc) {
-  fprintf(stderr, "Usage: %s [-cv][-d <secs>][-n <num_cpus>]"
-                  "[-o <overcommit>]\n"
-                  "  -c: cfs scheduling (default is ghost)\n"
-                  "  -d: test duration in seconds (default is %d)"
-                  "  -o: overcommit factor for cfs (default is %d)\n"
-                  "  -n: num_cpus (default is %d)\n",
-                  progname, DEFAULT_TEST_DURATION, DEFAULT_OVERCOMMIT,
-                  get_nprocs());
+  fprintf(stderr,
+          "Usage: %s [-cv][-d <secs>][-n <num_cpus>]"
+          "[-o <overcommit>]\n"
+          "  -c: cfs scheduling (default is ghost)\n"
+          "  -d: test duration in seconds (default is %d)"
+          "  -o: overcommit factor for cfs (default is %d)\n"
+          "  -n: num_cpus (default is %d)\n",
+          progname, DEFAULT_TEST_DURATION, DEFAULT_OVERCOMMIT, get_nprocs());
   exit(rc);
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   bool use_cfs = false;
   int opt, duration = DEFAULT_TEST_DURATION;
   int overcommit = DEFAULT_OVERCOMMIT;
@@ -217,7 +215,7 @@ int main(int argc, char *argv[]) {
         duration = strtol(optarg, NULL, 0);
         break;
       case 'n':
-        num_cpus  = strtol(optarg, NULL, 0);
+        num_cpus = strtol(optarg, NULL, 0);
         break;
       case 'v':
         verbose++;
@@ -227,16 +225,12 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (duration <= 0 || duration > 30)
-    usage(2);
+  if (duration <= 0 || duration > 30) usage(2);
 
   std::array<absl::Duration, 6> spin_values = {
-    absl::Microseconds(1000),
-    absl::Microseconds(750),
-    absl::Microseconds(500),
-    absl::Microseconds(250),
-    absl::Microseconds(100),
-    absl::Microseconds(50),
+      absl::Microseconds(1000), absl::Microseconds(750),
+      absl::Microseconds(500),  absl::Microseconds(250),
+      absl::Microseconds(100),  absl::Microseconds(50),
   };
 
   for (absl::Duration spin : spin_values) {
@@ -245,9 +239,7 @@ int main(int argc, char *argv[]) {
     } else {
       printf("%.2f usecs\n", absl::ToDoubleMicroseconds(spin));
     }
-    for (absl::Duration sleep = spin;
-         sleep >= spin / 10;
-         sleep -= spin / 10) {
+    for (absl::Duration sleep = spin; sleep >= spin / 10; sleep -= spin / 10) {
       int iterations = absl::Seconds(duration) / (spin + sleep);
       if (use_cfs)
         ghost::doit_cfs(spin, sleep, iterations, num_cpus, overcommit);

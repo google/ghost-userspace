@@ -89,19 +89,19 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
                          std::shared_ptr<TaskAllocator<FifoTask>> allocator);
   ~FifoScheduler() final {}
 
-  void Schedule(Cpu cpu, const StatusWord& sw);
+  void Schedule(const Cpu& cpu, const StatusWord& sw);
 
   void EnclaveReady() final;
   Channel& GetDefaultChannel() final { return *default_channel_; };
 
-  bool Empty(Cpu cpu) {
+  bool Empty(const Cpu& cpu) {
     CpuState* cs = cpu_state(cpu);
     return cs->run_queue.Empty();
   }
 
   void ValidatePreExitState();
 
-  void DumpState(Cpu cpu, int flags) final;
+  void DumpState(const Cpu& cpu, int flags) final;
   std::atomic<bool> debug_runqueue_ = false;
 
   static constexpr int kDebugRunqueue = 1;
@@ -115,11 +115,9 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   void TaskBlocked(FifoTask* task, const Message& msg) final;
   void TaskPreempted(FifoTask* task, const Message& msg) final;
   void TaskSwitchto(FifoTask* task, const Message& msg) final;
-  void CpuTick(const Message& msg) final;
-  void CpuNotIdle(const Message& msg) final;
 
  private:
-  void FifoSchedule(Cpu cpu, StatusWord::BarrierToken agent_barrier,
+  void FifoSchedule(const Cpu& cpu, StatusWord::BarrierToken agent_barrier,
                     bool prio_boosted);
   void TaskOffCpu(FifoTask* task, bool blocked, bool from_switchto);
   void TaskOnCpu(FifoTask* task, Cpu cpu);
@@ -133,7 +131,7 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
     FifoRq run_queue;
   } ABSL_CACHELINE_ALIGNED;
 
-  inline CpuState* cpu_state(Cpu cpu) { return &cpu_states_[cpu.id()]; }
+  inline CpuState* cpu_state(const Cpu& cpu) { return &cpu_states_[cpu.id()]; }
 
   inline CpuState* cpu_state_of(const FifoTask* task) {
     CHECK_GE(task->cpu, 0);
@@ -178,13 +176,16 @@ class FullFifoAgent : public FullAgent<ENCLAVE> {
     return absl::make_unique<FifoAgent>(&this->enclave_, cpu, scheduler_.get());
   }
 
-  int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) override {
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse<>& response) override {
     switch (req) {
       case FifoScheduler::kDebugRunqueue:
         scheduler_->debug_runqueue_ = true;
-        return 0;
+        response.response_code = 0;
+        return;
       default:
-        return -1;
+        response.response_code = -1;
+        return;
     }
   }
 

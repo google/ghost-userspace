@@ -14,9 +14,11 @@
 
 #include "lib/enclave.h"
 
+#include <sys/epoll.h>
 #include <sys/mman.h>
 
 #include <filesystem>
+#include <fstream>
 #include <regex>  // NOLINT: no RE2; ghost limits itself to absl
 
 #include "absl/base/attributes.h"
@@ -24,15 +26,19 @@
 #include "lib/agent.h"
 #include "lib/scheduler.h"
 
+namespace {
+// eBPF is excluded in open source for now.
+inline int bpf_init(void) { return 0; }
+inline int bpf_insert(int ctl_fd, int* progs, size_t nr_progs) { return 0; }
+inline void bpf_destroy(void) {}
+}  // namespace
+
 namespace ghost {
 
-Enclave::Enclave(Topology* topology, CpuList enclave_cpus)
-    : topology_(topology), enclave_cpus_(std::move(enclave_cpus)) {}
-Enclave::Enclave(Topology* topology, int enclave_fd)
-    : topology_(topology),
-      enclave_cpus_(CpuList(*topology)),
-      dir_fd_(enclave_fd) {}
-
+Enclave::Enclave(AgentConfig config)
+    : config_(config),
+      topology_(config.topology_),
+      enclave_cpus_(config.cpus_) {}
 Enclave::~Enclave() {}
 
 void Enclave::Ready() {
@@ -53,20 +59,58 @@ void Enclave::Ready() {
     CHECK(schedulers_.front()->GetDefaultChannel().SetEnclaveDefault());
   }
 
+  // On the topic of multithreaded Discovery: the main issue is that global
+  // schedulers can't handle concurrent discovery and scheduling.  For instance,
+  // they use the SingleThreadMallocTaskAllocator and probably have other
+  // scheduler-specific assumptions.  If they ever can handle concurrency, then
+  // we can move DiscoverTasks elsewhere - perhaps the schedulers themselves can
+  // call DiscoverTasks from e.g. a non-global-agent.
+  //
+  // Even per-cpu agents can't easily handle concurrent Discovery.  Consider the
+  // lifetime of a Task.  The only agent task that is allowed to muck with Task
+  // is whoever handles the queue that the task is associated to.  For example,
+  // what happens when we receive a TaskDead?  We want to call ~Task().  But you
+  // can't do that if another thread - including the Discoverer - is accessing
+  // it.  So long as we have this assumption (queue owner -> can muck with
+  // Task), we cannot do concurrent discovery.
+  //
+  // As another case, consider what happens when the Discoverer finds a task
+  // that is in the process of departing while another thread is handling
+  // messages.  If the Discoverer calls ~Task(), then the thread that called
+  // GetTask has an unreference-counted reference!  If we knew that there were
+  // *no* messages for the task, then we could call ~Task().  But we can't be
+  // sure of that: it's possible that task was new and used our new agent's
+  // default channel - so we'll eventually get those messages.
+  //
+  // As a final consideration, take EDF: we need to scrape the PrioTable before
+  // scheduling.  It's easiest to scrape after discovery completes, so that
+  // scheduler won't practically be able to schedule during discovery.
+  //
+  // Without redesigning Tasks and the way schedulers work, we'll have to stick
+  // to non-concurrent discovery and scheduling.  We'd probably need something
+  // like a kref and RCU too.
+  //
+  // Right now we're single threaded.  All Agents are in WaitForEnclaveReady,
+  // which is triggered by EnclaveReady below.  That means we can't schedule
+  // until Discovery is complete, which may take time.
+  for (auto scheduler : schedulers_) scheduler->DiscoverTasks();
+
   for (auto scheduler : schedulers_) scheduler->EnclaveReady();
 
+  InsertBpfPrograms();
+
   // We could use agents_ here, but this allows extra checking.
-  for (auto cpu : enclave_cpus_) {
+  for (const Cpu& cpu : enclave_cpus_) {
     Agent* agent = GetAgent(cpu);
     CHECK_NE(agent, nullptr);  // Every Enclave CPU should have an agent.
     agent->EnclaveReady();
   }
   mu_.Unlock();
 
-  AdvertiseReady();
+  AdvertiseOnline();
 }
 
-void Enclave::AttachAgent(Cpu cpu, Agent* agent) {
+void Enclave::AttachAgent(const Cpu& cpu, Agent* agent) {
   absl::MutexLock h(&mu_);
   agents_.push_back(agent);
 }
@@ -116,6 +160,16 @@ std::string ReadString(int fd) {
   }
   CHECK_EQ(amt, 0);
   return std::string(buf, p - buf);
+}
+
+void LocalEnclave::ForEachTaskStatusWord(
+    const std::function<void(struct ghost_status_word* sw, uint32_t region_id,
+                             uint32_t idx)>
+        l) {
+  // TODO: Need to support more than one SW region.
+  StatusWordTable* tbl = Ghost::GetGlobalStatusWordTable();
+  CHECK_NE(tbl, nullptr);
+  tbl->ForEachTaskStatusWord(l);
 }
 
 // Makes the next available enclave from ghostfs.  Returns the FD for the ctl
@@ -170,12 +224,89 @@ int LocalEnclave::GetCpuDataRegion(int dir_fd) {
   return openat(dir_fd, "cpu_data", O_RDWR);
 }
 
+// Waits on an enclave's agent_online until the value of the file was 'until'
+// (either 0 or 1) at some point in time.
+//
+// If the value is already 'until', then we will return immediately.  There is
+// no guarantee that an edge occurred, where the value of agent_online changed.
+//
+// We also might never witness agent_online == until.  We only know that we saw
+// one_or_zero != until, and we epoll_waited.  (agent_online's value is either
+// one or zero.)
+//
+// epoll_wait will return if the value changed between the first and second
+// calls to epoll_wait.  That change may be before we read.  Either way, we know
+// there was a change at some point since we entered this function, and at some
+// point the value we read was not equal to until.  Since there are only two
+// values for agent_online, we know at some point agent_online == until.
+//
+// static
+void LocalEnclave::WaitForAgentOnlineValue(int dir_fd, int until) {
+  struct epoll_event ep_ev;
+  int epfd;
+  int fd = openat(dir_fd, "agent_online", O_RDONLY);
+
+  CHECK(until == 0 || until == 1);
+  CHECK_GE(fd, 0);
+  epfd = epoll_create(1);
+  CHECK_GE(epfd, 0);
+  ep_ev.events = EPOLLIN | EPOLLET | EPOLLPRI;
+  CHECK_EQ(epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ep_ev), 0);
+
+  // We epoll before reading, since the first epoll_wait will return, even if
+  // the file hasn't changed since epoll_ctl
+  while (epoll_wait(epfd, &ep_ev, sizeof(ep_ev), -1) != 1) {
+    // EINTR is ok - it will happen for signals (e.g. ctl-z)
+    CHECK_EQ(errno, EINTR);
+  }
+
+  char buf[20];
+  memset(buf, 0, sizeof(buf));
+  CHECK_GT(read(fd, buf, sizeof(buf) - 1), 0);
+  int one_or_zero;
+  CHECK(absl::SimpleAtoi(buf, &one_or_zero));
+  if (one_or_zero != until) {
+    while (epoll_wait(epfd, &ep_ev, sizeof(ep_ev), -1) != 1) {
+      CHECK_EQ(errno, EINTR);
+    }
+    // At this point, the value of agent_online might be 1 or 0.  All we know is
+    // that it changed at some point after our first epoll_wait.
+  }
+
+  close(epfd);
+  close(fd);
+}
+
+// static
+int LocalEnclave::GetNrTasks(int dir_fd) {
+  int fd = openat(dir_fd, "status", O_RDONLY);
+  CHECK_GE(fd, 0);
+  const std::string status_lines = ReadString(fd);
+  close(fd);
+  std::istringstream s(status_lines);
+  std::string line;
+  while (std::getline(s, line)) {
+    std::smatch matches;
+    if (std::regex_match(line, matches, std::regex("^nr_tasks ([0-9]+)$"))) {
+      // matches[1] corresponds to [0-9]+
+      if (matches.size() != 2) {
+        return -1;
+      }
+      std::ssub_match digits = matches[1];
+      int nr_tasks;
+      CHECK(absl::SimpleAtoi(digits.str(), &nr_tasks));
+      return nr_tasks;
+    }
+  }
+  return -1;
+}
+
 // static
 void LocalEnclave::DestroyEnclave(int ctl_fd) {
   constexpr const char kCommand[] = "destroy";
   ssize_t msg_sz = sizeof(kCommand) - 1;  // No need for the \0
   // It's possible to get an error if the enclave is concurrently destroyed.
-  write(ctl_fd, kCommand, msg_sz);
+  IGNORE_RETURN_VALUE(write(ctl_fd, kCommand, msg_sz));
 }
 
 // static
@@ -237,11 +368,9 @@ void LocalEnclave::BuildCpuReps() {
 // We are attaching to an existing enclave, given the fd for the directory to
 // e.g. /sys/fs/ghost/enclave_123/.  We use the cpus that already belong to the
 // enclave.
-LocalEnclave::LocalEnclave(Topology* topology, int enclave_fd)
-    : Enclave(topology, enclave_fd) {
+void LocalEnclave::AttachToExistingEnclave() {
   destroy_when_destructed_ = false;
 
-  CHECK_EQ(enclave_fd, dir_fd_);  // set by Enclave::Enclave
   CHECK_GE(dir_fd_, 0);
 
   ctl_fd_ = openat(dir_fd_, "ctl", O_RDWR);
@@ -252,15 +381,12 @@ LocalEnclave::LocalEnclave(Topology* topology, int enclave_fd)
   int cpulist_fd = openat(dir_fd_, "cpulist", O_RDONLY);
   CHECK_GE(cpulist_fd, 0);
   std::string cpulist = ReadString(cpulist_fd);
-  enclave_cpus_ = topology->ParseCpuStr(cpulist);
+  enclave_cpus_ = topology_->ParseCpuStr(cpulist);
   close(cpulist_fd);
-
-  BuildCpuReps();
 }
 
 // We are creating a new enclave.  We attempt to allocate enclave_cpus.
-LocalEnclave::LocalEnclave(Topology* topology, CpuList enclave_cpus)
-    : Enclave(topology, std::move(enclave_cpus)) {
+void LocalEnclave::CreateAndAttachToEnclave() {
   destroy_when_destructed_ = true;
 
   // Note that if you CHECK fail in this function, the LocalEnclave dtor won't
@@ -277,7 +403,7 @@ LocalEnclave::LocalEnclave(Topology* topology, CpuList enclave_cpus)
 
   int cpumask_fd = openat(dir_fd_, "cpumask", O_RDWR);
   CHECK_GE(cpumask_fd, 0);
-  std::string cpumask = enclave_cpus.CpuMaskStr();
+  std::string cpumask = enclave_cpus_.CpuMaskStr();
   // Note that if you ask for more cpus than the kernel knows about, i.e. more
   // than nr_cpu_ids, it may silently succeed.  The kernel only checks the cpus
   // it knows about.  However, since this cpumask was constructed from a
@@ -285,8 +411,19 @@ LocalEnclave::LocalEnclave(Topology* topology, CpuList enclave_cpus)
   CHECK_EQ(write(cpumask_fd, cpumask.c_str(), cpumask.length()),
            cpumask.length());
   close(cpumask_fd);
+}
+
+LocalEnclave::LocalEnclave(AgentConfig config)
+    : Enclave(config), dir_fd_(config.enclave_fd_) {
+  if (dir_fd_ == -1) {
+    CreateAndAttachToEnclave();
+  } else {
+    AttachToExistingEnclave();
+  }
 
   BuildCpuReps();
+
+  CHECK_EQ(bpf_init(), 0);
 }
 
 LocalEnclave::~LocalEnclave() {
@@ -400,6 +537,14 @@ bool LocalEnclave::CompleteRunRequest(RunRequest* req) {
     case GHOST_TXN_AGENT_STALE:
       break;
 
+    // target CPU's agent is exiting
+    case GHOST_TXN_NO_AGENT:
+      // If we ever shrink enclaves at runtime, we'll need to modify this check.
+      if (agent_online_fd_ != -1) {
+        GHOST_ERROR("TXN failed with NO_AGENT, but we are still online!");
+      }
+      break;
+
     // target CPU is running a higher priority sched_class.
     case GHOST_TXN_CPU_UNAVAIL:
       break;
@@ -442,7 +587,7 @@ bool LocalEnclave::PingRunRequest(RunRequest* req, Cpu remote_cpu) {
   return rc == 0;
 }
 
-void LocalEnclave::AttachAgent(Cpu cpu, Agent* agent) {
+void LocalEnclave::AttachAgent(const Cpu& cpu, Agent* agent) {
   CHECK_EQ(rep(cpu)->agent, nullptr);
   rep(cpu)->agent = agent;
   Enclave::AttachAgent(cpu, agent);
@@ -453,15 +598,26 @@ void LocalEnclave::DetachAgent(Agent* agent) {
   Enclave::DetachAgent(agent);
 }
 
-void LocalEnclave::AdvertiseReady() {
+void LocalEnclave::AdvertiseOnline() {
   // There can be only one open, writable file for agent_online, per enclave.
   // As long as this FD (and any dups) are held open, the system will believe
   // there is an agent capable of scheduling this enclave.
-  //
-  // We don't need to store the FD anywhere either.  If we crash or exit, the
-  // kernel will close it for us.
-  int fd = openat(dir_fd_, "agent_online", O_RDWR);
-  CHECK_GE(fd, 0);
+  agent_online_fd_ = openat(dir_fd_, "agent_online", O_RDWR);
+  CHECK_GE(agent_online_fd_, 0);
+}
+
+// We have a bunch of open FDs for enclave resources, such as agent_online and
+// any inserted BPF programs.  The next agent taking over the enclave needs to
+// wait until these FDs are closed, so it behooves us to close the FDs early
+// instead of waiting on the kernel to close them, which takes O(nr_cpus) ms.
+void LocalEnclave::PrepareToExit() {
+  close(agent_online_fd_);
+  agent_online_fd_ = -1;
+  bpf_destroy();
+}
+
+void LocalEnclave::WaitForOldAgent() {
+  WaitForAgentOnlineValue(dir_fd_, /*until=*/0);
 }
 
 void RunRequest::Open(const RunRequestOptions& options) {
@@ -474,11 +630,11 @@ void RunRequest::Open(const RunRequestOptions& options) {
     CHECK(!sync_group_owned());
   }
 
-  // We don't allow transaction clobbering.
+  // We do not allow transaction clobbering.
   //
-  // Once a transaction is opened it must be committed (sync or async)
-  // before opening it again. We rely on caller doing a Submit() which
-  // guarantees a commit-barrier on the transaction.
+  // Once a transaction is opened it must be committed (sync or async) before
+  // opening it again. We rely on the caller doing a Submit() which guarantees a
+  // commit-barrier on the transaction.
   CHECK(committed());
 
   txn_->agent_barrier = options.agent_barrier;
@@ -490,13 +646,12 @@ void RunRequest::Open(const RunRequestOptions& options) {
     sync_group_owner_set(options.sync_group_owner);
   }
   allow_txn_target_on_cpu_ = options.allow_txn_target_on_cpu;
-  if (allow_txn_target_on_cpu_)
-    CHECK(sync_group_owned());
+  if (allow_txn_target_on_cpu_) CHECK(sync_group_owned());
   txn_->state.store(GHOST_TXN_READY, std::memory_order_release);
 }
 
 bool RunRequest::Abort() {
-  int32_t expected = txn_->state.load(std::memory_order_relaxed);
+  ghost_txn_state expected = txn_->state.load(std::memory_order_relaxed);
   if (expected == GHOST_TXN_READY) {
     // We do a compare exchange since we may race with the kernel trying to
     // commit this transaction.

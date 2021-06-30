@@ -242,7 +242,6 @@ class GhostOptions:
       globalcpu < firstcpu + ncpus
     ncpus: The number of CPUs that ghOSt will run agents on (and therefore
       schedule).
-    bpf: If True, ghOSt uses eBPF.
     preemption_time_slice: ghOSt threads that run this duration or longer are
       preempted and added to the end of the runqueue.
   """
@@ -251,7 +250,6 @@ class GhostOptions:
   globalcpu: int = _FIRST_CPU + 1
   # Add 1 to account for the global agent.
   ncpus: int = _NUM_ROCKSDB_WORKERS + 1
-  bpf: bool = False
   # Turn off time-based preemption by setting the preemption time slice to
   # infinity. Some scheduling algorithms do not have time-based preemption, so
   # scheduling algorithms that do have it should explicitly turn this on.

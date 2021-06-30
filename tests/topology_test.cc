@@ -284,23 +284,59 @@ TEST(TopologyTest, BitmapSetCpu) {
 // correct intersection of two `CpuList`s.
 TEST(TopologyTest, Intersection) {
   Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  CpuList list0 = test_topology->ToCpuList({5, 20, 87, 94, 100});
-  CpuList list1 = test_topology->ToCpuList({5, 10, 60, 80, 87, 90, 101, 110});
+  CpuList list0 =
+      test_topology->ToCpuList(std::vector<int>{5, 20, 87, 94, 100});
+  CpuList list1 = test_topology->ToCpuList(
+      std::vector<int>{5, 10, 60, 80, 87, 90, 101, 110});
 
   list0.Intersection(list1);
-  EXPECT_THAT(list0, Eq(test_topology->ToCpuList({5, 87})));
+  EXPECT_THAT(list0, Eq(test_topology->ToCpuList(std::vector<int>{5, 87})));
 }
 
 // Tests that the `CpuList::Union` method calculates the correct union
-// of two `CpuList`s.
+// of two `CpuList`s. Also tests the related `+` and `+=` operators.
 TEST(TopologyTest, Union) {
   Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  CpuList list0 = test_topology->ToCpuList({5, 20, 87, 94, 100});
-  CpuList list1 = test_topology->ToCpuList({5, 10, 60, 80, 87, 90, 101, 110});
+  const CpuList list0 =
+      test_topology->ToCpuList(std::vector<int>{5, 20, 87, 94, 100});
+  const CpuList list1 = test_topology->ToCpuList(
+      std::vector<int>{5, 10, 60, 80, 87, 90, 101, 110});
+  const CpuList result = test_topology->ToCpuList(
+      std::vector<int>{5, 10, 20, 60, 80, 87, 90, 94, 100, 101, 110});
 
-  list0.Union(list1);
-  EXPECT_THAT(list0, Eq(test_topology->ToCpuList(
-                         {5, 10, 20, 60, 80, 87, 90, 94, 100, 101, 110})));
+  CpuList scratch = list0;
+  scratch.Union(list1);
+  EXPECT_THAT(scratch, Eq(result));
+
+  scratch = list0;
+  scratch += list1;
+  EXPECT_THAT(scratch, Eq(result));
+
+  scratch = list0 + list1;
+  EXPECT_THAT(scratch, Eq(result));
+}
+
+// Tests that the `CpuList::Subtract` method calculates the correct subtraction
+// of two `CpuList`s. Also tests the related `-` and `-=` operators.
+TEST(TopologyTest, Subtract) {
+  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  const CpuList list0 =
+      test_topology->ToCpuList(std::vector<int>{1, 3, 5, 20, 87, 94, 100});
+  const CpuList list1 =
+      test_topology->ToCpuList(std::vector<int>{0, 5, 10, 60, 94});
+  const CpuList result = test_topology
+                             ->ToCpuList(std::vector<int>{1, 3, 20, 87, 100});
+
+  CpuList scratch = list0;
+  scratch.Subtract(list1);
+  EXPECT_THAT(scratch, Eq(result));
+
+  scratch = list0;
+  scratch -= list1;
+  EXPECT_THAT(scratch, Eq(result));
+
+  scratch = list0 - list1;
+  EXPECT_THAT(scratch, Eq(result));
 }
 
 // Tests that immediately dereferencing the iterator returned by `begin()` for
@@ -372,7 +408,7 @@ TEST(TopologyTest, IteratorBoundary) {
 
 static std::string StripCommas(const std::string s) {
   std::string ret;
-  for (auto c : s) {
+  for (const char c : s) {
     if (c != ',') {
       absl::StrAppend(&ret, std::string(1, c));
     }
@@ -386,7 +422,7 @@ static void TestList(Topology* t, const std::vector<int> cpus,
   std::string cpumask = list.CpuMaskStr();
   std::string cpumask_nocomma = StripCommas(cpumask);
 
-  for (auto c : cpus) {
+  for (const int c : cpus) {
     char nibble[2] = {0};
     nibble[0] = cpumask_nocomma[cpumask_nocomma.length() - 1 - c / 4];
     uint32_t nibble_int;
@@ -456,6 +492,19 @@ TEST(TopologyTest, CpuInNodeTest) {
   cpus_on_node0 = test_topology->CpusOnNode(0);
   cpus_on_node0.Union(cpus_on_node1);
   EXPECT_EQ(cpus_on_node0.Size(), test_topology->all_cpus().Size());
+}
+
+// Test conversion of cpu_set_t to CpuList.
+TEST(TopologyTest, CpuSetToCpuList) {
+  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  CpuList list = test_topology->EmptyCpuList();
+  int stride = 1;
+  for (int i = 0; i < test_topology->num_cpus(); i += stride++) {
+    list.Set(i);
+  }
+
+  const cpu_set_t cpuset = Topology::ToCpuSet(list);
+  EXPECT_EQ(list, test_topology->ToCpuList(cpuset));
 }
 
 }  // namespace

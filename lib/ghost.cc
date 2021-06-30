@@ -51,8 +51,8 @@ StatusWordTable::StatusWordTable(int enclave_fd, int id, int numa_node) {
   CHECK(ret == cmd.length() || errno == EEXIST);
   close(ctl);
 
-  fd_ = openat(enclave_fd, absl::StrCat("sw_regions/sw_", id).c_str(),
-               O_RDONLY);
+  fd_ =
+      openat(enclave_fd, absl::StrCat("sw_regions/sw_", id).c_str(), O_RDONLY);
   CHECK_GE(fd_, 0);
   map_size_ = GetFileSize(fd_);
   header_ = static_cast<struct ghost_sw_region_header*>(
@@ -198,18 +198,19 @@ void GhostSignals::Init() {
   std::signal(SIGFPE, SigHand);
   std::signal(SIGILL, SigHand);
   std::signal(SIGINT, SigHand);
-  std::signal(SIGSEGV, SigHand);
   std::signal(SIGTERM, SigHand);
   std::signal(SIGUSR1, SigHand);
   // Don't handle `SIGCHLD`; it's used by `ForkedProcess`.
+
+  struct sigaction sigsegv_act = {{0}};
+  sigsegv_act.sa_sigaction = SigSegvAction;
+  sigsegv_act.sa_flags = SA_SIGINFO;
+
+  sigaction(SIGSEGV, &sigsegv_act, NULL);
 }
 
-void GhostSignals::IgnoreAll() {
-  std::signal(SIGABRT, SigIgnore);
-  std::signal(SIGFPE, SigIgnore);
-  std::signal(SIGILL, SigIgnore);
+void GhostSignals::IgnoreCommon() {
   std::signal(SIGINT, SigIgnore);
-  std::signal(SIGSEGV, SigIgnore);
   std::signal(SIGTERM, SigIgnore);
   std::signal(SIGUSR1, SigIgnore);
   // Don't handle `SIGCHLD`; it's used by `ForkedProcess`.
@@ -228,6 +229,13 @@ void GhostSignals::SigHand(int signum) {
     std::cerr << "Fatal signal " << strsignal(signum) << ": " << std::endl;
     Exit(1);
   }
+}
+
+void GhostSignals::SigSegvAction(int signum, siginfo_t* info, void* uctx) {
+  std::cerr << "PID " << Gtid::Current().tid() << " Fatal segfault at addr "
+            << info->si_addr << ": " << std::endl;
+  PrintBacktrace(stderr, uctx);
+  std::exit(1);
 }
 
 void GhostSignals::AddHandler(int signal, std::function<bool(int)> handler) {

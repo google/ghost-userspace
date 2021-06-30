@@ -66,7 +66,10 @@ void Orchestrator::RefreshSchedParams(const SchedCallbackFunc& SchedCallback) {
     } else if (updatedIndex == PrioTable::kStreamNoEntries) {
       break;
     } else {
-      GHOST_ERROR("Dequeued unknown value from the stream");
+      GHOST_ERROR(
+          "Dequeued unknown value 0x%x from the stream, cap 0x%x, "
+          "num_sched_items_ 0x%x",
+          updatedIndex, table_.hdr()->st_cap, num_sched_items_);
     }
   }
 }

@@ -62,9 +62,9 @@ struct SolTask : public Task {
         return "Yielding";
       case SolTask::RunState::kPending:
         return "Pending";
-      // We will get a compile error if a new member is added to the
-      // `SolTask::RunState` enum and a corresponding case is not added
-      // here.
+        // We will get a compile error if a new member is added to the
+        // `SolTask::RunState` enum and a corresponding case is not added
+        // here.
     }
     CHECK(false);
     return "Unknown run state";
@@ -86,10 +86,9 @@ struct SolTask : public Task {
 
 class SolScheduler : public BasicDispatchScheduler<SolTask> {
  public:
-  explicit SolScheduler(
-      Enclave* enclave, CpuList cpus,
-      std::shared_ptr<TaskAllocator<SolTask>> allocator,
-      int32_t global_cpu);
+  explicit SolScheduler(Enclave* enclave, CpuList cpus,
+                        std::shared_ptr<TaskAllocator<SolTask>> allocator,
+                        int32_t global_cpu);
   ~SolScheduler() final;
 
   void EnclaveReady() final;
@@ -104,11 +103,11 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
   void TaskBlocked(SolTask* task, const Message& msg) final;
   void TaskPreempted(SolTask* task, const Message& msg) final;
 
-  // Handles a timer tick. Currently a nop.
-  void CpuTick(const Message& msg) final;
-
   // Handles cpu "not idle" message. Currently a nop.
   void CpuNotIdle(const Message& msg) final;
+
+  // Handles cpu "timer expired" messages. Currently a nop.
+  void CpuTimerExpired(const Message& msg) final;
 
   bool Empty() { return num_tasks_ == 0; }
 
@@ -128,7 +127,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
     return global_cpu_.load(std::memory_order_acquire);
   }
 
-  void SetGlobalCPU(Cpu cpu) {
+  void SetGlobalCPU(const Cpu& cpu) {
     global_cpu_core_ = cpu.core();
     global_cpu_.store(cpu.id(), std::memory_order_release);
   }
@@ -160,7 +159,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 
   // Print debug details about the current tasks managed by the global agent,
   // CPU state, and runqueue stats.
-  void DumpState(Cpu cpu, int flags) final;
+  void DumpState(const Cpu& cpu, int flags) final;
   std::atomic<bool> debug_runqueue_ = false;
 
   static const int kDebugRunqueue = 1;
@@ -173,7 +172,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
     const Agent* agent = nullptr;
   } ABSL_CACHELINE_ALIGNED;
 
-  bool SyncCpuState(Cpu cpu);
+  bool SyncCpuState(const Cpu& cpu);
   void SyncTaskState(SolTask* task);
   bool PreemptTask(SolTask* prev, SolTask* next,
                    StatusWord::BarrierToken agent_barrier);
@@ -194,15 +193,13 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
   // Returns 'true' if a CPU can be scheduled by ghOSt. Returns 'false'
   // otherwise, usually because a higher-priority scheduling class (e.g., CFS)
   // is currently using the CPU.
-  bool Available(Cpu cpu);
+  bool Available(const Cpu& cpu);
 
   CpuState* cpu_state_of(const SolTask* task);
 
-  CpuState* cpu_state(Cpu cpu) { return &cpu_states_[cpu.id()]; }
+  CpuState* cpu_state(const Cpu& cpu) { return &cpu_states_[cpu.id()]; }
 
-  size_t RunqueueSize() const {
-    return run_queue_.size();
-  }
+  size_t RunqueueSize() const { return run_queue_.size(); }
 
   bool RunqueueEmpty() const { return RunqueueSize() == 0; }
 
@@ -222,8 +219,9 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 };
 
 // Initializes the task allocator and the Sol scheduler.
-std::unique_ptr<SolScheduler> SingleThreadSolScheduler(
-    Enclave* enclave, CpuList cpus, int32_t global_cpu);
+std::unique_ptr<SolScheduler> SingleThreadSolScheduler(Enclave* enclave,
+                                                       CpuList cpus,
+                                                       int32_t global_cpu);
 
 // Operates as the Global or Satellite agent depending on input from the
 // global_scheduler->GetGlobalCPU callback.
@@ -289,16 +287,20 @@ class FullSolAgent : public FullAgent<ENCLAVE> {
                                        global_scheduler_.get());
   }
 
-  int64_t RpcHandler(int64_t req, const AgentRpcArgs& args) override {
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse<>& response) override {
     switch (req) {
       case SolScheduler::kDebugRunqueue:
         global_scheduler_->debug_runqueue_ = true;
-        return 0;
+        response.response_code = 0;
+        return;
       case SolScheduler::kGetSchedOverhead:
-        return absl::ToInt64Nanoseconds(
+        response.response_code = absl::ToInt64Nanoseconds(
             global_scheduler_->SchedulingOverhead());
+        return;
       default:
-        return -1;
+        response.response_code = -1;
+        return;
     }
   }
 

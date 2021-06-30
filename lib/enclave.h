@@ -41,14 +41,37 @@ class RunRequest;
 class Agent;
 class Scheduler;
 
+// Options for how the kernel generates MSG_CPU_TICKs
+enum class CpuTickConfig {
+  kNoTicks,
+  kAllTicks,
+  kTickOnRequest,
+};
+
+// Contains the configuration for an Agent, including the topology, the list of
+// cpus, etc.  Pass this to FullAgent.
+class AgentConfig {
+ public:
+  Topology* topology_;
+  // If enclave_fd_ is set, then cpus_ is ignored.
+  CpuList cpus_;
+  int enclave_fd_ = -1;
+  CpuTickConfig tick_config_ = CpuTickConfig::kNoTicks;
+
+  explicit AgentConfig(Topology* topology = nullptr,
+                       CpuList cpus = MachineTopology()->EmptyCpuList())
+      : topology_(topology), cpus_(cpus) {}
+  virtual ~AgentConfig() {}
+};
+
 class Enclave {
  public:
-  Enclave(Topology* topology, CpuList enclave_cpus);
-  Enclave(Topology* topology, int enclave_fd);
+  Enclave(const AgentConfig config);
   virtual ~Enclave();
 
-  // Get the run request for 'cpu'
-  virtual RunRequest* GetRunRequest(Cpu cpu) = 0;
+  // Gets the run request for `cpu`.
+  virtual RunRequest* GetRunRequest(const Cpu& cpu) = 0;
+
   // Submits 'req', waits for it to complete, and checks its return status. If
   // the commit succeeded, returns 'true'. Returns 'false' otherwise. Look at
   // the request itself to get the failure reason (req->state()).
@@ -59,6 +82,7 @@ class Enclave {
   // from the performance advantage of non-inline commits if this method is
   // called. Call 'SubmitRunRequest' instead.
   virtual bool CommitRunRequest(RunRequest* req) = 0;
+
   // Submits 'req' so the kernel may commit it, but neither waits for the commit
   // to complete nor checks its return status. Use this to submit non-inline
   // commits so that the agent may perform other work and periodically check if
@@ -66,6 +90,7 @@ class Enclave {
   // 'CommitRunRequest'/'CompleteRunRequest' and spinning until the commits
   // finish.
   virtual void SubmitRunRequest(RunRequest* req) = 0;
+
   // Waits for 'req' to be committed by the kernel (but does not submit 'req' if
   // it has not yet been submitted) and checks its return status. If the commit
   // succeeded, returns 'true'. Returns 'false' otherwise. Look at the request
@@ -77,6 +102,7 @@ class Enclave {
   // from the performance advantage of non-inline commits if this method is
   // called. Call 'SubmitRunRequest' instead.
   virtual bool CompleteRunRequest(RunRequest* req) = 0;
+
   // The agent calls this when it wants to yield its CPU without scheduling a
   // task on its own CPU.
   virtual bool LocalYieldRunRequest(const RunRequest* req,
@@ -94,6 +120,7 @@ class Enclave {
   // Commit all open transactions on cpus specified in 'cpu_list'.
   // Returns true if all txns committed successfully and false otherwise.
   virtual bool CommitRunRequests(const CpuList& cpu_list);
+
   // Submits all open transactions on cpus specified in 'cpu_list' for commit,
   // but neither waits for them to commit nor checks their return status.
   virtual void SubmitRunRequests(const CpuList& cpu_list);
@@ -112,7 +139,22 @@ class Enclave {
   // On success the kernel releases ownership of all txns in the sync group.
   virtual bool SubmitSyncRequests(const CpuList& cpu_list) = 0;
 
-  virtual Agent* GetAgent(Cpu cpu) = 0;
+  virtual Agent* GetAgent(const Cpu& cpu) = 0;
+
+  // Runs l on every non-agent, ghost-task status word.
+  virtual void ForEachTaskStatusWord(
+      std::function<void(struct ghost_status_word* sw, uint32_t region_id,
+                         uint32_t idx)>
+          l) = 0;
+
+  virtual void AdvertiseOnline() {}
+  virtual void PrepareToExit() {}
+  // If there was an old agent attached to the enclave, this blocks until that
+  // agent exits.
+  virtual void WaitForOldAgent() = 0;
+  virtual void InsertBpfPrograms() {}
+  // LocalEnclaves have a ctl fd, which various agent functions use.
+  virtual int GetCtlFd() { return -1; }
 
   // REQUIRES: Must be called by an implementation when all Schedulers and
   // Agents have been constructed.
@@ -145,16 +187,14 @@ class Enclave {
   const CpuList* cpus() const { return &enclave_cpus_; }
 
  protected:
+  const AgentConfig config_;
   Topology* topology_;
   CpuList enclave_cpus_;
-  // TODO move these and the "passed in enclave" to LocalEnclave
-  int dir_fd_ = -1;
-  int ctl_fd_ = -1;
 
   // Specializations for Attach and Detach must invoke the base method.
   // Note: Invoked by the actual thread associated with the Agent, prior to
   // invoking specialization.
-  virtual void AttachAgent(Cpu cpu, Agent* agent);
+  virtual void AttachAgent(const Cpu& cpu, Agent* agent);
   virtual void DetachAgent(Agent* agent);
 
   virtual void AttachScheduler(Scheduler* scheduler);
@@ -163,7 +203,6 @@ class Enclave {
   // May be overridden by implementations for Enclave late-initialization.
   // See Ready() for more details.
   virtual void DerivedReady() {}
-  virtual void AdvertiseReady() {}
 
  private:
   absl::Mutex mu_;
@@ -290,13 +329,17 @@ class RunRequest {
 
   Cpu cpu() const { return cpu_; }
   ghost_txn_state state() const {
-    return static_cast<ghost_txn_state>(
-        txn_->state.load(std::memory_order_acquire));
+    return txn_->state.load(std::memory_order_acquire);
   }
-  bool open() const { return state() == GHOST_TXN_READY; }
-  bool committed() const { return state() < 0; }
-  bool failed() const { return committed() && state() != GHOST_TXN_COMPLETE; }
-  bool succeeded() const { return state() == GHOST_TXN_COMPLETE; }
+  bool open() const { return is_open(state()); }
+  bool committed() const { return is_committed(state()); }
+  bool failed() const { return is_failed(state()); }
+  bool succeeded() const { return is_succeeded(state()); }
+  absl::Time commit_time() const {
+    // Do a relaxed load of `txn_->commit_time` since this should be done after
+    // the acquire load to the txn state.
+    return absl::FromUnixNanos(READ_ONCE(txn_->commit_time));
+  }
 
   // Returns the owner of the sync_group from the associated txn.
   int32_t sync_group_owner_get() const {
@@ -313,34 +356,22 @@ class RunRequest {
     return sync_group_owner_get() != kSyncGroupNotOwned;
   }
 
-  // `agent_barrier()` returns the transaction's agent_barrier field.
-  StatusWord::BarrierToken agent_barrier() const {
-    return txn_->agent_barrier;
-  }
+  // Returns the transaction's agent_barrier field.
+  StatusWord::BarrierToken agent_barrier() const { return txn_->agent_barrier; }
 
-  // `target()` returns the transaction's gtid field.
-  Gtid target() const {
-    return Gtid(txn_->gtid);
-  }
+  // Returns the transaction's gtid field.
+  Gtid target() const { return Gtid(txn_->gtid); }
 
-  // `target_barrier()` returns the transaction's task_barrier field.
-  StatusWord::BarrierToken target_barrier() const {
-    return txn_->task_barrier;
-  }
+  // Returns the transaction's task_barrier field.
+  StatusWord::BarrierToken target_barrier() const { return txn_->task_barrier; }
 
-  // `commit_flags()` returns the transaction's commit_flags field.
-  int commit_flags() const {
-    return txn_->commit_flags;
-  }
+  // Returns the transaction's commit_flags field.
+  int commit_flags() const { return txn_->commit_flags; }
 
-  // `run_flags()` returns the transaction's run_flags field.
-  int run_flags() const {
-    return txn_->run_flags;
-  }
+  // Returns the transaction's run_flags field.
+  int run_flags() const { return txn_->run_flags; }
 
-  bool allow_txn_target_on_cpu() const {
-    return allow_txn_target_on_cpu_;
-  }
+  bool allow_txn_target_on_cpu() const { return allow_txn_target_on_cpu_; }
 
  private:
   RunRequest() : cpu_(Cpu::UninitializedType::kUninitialized) {}
@@ -350,6 +381,19 @@ class RunRequest {
 
     CHECK_EQ(txn->cpu, cpu.id());
     txn_ = txn;
+  }
+
+  // These are helper functions for the state-checking functions above. These
+  // are useful because the caller may only want to call `state()` once since
+  // that function does an atomic read and its value may change between
+  // successive calls (e.g., in `is_failed()`).
+  bool is_open(ghost_txn_state state) const { return state == GHOST_TXN_READY; }
+  bool is_committed(ghost_txn_state state) const { return state < 0; }
+  bool is_failed(ghost_txn_state state) const {
+    return is_committed(state) && state != GHOST_TXN_COMPLETE;
+  }
+  bool is_succeeded(ghost_txn_state state) const {
+    return state == GHOST_TXN_COMPLETE;
   }
 
   Cpu cpu_;
@@ -362,41 +406,63 @@ class RunRequest {
 };
 
 // An Enclave supporting execution on the local physical host.
-class LocalEnclave : public Enclave {
+class LocalEnclave final : public Enclave {
  public:
-  LocalEnclave(Topology* topology, CpuList enclave_cpus);
-  LocalEnclave(Topology* topology, int enclave_fd);
+  LocalEnclave(AgentConfig config);
   ~LocalEnclave() final;
 
-  RunRequest* GetRunRequest(Cpu cpu) override { return &cpus_[cpu.id()].req; }
+  RunRequest* GetRunRequest(const Cpu& cpu) final {
+    return &cpus_[cpu.id()].req;
+  }
 
-  bool CommitRunRequest(RunRequest* req) override;
-  void SubmitRunRequest(RunRequest* req) override;
-  bool CompleteRunRequest(RunRequest* req) override;
+  bool CommitRunRequest(RunRequest* req) final;
+  void SubmitRunRequest(RunRequest* req) final;
+  bool CompleteRunRequest(RunRequest* req) final;
   bool LocalYieldRunRequest(const RunRequest* req,
                             StatusWord::BarrierToken agent_barrier,
-                            int flags) override;
-  bool PingRunRequest(RunRequest* req, Cpu remote_cpu) override;
+                            int flags) final;
+  bool PingRunRequest(RunRequest* req, Cpu remote_cpu) final;
 
-  bool CommitRunRequests(const CpuList& cpu_list) override;
-  void SubmitRunRequests(const CpuList& cpu_list) override;
-  bool CommitSyncRequests(const CpuList& cpu_list) override;
-  bool SubmitSyncRequests(const CpuList& cpu_list) override;
+  bool CommitRunRequests(const CpuList& cpu_list) final;
+  void SubmitRunRequests(const CpuList& cpu_list) final;
+  bool CommitSyncRequests(const CpuList& cpu_list) final;
+  bool SubmitSyncRequests(const CpuList& cpu_list) final;
 
-  Agent* GetAgent(Cpu cpu) final { return rep(cpu)->agent; }
-  void AttachAgent(Cpu cpu, Agent* agent) final;
+  Agent* GetAgent(const Cpu& cpu) final { return rep(cpu)->agent; }
+  void AttachAgent(const Cpu& cpu, Agent* agent) final;
   void DetachAgent(Agent* agent) final;
+
+  int GetNrTasks() { return LocalEnclave::GetNrTasks(dir_fd_); }
+
+  // Runs l on every non-agent, ghost-task status word.
+  void ForEachTaskStatusWord(
+      const std::function<void(struct ghost_status_word* sw, uint32_t region_id,
+                               uint32_t idx)>
+          l) final;
+
+  void AdvertiseOnline() final;
+  void PrepareToExit() final;
+
+  // If there was an old agent attached to the enclave (i.e. holding a RW fd on
+  // agent_online), this blocks until that FD is closed.
+  void WaitForOldAgent() final;
+  int GetCtlFd() final { return ctl_fd_; }
 
   static int MakeNextEnclave();
   static int GetEnclaveDirectory(int ctl_fd);
   static int GetCpuDataRegion(int dir_fd);
+  // Waits on an enclave's agent_online until the value of the file was 'until'
+  // (either 0 or 1) at some point in time.
+  static void WaitForAgentOnlineValue(int dir_fd, int until);
+  static int GetNrTasks(int dir_fd);
   static void DestroyEnclave(int ctl_fd);
   static void DestroyAllEnclaves();
 
  private:
   void CommonInit();
   void BuildCpuReps();
-  void AdvertiseReady() final;
+  void AttachToExistingEnclave();
+  void CreateAndAttachToEnclave();
   // Releases ownership of txns associated with cpus in `cpu_list`.
   void ReleaseSyncRequests(const CpuList& cpu_list);
 
@@ -414,6 +480,9 @@ class LocalEnclave : public Enclave {
   ghost_cpu_data* data_region_ = nullptr;
   size_t data_region_size_ = 0;
   bool destroy_when_destructed_;
+  int dir_fd_ = -1;
+  int ctl_fd_ = -1;
+  int agent_online_fd_ = -1;
 };
 
 }  // namespace ghost

@@ -32,8 +32,14 @@
 #include "linux_tools/bpf.h"
 #include "linux_tools/libbpf.h"
 
-static struct per_cpu_data *cpu_data;
+static struct ghost_bpf *obj;
+static struct ghost_per_cpu_data *cpu_data;
+static struct {
+	bool inserted;
+	int fd;
+} bpf_info [GHOST_BPF_MAX_NR_PROGS];
 
+// mmaps a bpf map.  Returns MAP_FAILED on error; unmap it with munmap().
 static void *bpf_map__mmap(struct bpf_map *map)
 {
 	const struct bpf_map_def *def = bpf_map__def(map);
@@ -45,94 +51,179 @@ static void *bpf_map__mmap(struct bpf_map *map)
 		    bpf_map__fd(map), 0);
 }
 
-static void prep_prog(struct bpf_program *prog, int prog_type,
-		      int expected_attach_type)
+static void bpf_program__set_types(struct bpf_program *prog, int prog_type,
+				   int expected_attach_type)
 {
 	bpf_program__set_type(prog, prog_type);
 	bpf_program__set_expected_attach_type(prog, expected_attach_type);
 }
 
-/* attach or link, as applicable */
-static int hook_prog(struct bpf_program *prog)
+// libbpf doesn't know about ghost-specific BPF programs, so you have to set the
+// type and attach type for every bpf program before they are loaded.
+static void set_all_program_types(struct ghost_bpf *obj)
+{
+	bpf_program__set_types(obj->progs.ghost_sched_skip_tick,
+			       BPF_PROG_TYPE_GHOST_SCHED,
+			       BPF_GHOST_SCHED_SKIP_TICK);
+}
+
+// Inserts the program in the the kernel.  The program must already be loaded.
+// Internally, this does an ATTACH or LINK.  libbpf doesn't know about ghost's
+// BPF programs, so you have to call this instead of something like
+// SKELETON_bpf__attach(obj).
+//
+// Returns the inserted program's FD on success, or -1 with errno set on
+// failure.
+static int insert_prog(int ctl_fd, struct bpf_program *prog)
 {
 	int prog_fd = bpf_program__fd(prog);
 	int eat = bpf_program__get_expected_attach_type(prog);
+	int ret;
 
 	switch (eat) {
-	case BPF_SCHEDULER_TICK:
-		if (bpf_link_create(prog_fd, -1, eat, NULL) < 0)
-			return -1;
-		return 0;
+	case BPF_GHOST_SCHED_SKIP_TICK:
+		ret = bpf_link_create(prog_fd, ctl_fd, eat, NULL);
+		break;
 	default:
 		/* no attach types yet, but here's how we'd do it */
-		if (bpf_prog_attach(prog_fd, -1, eat, 0))
-			return -1;
-		return 0;
+		ret = bpf_prog_attach(prog_fd, ctl_fd, eat, 0);
+		break;
 	}
+
+	// libbpf's functions typically return -error_code, but some *usually*
+	// just return -1 and have errno set, but *might* return -EINVAL.  It
+	// depends if they are calling sys_bpf() directly without handling
+	// errors.  bpf_link_create() and prog_attach are like the latter.
+	if (ret == -1) {
+		// Make sure errno has some non-zero value
+		errno = errno ?: EINVAL;
+		return -1;
+	}
+	if (ret < 0) {
+		errno = -ret;
+		return -1;
+	}
+	return ret;
 }
 
-int bpf_init(void)
+// Returns 0 on success, or -1 with errno set on failure.
+// You can attempt to insert the same program multiple times; it will only be
+// inserted once.
+static int insert_prog_by_id(struct ghost_bpf *obj, int ctl_fd, int id)
 {
-	struct ghost_bpf *obj;
-	int err;
+	int ret;
 
-	err = bump_memlock_rlimit();
+	if (bpf_info[id].inserted)
+		return 0;
 
-	if (err) {
-		fprintf(stderr, "failed to increase rlimit: %d\n", err);
+	switch (id) {
+	case GHOST_BPF_NONE:
+		return 0;
+	case GHOST_BPF_TICK_ON_REQUEST:
+		ret = insert_prog(ctl_fd, obj->progs.ghost_sched_skip_tick);
+		if (ret < 0)
+			return ret;
+		break;
+	default:
+		errno = ENOENT;
 		return -1;
 	}
 
+	bpf_info[id].inserted = true;
+	bpf_info[id].fd = ret;
+
+	return 0;
+}
+
+// Returns 0 on success, -1 with errno set on failure.
+int bpf_init(void)
+{
+	int err;
+
+	if (obj)
+		return 0;
+
+	if (bump_memlock_rlimit())
+		return -1;
+
 	obj = ghost_bpf__open();
 	if (!obj) {
-		fprintf(stderr, "failed to open BPF object\n");
+		// ghost_bpf__open() clobbered errno.
+		errno = EINVAL;
 		return -1;
 	}
 
 	bpf_map__resize(obj->maps.cpu_data, libbpf_num_possible_cpus());
 
-	/* libbpf doesn't know about our sched type.  you have to do this for
-	 * each program.
-	 */
-	prep_prog(obj->progs.sched_tick, BPF_PROG_TYPE_SCHEDULER,
-		  BPF_SCHEDULER_TICK);
+	set_all_program_types(obj);
 
-	if (ghost_bpf__load(obj)) {
+	err = ghost_bpf__load(obj);
+	if (err) {
 		ghost_bpf__destroy(obj);
-		fprintf(stderr, "failed to load BPF object\n");
+		errno = -err;
+		return -1;
+	}
+	return 0;
+}
+
+// Returns 0 on success, -1 with errno set on failure.  Any programs inserted
+// are not removed; call bpf_destroy() or just exit your process.
+int bpf_insert(int ctl_fd, int *progs, size_t nr_progs)
+{
+	int ret;
+
+	if (!obj) {
+		errno = ENXIO;
 		return -1;
 	}
 
-	if (hook_prog(obj->progs.sched_tick) < 0) {
-		fprintf(stderr, "failed to attach/link BPF program\n");
-		goto cleanup;
+	for (int i = 0; i < nr_progs; i++) {
+		ret = insert_prog_by_id(obj, ctl_fd, progs[i]);
+		if (ret)
+			return ret;
 	}
 
 	cpu_data = bpf_map__mmap(obj->maps.cpu_data);
 
-	if (cpu_data == MAP_FAILED) {
-		cpu_data = NULL;
-		fprintf(stderr, "failed to mmap cpu_data\n");
-		goto cleanup;
-	}
-
-cleanup:
-	ghost_bpf__destroy(obj);
+	if (cpu_data == MAP_FAILED)
+		return -1;
 
 	return 0;
 }
 
-void bpf_request_tick_on(int cpu)
+// Gracefully unlinks and unloads the BPF programs.  When agents call this, they
+// explicitly close (and thus unlink/detach) BPF programs from the enclave,
+// which will speed up agent upgrade/handoff.
+void bpf_destroy(void)
+{
+	for (int i = 0; i < GHOST_BPF_MAX_NR_PROGS; ++i) {
+		if (bpf_info[i].inserted) {
+			close(bpf_info[i].fd);
+			bpf_info[i].inserted = false;
+		}
+	}
+	ghost_bpf__destroy(obj);
+	obj = NULL;
+}
+
+// Returns 0 on success, -1 with errno set on failure.  Must have selected
+// GHOST_BPF_TICK_ON_REQUEST.
+int request_tick_on_cpu(int cpu)
 {
 	unsigned int nr_cpus = libbpf_num_possible_cpus();
 
+	if (!bpf_info[GHOST_BPF_TICK_ON_REQUEST].inserted) {
+		errno = ENOENT;
+		return -1;
+	}
 	if (cpu >= nr_cpus) {
-		fprintf(stderr, "cpu %d out of range %d\n", cpu, nr_cpus);
-		return;
+		errno = ERANGE;
+		return -1;
 	}
 	if (!cpu_data) {
-		fprintf(stderr, "BPF cpu_data not mmapped!\n");
-		return;
+		errno = EINVAL;
+		return -1;
 	}
 	cpu_data[cpu].want_tick = true;
+	return 0;
 }

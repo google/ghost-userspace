@@ -30,7 +30,9 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "lib/base.h"
-#include "lib/ghost.h"
+
+// We carry some definitions currently which anchor on this for convenience.
+#define MAX_CPUS 256
 
 namespace ghost {
 
@@ -113,6 +115,30 @@ class CpuList {
                       std::begin(other.bitmap_));
   }
 
+  // Returns the Union of `this` and `other`.
+  CpuList& operator+=(const CpuList& other) {
+    this->Union(other);
+    return *this;
+  }
+
+  // Returns the Union of `lhs` and `rhs`.
+  friend CpuList operator+(CpuList lhs, const CpuList& rhs) {
+    lhs += rhs;
+    return lhs;
+  }
+
+  // Returns the result of `this.Subtract(other)`.
+  CpuList& operator-=(const CpuList& other) {
+    this->Subtract(other);
+    return *this;
+  }
+
+  // Returns the result of `lhs.Subtract(rhs)`.
+  friend CpuList operator-(CpuList lhs, const CpuList& rhs) {
+    lhs -= rhs;
+    return lhs;
+  }
+
   // Converts this `CpuList` to an `std::vector<Cpu>` and returns the vector.
   std::vector<Cpu> ToVector() const {
     std::vector<Cpu> cpus;
@@ -152,6 +178,20 @@ class CpuList {
                    [](uint64_t a, uint64_t b) { return a | b; });
   }
 
+  // Performs a bitwise `AND NOT` over two bitmaps, and stores the result in the
+  // calling object's bitmap. That is, `a AND ~b`, or the result of subtracting
+  // the bits in `b` from `a`.
+  //
+  // Example:
+  // CpuList a;
+  // CpuList b;
+  // ...
+  // a.Subtract(b);  // Mutates `a`.
+  void Subtract(const CpuList& src) {
+    std::transform(bitmap_, bitmap_ + kMapSize, src.bitmap_, bitmap_,
+                   [](uint64_t a, uint64_t b) { return a & ~b; });
+  }
+
   // Sets the bit at index `id`.
   void Set(uint32_t id) {
     DCHECK_GE(id, 0);
@@ -175,7 +215,7 @@ class CpuList {
   void Clear(const Cpu& cpu) { Clear(cpu.id()); }
 
   // Returns true if the bit at index `id` is set, returns false otherwise.
-  bool IsSet(uint32_t id) {
+  bool IsSet(uint32_t id) const {
     DCHECK_GE(id, 0);
     DCHECK_LT(id, MAX_CPUS);
 
@@ -183,7 +223,7 @@ class CpuList {
   }
 
   // Returns true if the bit for CPU `cpu` is set, returns false otherwise.
-  bool IsSet(const Cpu& cpu) { return IsSet(cpu.id()); }
+  bool IsSet(const Cpu& cpu) const { return IsSet(cpu.id()); }
 
   // Returns the nth CPU set in the bitmap (where `n` is zero-indexed), from
   // low CPU ID to high CPU ID. If fewer than `n + 1` CPUs are set, returns an
@@ -208,6 +248,8 @@ class CpuList {
 
   // Returns number of set bits in the bitmap.
   uint32_t Size() const { return CountSetBits(); }
+
+  const Topology& topology() const { return *topology_; }
 
   // Custom iterator to implement range based for-loops. Loops over set bits
   // in the bitmap and returns corresponding `Cpu` object.
@@ -313,7 +355,7 @@ class CpuList {
     if (!nibble_til_next_comma) {
       nibble_til_next_comma = 8;
     }
-    for (auto c : s) {
+    for (const char c : s) {
       if (!nibble_til_next_comma) {
         nibble_til_next_comma = 8;
         absl::StrAppend(&ret, ",");
@@ -388,6 +430,18 @@ class Topology {
 
     for (const Cpu& c : cpus) {
       result.Set(c.id());
+    }
+    return result;
+  }
+
+  // Converts a cpu_set_t (`cpus`) to a `CpuList` type and returns the CPU list.
+  CpuList ToCpuList(const cpu_set_t& cpus) const {
+    CpuList result(*this);
+
+    for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+      if (CPU_ISSET(cpu, &cpus)) {
+        result.Set(cpu);
+      }
     }
     return result;
   }

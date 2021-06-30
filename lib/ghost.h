@@ -30,11 +30,9 @@
 #include "kernel/ghost_uapi.h"
 #include "lib/base.h"
 #include "lib/logging.h"
+#include "lib/topology.h"
 
 ABSL_DECLARE_FLAG(int32_t, verbose);
-
-// We carry some definitions currently which anchor on this for convenience.
-#define MAX_CPUS 256
 
 namespace ghost {
 
@@ -63,6 +61,23 @@ class StatusWordTable {
 
   StatusWordTable(const StatusWordTable&) = delete;
   StatusWordTable(StatusWordTable&&) = delete;
+
+  // Runs l on every non-agent, ghost-task status word.
+  void ForEachTaskStatusWord(
+      const std::function<void(struct ghost_status_word* sw, uint32_t region_id,
+                               uint32_t idx)>
+          l) {
+    for (int i = 0; i < header_->capacity; ++i) {
+      struct ghost_status_word* sw = get(i);
+      if (!(sw->flags & GHOST_SW_F_INUSE)) {
+        continue;
+      }
+      if (sw->flags & GHOST_SW_TASK_IS_AGENT) {
+        continue;
+      }
+      l(sw, id(), i);
+    }
+  }
 
  private:
   int fd_;
@@ -131,8 +146,8 @@ class Ghost {
     for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
       if (CPU_ISSET(cpu, &cpuset)) {
         wakeup.push_back({
-          .cpu = cpu,
-          .prio = 0,
+            .cpu = cpu,
+            .prio = 0,
         });
       }
     }
@@ -143,7 +158,7 @@ class Ghost {
 
   static int AssociateQueue(const int queue_fd, const ghost_type type,
                             const uint64_t arg, const int barrier,
-                            const int flags, int *status = nullptr) {
+                            const int flags, int* status = nullptr) {
     ghost_msg_src msg_src = {
         .type = type,
         .arg = arg,
@@ -187,14 +202,17 @@ class Ghost {
 
   // Associate a timerfd with agent on 'cpu':
   // - first 3 parameters are identical to timerfd_settime()
-  // - cpu: produce CPU_TIMER_EXPIRED msg into 'dst_q' of agent on this cpu.
+  // - cpu: produce CPU_TIMER_EXPIRED msg into 'dst_q' of agent on this cpu. If
+  // an uninitialized (ie. invalid) cpu is passed, the timerfd will not produce
+  // any msg.
   // - cookie: an opaque value that is reflected back in CPU_TIMER_EXPIRED msg.
-  static int TimerFdSettime(const int fd, const int flags,
-                            itimerspec* const itimerspec, const int cpu = -1,
-                            const uint64_t cookie = 0) {
+  static int TimerFdSettime(
+      const int fd, const int flags, itimerspec* const itimerspec,
+      const Cpu& cpu = Cpu(Cpu::UninitializedType::kUninitialized),
+      const uint64_t cookie = 0) {
     timerfd_ghost timerfd_ghost = {
-        .cpu = cpu,
-        .flags = cpu >= 0 ? TIMERFD_GHOST_ENABLED : 0,
+        .cpu = cpu.valid() ? cpu.id() : -1,
+        .flags = cpu.valid() ? TIMERFD_GHOST_ENABLED : 0,
         .cookie = cookie,
     };
     return syscall(__NR_ghost, GHOST_TIMERFD_SETTIME, fd, flags, itimerspec,
@@ -234,6 +252,22 @@ class Ghost {
     return gbl_sw_table_;
   }
 
+  // Gets the CPU affinity for the task with the provided Gtid and writes the
+  // result to the provided CpuList.
+  // Returns true on success. Otherwise, returns false with errno set.
+  static bool SchedGetAffinity(const Gtid& gtid, CpuList& cpulist) {
+    cpu_set_t allowed_cpus;
+    CPU_ZERO(&allowed_cpus);
+    if (sched_getaffinity(gtid.tid(), sizeof(allowed_cpus), &allowed_cpus)) {
+      return false;
+    }
+    DCHECK_LE(CPU_COUNT(&allowed_cpus), MAX_CPUS);
+    DCHECK_GT(CPU_COUNT(&allowed_cpus), 0);
+
+    cpulist = cpulist.topology().ToCpuList(allowed_cpus);
+    return true;
+  }
+
   static constexpr const char kGhostfsMount[] = "/sys/fs/ghost";
 
  private:
@@ -244,13 +278,14 @@ class Ghost {
 class GhostSignals {
  public:
   static void Init();
-  static void IgnoreAll();
+  static void IgnoreCommon();
 
   static void AddHandler(int signal, std::function<bool(int)> handler);
 
  private:
   static void SigHand(int signum);
-  static void SigIgnore(int signum) {};
+  static void SigSegvAction(int signum, siginfo_t* info, void* uctx);
+  static void SigIgnore(int signum){};
 
   static absl::flat_hash_map<int, std::vector<std::function<bool(int)>>>
       handlers_;
@@ -293,6 +328,12 @@ class StatusWord {
   // All methods below are invalid on an empty status word.
   BarrierToken barrier() const { return sw_barrier(); }
 
+  // The time at which the task was context-switched onto CPU. We do a relaxed
+  // load of `sw_->switch_time` since this should be done after the load to
+  // `sw_->flags` to ensure that the oncpu bit is set.
+  absl::Time switch_time() const {
+    return absl::FromUnixNanos(READ_ONCE(sw_->switch_time));
+  }
   uint64_t runtime() const { return sw_runtime(); }
 
   bool stale(BarrierToken prev) { return prev == barrier(); }

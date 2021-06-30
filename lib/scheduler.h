@@ -74,10 +74,13 @@ class Scheduler {
   // late initialization.  See Enclave::Ready() for full details.
   virtual void EnclaveReady() {}
 
+  // Tells the scheduler to discover new tasks from its enclave
+  virtual void DiscoverTasks() {}
+
   // All schedulers must have some channel that is "default".
   virtual Channel& GetDefaultChannel() = 0;
 
-  virtual void DumpState(Cpu cpu, int flags) {}
+  virtual void DumpState(const Cpu& cpu, int flags) {}
 
  protected:
   Enclave* enclave() const { return enclave_; }
@@ -135,6 +138,159 @@ class BasicDispatchScheduler : public Scheduler {
 
   virtual void DispatchMessage(const Message& msg);
 
+  void DiscoverTasks() override {
+    DiscoveryStart();
+
+    // The kernel may concurrently modify the SW as we read it.  Many changes
+    // involve incrementing the barrier at some point in the future - in
+    // particular during task_woken_ghost and when a task blocks.
+    //
+    // We may miss out on other state changes - the kernel does not guarantee
+    // that the barrier protects the status word, only that the barrier prevents
+    // the agent from missing a message.  For instance, switchto involves
+    // changing the SW, but there is no corresponding message.  For this reason,
+    // we rely on the enclave being "quiescent" (no client tasks).
+    enclave()->ForEachTaskStatusWord([this](struct ghost_status_word* sw,
+                                            uint32_t region_id, uint32_t idx) {
+      struct ghost_sw_info swi = {.id = region_id, .index = idx};
+      TaskType* task;
+      uint32_t sw_barrier;
+      uint32_t sw_flags;
+      uint64_t sw_gtid;
+      uint64_t sw_runtime;
+      bool had_estale = false;
+      int assoc_status;
+
+    retry:
+      // Pairs with the smp_store_release() in the kernel.  (READ_ONCE of the
+      // barrier and an smp_rmb()).
+      sw_barrier = READ_ONCE(sw->barrier);
+
+      std::atomic_thread_fence(std::memory_order_acquire);
+
+      sw_flags = READ_ONCE(sw->flags);
+      sw_runtime = READ_ONCE(sw->runtime);
+      sw_gtid = READ_ONCE(sw->gtid);
+
+      // We will "blindly associate" the task with our default queue, where we
+      // don't actually make sure we received all of the messages before
+      // association.  Any previously sent messages were sent to the old agent's
+      // queue, with one exception handled below (EEXIST).
+      //
+      // The seqnum/barrier has two roles: make sure we didn't miss any messages
+      // and make sure we don't *later* handle any messages we shouldn't.
+      // Association is used to hand-off a task between agent tasks: whoever
+      // controls the queue has the right to muck with the Task.  If we
+      // associate to a new queue, the old queue may still have a message, which
+      // could violate that rule.
+      //
+      // In this case, we're OK when it comes to Task ownership.  The only queue
+      // *in this new agent* that this task could have been using is the Default
+      // queue, which is the one we're (re)associating with.  i.e. we're not
+      // swapping queues.
+      if (!GetDefaultChannel().AssociateTask(Gtid(sw_gtid), sw_barrier,
+                                             &assoc_status)) {
+        switch (errno) {
+          case ENOENT:
+            // The task died or departed.  It could have died and the old agent
+            // crashed before it received TASK_DEAD.  It could have departed
+            // concurrently with our scan.  When we free the task, it will tell
+            // the kernel to free the status_word.
+            bool allocated;
+            std::tie(task, allocated) =
+                allocator()->GetTask(Gtid(sw_gtid), swi);
+            // It's a bug if we already created this since we do not allow
+            // concurrent discovery and message handling.
+            if (!allocated) {
+              GHOST_ERROR("Already had task for gtid %lu!", sw_gtid);
+            }
+            allocator()->FreeTask(task);
+            return;
+          case ESTALE:
+            // We shouldn't have *too many* state changes to the task while we
+            // are discovering.  Tasks are not allowed to run while we are in
+            // discovery.  This is the "system must be quiescent" requirement.
+            //
+            // Specifically, we can have a TASK_WAKEUP or TASK_DEPARTED.
+            // TASK_DEPARTED would give us ENOENT, handled above.  There can be
+            // at most one TASK_WAKEUP (since the task won't run until an agent
+            // schedules it), so we can get at most one ESTALE.
+            if (had_estale) {
+              GHOST_ERROR(
+                  "Got repeated ESTALEs from a quiescent reassociation for "
+                  "gtid %lu, flags %lu!",
+                  sw_gtid, sw_flags);
+            }
+            had_estale = true;
+            goto retry;
+          default:
+            GHOST_ERROR(
+                "Failed reassociation for gtid %lu, errno %d, flags %lu",
+                sw_gtid, errno, sw_flags);
+        }
+      }
+
+      if (assoc_status & (GHOST_ASSOC_SF_ALREADY | GHOST_ASSOC_SF_BRAND_NEW)) {
+        // The association succeeded, but we need to handle it specially.  In
+        // both of these cases, we will eventually get all of the messages for
+        // this task and we do not need to discover it.
+        //
+        // 1) The task's queue was already set to our default queue.  This
+        // means that it arrived after we called SetDefaultQueue, and all of
+        // the messages for the task's state (TASK_NEW, etc.) have been
+        // delivered to us.
+        // 2) Regardless of whether or not the task's queue was set, the kernel
+        // has not sent a TASK_NEW yet.  This happens when a third party
+        // setsched's a running task into ghost; the kernel waits until the task
+        // gets off cpu to send the TASK_NEW.
+        //
+        // In either event, we skip the task during discovery, and will call
+        // TaskNew (and potentially TaskDeparted!) when we handle messages
+        // later.
+        return;
+      }
+
+      // Synthesize a message on the stack from the copied SW state.  All ghost
+      // messages must be aligned to the *size* of struct ghost_msg, not to the
+      // alignment of a ghost_msg.  This means the payloads will be aligned to
+      // that value (8 currently)
+      struct {
+        struct ghost_msg header;
+        struct ghost_msg_payload_task_new payload;
+      } synth __attribute__((aligned(sizeof(struct ghost_msg))));
+      // Make sure there's no magic padding between the structs.
+      static_assert(sizeof(synth) ==
+                    sizeof(struct ghost_msg) +
+                        sizeof(struct ghost_msg_payload_task_new));
+
+      struct ghost_msg* gm = &synth.header;
+      struct ghost_msg_payload_task_new* tn = &synth.payload;
+      gm->type = MSG_TASK_NEW;
+      gm->length = sizeof(synth);
+      gm->seqnum = sw_barrier;
+
+      tn->gtid = sw_gtid;
+      tn->runtime = sw_runtime;
+      tn->runnable = !!(sw_flags & GHOST_SW_TASK_RUNNABLE);
+      tn->sw_info = swi;
+
+      Message msg(gm);
+
+      bool allocated;
+      std::tie(task, allocated) = allocator()->GetTask(Gtid(sw_gtid), swi);
+      if (!allocated) {
+        GHOST_ERROR("Already had task for gtid %lu!", sw_gtid);
+      }
+      TaskNew(task, msg);
+      TaskDiscovered(task);
+    });
+
+    // All tasks that existed before we started to scan the SW region have been
+    // discovered, though there may be new tasks, for which the scheduler will
+    // receive msssages on its default queue.
+    DiscoveryComplete();
+  }
+
  protected:
   // Callbacks to IPC messages delivered by the kernel against `task`.
   // Implementations typically will advance the task's state machine and adjust
@@ -147,9 +303,15 @@ class BasicDispatchScheduler : public Scheduler {
   virtual void TaskBlocked(TaskType* task, const Message& msg) = 0;
   virtual void TaskPreempted(TaskType* task, const Message& msg) = 0;
   virtual void TaskSwitchto(TaskType* task, const Message& msg) {}
+  virtual void TaskAffinityChanged(TaskType* task, const Message& msg) {}
 
-  virtual void CpuTick(const Message& msg) = 0;
-  virtual void CpuNotIdle(const Message& msg) = 0;
+  virtual void TaskDiscovered(TaskType* task) {}
+  virtual void DiscoveryStart() {}
+  virtual void DiscoveryComplete() {}
+
+  virtual void CpuTick(const Message& msg) {}
+  virtual void CpuNotIdle(const Message& msg) {}
+  virtual void CpuTimerExpired(const Message& msg) {}
 
   TaskAllocator<TaskType>* allocator() const { return allocator_.get(); }
 
@@ -225,8 +387,8 @@ class ThreadSafeMallocTaskAllocator
     return Parent::GetTask(gtid);
   }
 
-  std::tuple<TaskType*, bool> GetTask(
-      Gtid gtid, struct ghost_sw_info sw_info) override {
+  std::tuple<TaskType*, bool> GetTask(Gtid gtid,
+                                      struct ghost_sw_info sw_info) override {
     absl::MutexLock lock(&mu_);
     return Parent::GetTask(gtid, sw_info);
   }
@@ -263,6 +425,9 @@ void BasicDispatchScheduler<TaskType>::DispatchMessage(const Message& msg) {
       case MSG_CPU_NOT_IDLE:
         CpuNotIdle(msg);
         break;
+      case MSG_CPU_TIMER_EXPIRED:
+        CpuTimerExpired(msg);
+        break;
       default:
         GHOST_ERROR("Unhandled message type %d", msg.type());
         break;
@@ -297,7 +462,8 @@ void BasicDispatchScheduler<TaskType>::DispatchMessage(const Message& msg) {
     if (ABSL_PREDICT_FALSE(!task)) {
       // This probably cannot happen, though we may have corner cases with
       // in-place upgrades.
-      GHOST_DPRINT(0, stderr, "Unable to find task for msg %s", msg.stringify());
+      GHOST_DPRINT(0, stderr, "Unable to find task for msg %s",
+                   msg.stringify());
       return;
     }
   }
@@ -315,14 +481,14 @@ void BasicDispatchScheduler<TaskType>::DispatchMessage(const Message& msg) {
       break;
     case MSG_TASK_NEW:
       TaskNew(task, msg);
-      update_seqnum = false;    // `TaskNew()` initializes sequence number.
+      update_seqnum = false;  // `TaskNew()` initializes sequence number.
       break;
     case MSG_TASK_PREEMPT:
       TaskPreempted(task, msg);
       break;
     case MSG_TASK_DEAD:
       TaskDead(task, msg);
-      update_seqnum = false;    // `task` pointer may no longer be valid.
+      update_seqnum = false;  // `task` pointer may no longer be valid.
       break;
     case MSG_TASK_WAKEUP:
       TaskRunnable(task, msg);
@@ -335,10 +501,13 @@ void BasicDispatchScheduler<TaskType>::DispatchMessage(const Message& msg) {
       break;
     case MSG_TASK_DEPARTED:
       TaskDeparted(task, msg);
-      update_seqnum = false;    // `task` pointer may no longer be valid.
+      update_seqnum = false;  // `task` pointer may no longer be valid.
       break;
     case MSG_TASK_SWITCHTO:
       TaskSwitchto(task, msg);
+      break;
+    case MSG_TASK_AFFINITY_CHANGED:
+      TaskAffinityChanged(task, msg);
       break;
     default:
       GHOST_ERROR("Unhandled message type %d", msg.type());

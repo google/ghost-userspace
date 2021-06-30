@@ -27,9 +27,9 @@
 #define MAX_NR_HIST_SLOTS 25
 
 struct task_stat {
-	uint64_t runnable_at;
-	uint64_t latched_at;
-	uint64_t ran_at;
+  uint64_t runnable_at;
+  uint64_t latched_at;
+  uint64_t ran_at;
 };
 
 /*
@@ -37,14 +37,14 @@ struct task_stat {
  * 8-byte aligned, since it is a value for a BPF map.
  */
 struct hist {
-	uint32_t slots[MAX_NR_HIST_SLOTS];
+  uint32_t slots[MAX_NR_HIST_SLOTS];
 } __attribute__((aligned(64)));
 
 enum {
-	RUNNABLE_TO_LATCHED,
-	LATCHED_TO_RUN,
-	RUNNABLE_TO_RUN,
-	NR_HISTS,
+  RUNNABLE_TO_LATCHED,
+  LATCHED_TO_RUN,
+  RUNNABLE_TO_RUN,
+  NR_HISTS,
 };
 
 #endif  // GHOST_LIB_BPF_SCHEDLAT_SHARED_H_

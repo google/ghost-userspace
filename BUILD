@@ -294,7 +294,7 @@ cc_test(
     copts = compiler_flags,
     deps = [
         ":edf_scheduler",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -348,11 +348,13 @@ cc_library(
     hdrs = [
         "kernel/ghost_uapi.h",
         "lib/ghost.h",
+        "lib/topology.h",
     ],
     copts = compiler_flags,
     deps = [
         ":base",
         "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:flag",
     ],
 )
