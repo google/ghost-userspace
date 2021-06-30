@@ -446,6 +446,7 @@ class LocalEnclave final : public Enclave {
   // If there was an old agent attached to the enclave (i.e. holding a RW fd on
   // agent_online), this blocks until that FD is closed.
   void WaitForOldAgent() final;
+  void InsertBpfPrograms() final;
   int GetCtlFd() final { return ctl_fd_; }
 
   static int MakeNextEnclave();

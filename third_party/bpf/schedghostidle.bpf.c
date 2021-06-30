@@ -11,13 +11,13 @@
 
 // vmlinux.h must be included before bpf_helpers.h
 // clang-format off
-#include "bpf/bpf/vmlinux_ghost.h"
-#include "linux_tools/bpf_headers/bpf_core_read.h"
-#include "linux_tools/bpf_headers/bpf_helpers.h"
-#include "linux_tools/bpf_headers/bpf_tracing.h"
+#include "kernel/vmlinux_ghost_5_11.h"
+#include "bpf_core_read.h"
+#include "bpf_helpers.h"
+#include "bpf_tracing.h"
 // clang-format on
 
-#include "bpf/iovisor_bcc/bits.bpf.h"
+#include "third_party/iovisor_bcc/bits.bpf.h"
 
 #define MAX_CPUS 256
 /* Keep this in sync with schedghostidle.c. */

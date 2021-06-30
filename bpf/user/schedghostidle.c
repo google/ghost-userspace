@@ -24,9 +24,9 @@
 #include <unistd.h>
 
 #include "bpf/user/schedghostidle_bpf.skel.h"
-#include "bpf/iovisor_bcc/trace_helpers.h"
-#include "linux_tools/bpf.h"
-#include "linux_tools/libbpf.h"
+#include "third_party/iovisor_bcc/trace_helpers.h"
+#include "bpf.h"
+#include "libbpf.h"
 
 #define handle_error(msg) \
         do { perror(msg); exit(-1); } while (0)
@@ -34,14 +34,14 @@
 /* Keep this in sync with schedghostidle.bpf.c. */
 #define NR_SLOTS 25
 
-static u64 start_time_ns, print_time_ns;
+static uint64_t start_time_ns, print_time_ns;
 
 static void print_hist(int fd)
 {
 	unsigned int nr_cpus = libbpf_num_possible_cpus();
 	unsigned int hist[NR_SLOTS] = {0};
-	u64 *count;
-	u64 total = 0;
+	uint64_t *count;
+	uint64_t total = 0;
 	float total_sec;
 
 	count = calloc(nr_cpus, sizeof(*count));

@@ -11,12 +11,12 @@
 
 // vmlinux.h must be included before bpf_helpers.h
 // clang-format off
-#include "linux_tools/bpf_headers/vmlinux.h"
-#include "linux_tools/bpf_headers/bpf_helpers.h"
-#include "linux_tools/bpf_headers/bpf_tracing.h"
+#include "kernel/vmlinux_ghost_5_11.h"
+#include "bpf_helpers.h"
+#include "bpf_tracing.h"
 // clang-format on
 
-#include "bpf/bpf/ghost_shared_bpf.h"
+#include "third_party/bpf/ghost_shared_bpf.h"
 
 /* max_entries is patched at runtime to num_possible_cpus */
 struct {

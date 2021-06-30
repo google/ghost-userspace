@@ -1,9 +1,10 @@
 package(default_visibility = ["//visibility:public"])
 
-# Alias `third_party` projects, allowing us to refer to each one by
-# `//third_party:project`.
+# This BUILD file is necessary so that `//third_party` is a package that the
+# WORKSPACE file can reference. Without this BUILD file, Bazel will be unable to
+# pull in the project dependencies and compile the project.
 
-alias(
-    name = "rocksdb",
-    actual = "@rocksdb//:rocksdb",
-)
+exports_files([
+    "iovisor_bcc/bits.bpf.h",
+    "iovisor_bcc/trace_helpers.h",
+])

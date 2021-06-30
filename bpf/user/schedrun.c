@@ -23,9 +23,9 @@
 #include <unistd.h>
 
 #include "bpf/user/schedrun_bpf.skel.h"
-#include "bpf/iovisor_bcc/trace_helpers.h"
-#include "linux_tools/bpf.h"
-#include "linux_tools/libbpf.h"
+#include "third_party/iovisor_bcc/trace_helpers.h"
+#include "bpf.h"
+#include "libbpf.h"
 
 #define error_exit(msg) do {	\
 	perror(msg);		\
@@ -40,14 +40,14 @@ static pid_t pid = 0;
 
 static void print_hist(int fd)
 {
-	u64 *counts;
+	uint64_t *counts;
 	unsigned int hist[NUM_BUCKETS] = {0};
 
 	int ncpus = libbpf_num_possible_cpus();
 	if (ncpus < 0)
 		error_exit("libbpf_num_possible_cpus");
 
-	counts = calloc(ncpus, sizeof(u64));
+	counts = calloc(ncpus, sizeof(*counts));
 	if (!counts)
 		error_exit("calloc");
 

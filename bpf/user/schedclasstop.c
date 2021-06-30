@@ -24,9 +24,9 @@
 #include <unistd.h>
 
 #include "bpf/user/schedclasstop_bpf.skel.h"
-#include "bpf/iovisor_bcc/trace_helpers.h"
-#include "linux_tools/bpf.h"
-#include "linux_tools/libbpf.h"
+#include "third_party/iovisor_bcc/trace_helpers.h"
+#include "bpf.h"
+#include "libbpf.h"
 
 #define handle_error(msg) \
         do { perror(msg); exit(-1); } while (0)
@@ -37,7 +37,7 @@
 static struct sched_class {
 	char *name;
 	char symbol;
-	u64 total;
+	uint64_t total;
 } sched_class[MAX_SCHED_CLASS] = {
 	[0]  = {"CFS",		'c'},
 	[1]  = {"FIFO",		'f'},
@@ -60,7 +60,7 @@ static struct sched_class {
 	[18] = {"GHOST",	'g'},
 };
 
-static u64 start_time_ns;
+static uint64_t start_time_ns;
 
 static unsigned int get_nr_columns(void)
 {
@@ -73,20 +73,20 @@ static unsigned int get_nr_columns(void)
 static void print_class_times(int fd)
 {
 	unsigned int nr_cpus = libbpf_num_possible_cpus();
-	u64 *class_cpu_times;	/* matrix[class][cpu] */
-	u64 max_time = 0;
-	u64 print_time_ns;
+	uint64_t *class_cpu_times;	/* matrix[class][cpu] */
+	uint64_t max_time = 0;
+	uint64_t print_time_ns;
 	unsigned int width, ns_per_char;
 
 	print_time_ns = get_ktime_ns();
 
-	class_cpu_times = calloc(nr_cpus, sizeof(u64) * MAX_SCHED_CLASS);
+	class_cpu_times = calloc(nr_cpus, sizeof(uint64_t) * MAX_SCHED_CLASS);
 	if (!class_cpu_times)
 		handle_error("calloc");
 
 	for (int i = 0; i < MAX_SCHED_CLASS; i++) {
 		/*
-		 * Each lookup returns a u64[nr_cpus] of the times for a given
+		 * Each lookup returns a uint64_t[nr_cpus] of the times for a given
 		 * class for all cpus.
 		 */
 		if (bpf_map_lookup_elem(fd, &i, &class_cpu_times[i * nr_cpus]))
@@ -94,10 +94,10 @@ static void print_class_times(int fd)
 	}
 
 	for (int c = 0; c < nr_cpus; c++) {
-		u64 cpu_total = 0;
+		uint64_t cpu_total = 0;
 
 		for (int i = 0; i < MAX_SCHED_CLASS; i++) {
-			u64 *i_c = &class_cpu_times[i * nr_cpus + c];
+			uint64_t *i_c = &class_cpu_times[i * nr_cpus + c];
 
 			cpu_total += *i_c;
 			sched_class[i].total += *i_c;
@@ -114,7 +114,7 @@ static void print_class_times(int fd)
 	for (int c = 0; c < nr_cpus; c++) {
 		printf("%3u | ", c);
 		for (int i = 0; i < MAX_SCHED_CLASS; i++) {
-			u64 *i_c = &class_cpu_times[i * nr_cpus + c];
+			uint64_t *i_c = &class_cpu_times[i * nr_cpus + c];
 			unsigned int num_chars = *i_c / ns_per_char;
 
 			for (int j = 0; j < num_chars; j++)

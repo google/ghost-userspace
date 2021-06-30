@@ -22,16 +22,10 @@
 #include <regex>  // NOLINT: no RE2; ghost limits itself to absl
 
 #include "absl/base/attributes.h"
+#include "bpf/user/agent.h"
 #include "kernel/ghost_uapi.h"
 #include "lib/agent.h"
 #include "lib/scheduler.h"
-
-namespace {
-// eBPF is excluded in open source for now.
-inline int bpf_init(void) { return 0; }
-inline int bpf_insert(int ctl_fd, int* progs, size_t nr_progs) { return 0; }
-inline void bpf_destroy(void) {}
-}  // namespace
 
 namespace ghost {
 
@@ -437,6 +431,24 @@ LocalEnclave::~LocalEnclave() {
   Ghost::SetGlobalEnclaveCtlFd(-1);
   delete Ghost::GetGlobalStatusWordTable();
   Ghost::SetGlobalStatusWordTable(nullptr);
+}
+
+void LocalEnclave::InsertBpfPrograms() {
+  int progs[1];
+  switch (config_.tick_config_) {
+    case CpuTickConfig::kNoTicks:
+    case CpuTickConfig::kTickOnRequest:
+      // kNoTicks is the same as kTickOnRequest: you just never ask for one.
+      progs[0] = GHOST_BPF_TICK_ON_REQUEST;
+      break;
+    case CpuTickConfig::kAllTicks:
+      progs[0] = GHOST_BPF_NONE;
+  };
+  int ret;
+  do {
+    ret = bpf_insert(ctl_fd_, progs, ABSL_ARRAYSIZE(progs));
+  } while (ret && errno == EBUSY);
+  CHECK_EQ(ret, 0);
 }
 
 bool LocalEnclave::CommitRunRequests(const CpuList& cpu_list) {

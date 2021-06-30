@@ -1,6 +1,8 @@
 # Note: If you modify this BUILD file, please contact jhumphri@ first to ensure
 # that you are not breaking the Copybara script.
 
+load("//:bpf/bpf.bzl", "bpf_skeleton")
+
 package(default_visibility = ["//:__pkg__"])
 
 # Each license covers the code below:
@@ -31,9 +33,15 @@ compiler_flags = [
     "-DGHOST_LOGGING",
 ]
 
+bpf_linkopts = [
+    "-lelf",
+    "-lz",
+]
+
 cc_library(
     name = "agent",
     srcs = [
+        "bpf/user/agent.c",
         "lib/agent.cc",
         "lib/channel.cc",
         "lib/enclave.cc",
@@ -41,14 +49,18 @@ cc_library(
         "lib/topology.cc",
     ],
     hdrs = [
+        "bpf/user/agent.h",
+        "bpf/user/ghost_bpf.skel.h",
+        "bpf/user/ghost_shared.h",
         "lib/agent.h",
         "lib/channel.h",
         "lib/enclave.h",
         "lib/scheduler.h",
         "lib/topology.h",
+        "//third_party:iovisor_bcc/trace_helpers.h",
     ],
     copts = compiler_flags,
-    linkopts = ["-lnuma"],
+    linkopts = bpf_linkopts + ["-lnuma"],
     deps = [
         ":base",
         ":ghost",
@@ -59,6 +71,7 @@ cc_library(
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
+        "@linux//:libbpf",
     ],
 )
 
@@ -187,6 +200,9 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+# Makes vmlinux_ghost_*.h files visible to eBPF code.
+exports_files(glob(["kernel/vmlinux_ghost_*.h"]))
 
 cc_library(
     name = "base",
@@ -406,12 +422,92 @@ cc_test(
     ],
 )
 
-# All ghost BPF extensions are in bpf/bpf/ghost.bpf.c. The specific programs and
-# their attach points are loaded by the agent in bpf/user/agent.c.
-exports_files([
-    "bpf/iovisor_bcc/bits.bpf.h",
-    "bpf/iovisor_bcc/trace_helpers.h",
-])
+bpf_skeleton(
+    name = "ghost_bpf_skel",
+    bpf_object = "//third_party/bpf:ghost_bpf",
+    skel_hdr = "bpf/user/ghost_bpf.skel.h",
+)
+
+bpf_skeleton(
+    name = "schedclasstop_bpf_skel",
+    bpf_object = "//third_party/bpf:schedclasstop_bpf",
+    skel_hdr = "bpf/user/schedclasstop_bpf.skel.h",
+)
+
+cc_binary(
+    name = "schedclasstop",
+    srcs = [
+        "bpf/user/schedclasstop.c",
+        "bpf/user/schedclasstop_bpf.skel.h",
+        "//third_party:iovisor_bcc/trace_helpers.h",
+    ],
+    copts = compiler_flags,
+    linkopts = bpf_linkopts,
+    deps = [
+        "@linux//:libbpf",
+    ],
+)
+
+bpf_skeleton(
+    name = "schedghostidle_bpf_skel",
+    bpf_object = "//third_party/bpf:schedghostidle_bpf",
+    skel_hdr = "bpf/user/schedghostidle_bpf.skel.h",
+)
+
+cc_binary(
+    name = "schedghostidle",
+    srcs = [
+        "bpf/user/schedghostidle.c",
+        "bpf/user/schedghostidle_bpf.skel.h",
+        "//third_party:iovisor_bcc/trace_helpers.h",
+    ],
+    copts = compiler_flags,
+    linkopts = bpf_linkopts,
+    deps = [
+        "@linux//:libbpf",
+    ],
+)
+
+bpf_skeleton(
+    name = "schedlat_bpf_skel",
+    bpf_object = "//third_party/bpf:schedlat_bpf",
+    skel_hdr = "bpf/user/schedlat_bpf.skel.h",
+)
+
+cc_binary(
+    name = "schedlat",
+    srcs = [
+        "bpf/user/schedlat.c",
+        "bpf/user/schedlat_bpf.skel.h",
+        "bpf/user/schedlat_shared.h",
+        "//third_party:iovisor_bcc/trace_helpers.h",
+    ],
+    copts = compiler_flags,
+    linkopts = bpf_linkopts,
+    deps = [
+        "@linux//:libbpf",
+    ],
+)
+
+bpf_skeleton(
+    name = "schedrun_bpf_skel",
+    bpf_object = "//third_party/bpf:schedrun_bpf",
+    skel_hdr = "bpf/user/schedrun_bpf.skel.h",
+)
+
+cc_binary(
+    name = "schedrun",
+    srcs = [
+        "bpf/user/schedrun.c",
+        "bpf/user/schedrun_bpf.skel.h",
+        "//third_party:iovisor_bcc/trace_helpers.h",
+    ],
+    copts = compiler_flags,
+    linkopts = bpf_linkopts,
+    deps = [
+        "@linux//:libbpf",
+    ],
+)
 
 # Shared library for ghOSt tests.
 
@@ -479,13 +575,13 @@ cc_binary(
     deps = [
         ":base",
         ":experiments_shared",
-        "//third_party:rocksdb",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:bit_gen_ref",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
+        "@rocksdb",
     ],
 )
 
@@ -531,13 +627,13 @@ cc_test(
     deps = [
         ":base",
         ":experiments_shared",
-        "//third_party:rocksdb",
         "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:bit_gen_ref",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
+        "@rocksdb",
     ],
 )
 
@@ -565,13 +661,13 @@ cc_test(
     deps = [
         ":base",
         ":experiments_shared",
-        "//third_party:rocksdb",
         "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:bit_gen_ref",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
+        "@rocksdb",
     ],
 )
 
@@ -586,10 +682,10 @@ cc_test(
     copts = compiler_flags,
     deps = [
         ":base",
-        "//third_party:rocksdb",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_googletest//:gtest",
+        "@rocksdb",
     ],
 )
 
@@ -607,11 +703,11 @@ cc_test(
     copts = compiler_flags,
     deps = [
         ":base",
-        "//third_party:rocksdb",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:bit_gen_ref",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
+        "@rocksdb",
     ],
 )
 

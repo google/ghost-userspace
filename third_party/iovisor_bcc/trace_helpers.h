@@ -21,7 +21,7 @@
 
 #define NSEC_PER_SEC		1000000000ULL
 
-static unsigned long long get_ktime_ns(void)
+static inline unsigned long long get_ktime_ns(void)
 {
 	struct timespec ts;
 
@@ -29,7 +29,7 @@ static unsigned long long get_ktime_ns(void)
 	return ts.tv_sec * NSEC_PER_SEC + ts.tv_nsec;
 }
 
-static int bump_memlock_rlimit(void)
+static inline int bump_memlock_rlimit(void)
 {
 	struct rlimit rlim_new = {
 		.rlim_cur	= RLIM_INFINITY,
@@ -39,7 +39,7 @@ static int bump_memlock_rlimit(void)
 	return setrlimit(RLIMIT_MEMLOCK, &rlim_new);
 }
 
-static void print_stars(unsigned int val, unsigned int val_max, int width)
+static inline void print_stars(unsigned int val, unsigned int val_max, int width)
 {
 	int num_stars, num_spaces, i;
 	bool need_plus;
@@ -56,7 +56,7 @@ static void print_stars(unsigned int val, unsigned int val_max, int width)
 		printf("+");
 }
 
-static void print_log2_hist(unsigned int *vals, int vals_size,
+static inline void print_log2_hist(unsigned int *vals, int vals_size,
 			    const char *val_type)
 {
 	int stars_max = 40, idx_max = -1;
