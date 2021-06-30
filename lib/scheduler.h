@@ -80,6 +80,9 @@ class Scheduler {
   // All schedulers must have some channel that is "default".
   virtual Channel& GetDefaultChannel() = 0;
 
+  // Returns a (const) pointer to this scheduler's topology.
+  const Topology* SchedTopology() const { return enclave_->topology(); }
+
   virtual void DumpState(const Cpu& cpu, int flags) {}
 
  protected:

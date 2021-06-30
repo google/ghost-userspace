@@ -7,24 +7,16 @@ package(default_visibility = ["//:__pkg__"])
 
 # Each license covers the code below:
 #
-# BSD 2: Just covers the IOVisor BCC code in bpf/iovisor_bcc/. This code was not
-# written by Google.
+# BSD 2: Just covers the IOVisor BCC code in third_party/iovisor_bcc/. This
+# code was not written by Google.
 #
-# GPLv2: Just covers the eBPF code in bpf/bpf/. This code was written by Google.
-# We need to license it under GPLv2 though so that the eBPF code can use kernel
-# functionality restricted to code licensed under GPLv2.
+# GPLv2: Just covers the eBPF code in third_party/bpf/. This code was written
+# by Google. We need to license it under GPLv2 though so that the eBPF code
+# can use kernel functionality restricted to code licensed under GPLv2.
 #
 # Apache 2: All other code is covered by Apache 2. This includes the library
 # code in lib/, the experiments, all code in bpf/user/, etc.
-#
-# We are just putting `restricted` here to satisfy ComplianceLint, even though
-# all build targets in this file are covered in Apache 2 or BSD 2 (which are
-# `notice` type licenses). If we put `notice` here instead of `restricted`,
-# ComplianceLint would complain that one of the licenses in the LICENSE file is
-# GPLv2, but we did not put `restricted` here to cover the most restricted
-# LICENSE in our licenses file, which is GPLv2. That being said, all of the
-# build targets from the eBPF code covered under GPLv2 is in bpf/bpf/BUILD.
-licenses(["restricted"])
+licenses(["notice"])
 
 exports_files(["LICENSE"])
 

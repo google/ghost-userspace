@@ -136,6 +136,8 @@ class Agent {
 struct AgentRpcArgs {
   int64_t arg0 = 0;
   int64_t arg1 = 0;
+  // TODO: Create an arg buffer to serialize arbitrary data.
+  cpu_set_t cpu_set;
 };
 
 // Encapsulates the response for an RPC. Notably, in addition to an integer
