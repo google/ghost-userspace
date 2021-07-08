@@ -268,6 +268,14 @@ class Ghost {
     return true;
   }
 
+  // Sets the CPU affinity for the task with the provided `gtid` from the
+  // set of cpus in `cpulist`.
+  // Returns true on success. Otherwise, returns false with errno set.
+  static bool SchedSetAffinity(const Gtid& gtid, const CpuList& cpulist) {
+    cpu_set_t cpuset = Topology::ToCpuSet(cpulist);
+    return sched_setaffinity(gtid.tid(), sizeof(cpuset), &cpuset) == 0;
+  }
+
   static constexpr const char kGhostfsMount[] = "/sys/fs/ghost";
 
  private:

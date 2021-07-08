@@ -29,8 +29,8 @@
 #include "bpf/user/ghost_bpf.skel.h"
 #include "bpf/user/ghost_shared.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
-#include "bpf.h"
-#include "libbpf.h"
+#include "libbpf/bpf.h"
+#include "libbpf/libbpf.h"
 
 static struct ghost_bpf *obj;
 static struct ghost_per_cpu_data *cpu_data;

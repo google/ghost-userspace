@@ -127,24 +127,8 @@ class Agent {
   friend class Enclave;
 };
 
-// Encapsulation for any arguments that might need to be passed as part of an
-// RPC. These will be included in the shared memory region, which the
-// AgentProcess uses to communicate with the main agent thread.
-// Since this data is copied to the shared memory region to be consumed by a
-// process with a separate address space, only raw data is useful here (ie. no
-// pointers).
-struct AgentRpcArgs {
-  int64_t arg0 = 0;
-  int64_t arg1 = 0;
-  // TODO: Create an arg buffer to serialize arbitrary data.
-  cpu_set_t cpu_set;
-};
-
-// Encapsulates the response for an RPC. Notably, in addition to an integer
-// response code this includes a fixed space for the RPC to respond with some
-// arbitrary bytes of data.
-//
-// Template parameter N determines the size of the response buffer (in bytes).
+// A buffer that may be used within the RPC shared memory region to transmit
+// abitrary plain-old-data.
 //
 // DISCLAIMER: The serialization scheme here is only meant to be used for the
 // RPC mechanism operating over the shared memory region on a single machine.
@@ -152,7 +136,7 @@ struct AgentRpcArgs {
 // to serialize/deserialize the data in a consistent manner (for instance, due
 // to differences in struct padding, endianness, etc.).
 template <size_t BufferBytes = 1024 /* 1 KiB */>
-struct AgentRpcResponse {
+struct AgentRpcBuffer {
   // Converts the input to raw bytes and stores them in the internal data array.
   // Note that T shouldn't contain any pointers, since these pointers will not
   // have meaning for the process on the other side of the shared memory region.
@@ -189,9 +173,6 @@ struct AgentRpcResponse {
     return t;
   }
 
-  // Most RPC functions will only need to return a value via this response_code.
-  int64_t response_code = -1;
-
   // This is a region where arbitrary bytes of data can be written (ie. when the
   // RPC mechanism needs to return more than just a response code). Intended to
   // be used with the Serialize/Deserialize methods. We use a byte array instead
@@ -199,6 +180,31 @@ struct AgentRpcResponse {
   // different RPCs to return different types of responses (all of which must
   // fit within the shared memory region).
   std::array<std::byte, BufferBytes> data;
+};
+
+// Encapsulation for any arguments that might need to be passed as part of an
+// RPC. These will be included in the shared memory region, which the
+// AgentProcess uses to communicate with the main agent thread.
+// Since this data is copied to the shared memory region to be consumed by a
+// process with a separate address space, only raw data is useful here (ie. no
+// pointers).
+struct AgentRpcArgs {
+  int64_t arg0 = 0;
+  int64_t arg1 = 0;
+
+  // This buffer may be used to serialize arbitrary plain-old-data as part of
+  // the RPC arguments.
+  AgentRpcBuffer<> buffer;
+};
+
+// Encapsulates the response for an RPC.
+struct AgentRpcResponse {
+  // Most RPC functions will only need to return a value via this response_code.
+  int64_t response_code = -1;
+
+  // This response buffer may be used to serialize arbitrary plan-old-data as
+  // part of the RPC response.
+  AgentRpcBuffer<> buffer;
 };
 
 // A full Agent entity, not to be confused with individual Agent tasks.
@@ -225,7 +231,7 @@ class FullAgent {
   }
 
   virtual void RpcHandler(int64_t req, const AgentRpcArgs& args,
-                          AgentRpcResponse<>& response) = 0;
+                          AgentRpcResponse& response) = 0;
 
   FullAgent(const FullAgent&) = delete;
   FullAgent& operator=(const FullAgent&) = delete;
@@ -344,7 +350,7 @@ class AgentProcess {
     // Child posts response, then notifies rpc_done_.
     int64_t rpc_req_;
     AgentRpcArgs rpc_args_;
-    AgentRpcResponse<> rpc_res_;
+    AgentRpcResponse rpc_res_;
     Notification rpc_pending_;  // parent to child
     Notification rpc_done_;     // child_to_parent
 
@@ -380,7 +386,7 @@ class AgentProcess {
       for (;;) {
         sb_->rpc_pending_.WaitForNotification();
         sb_->rpc_pending_.Reset();
-        sb_->rpc_res_ = AgentRpcResponse<>();  // Reset the response.
+        sb_->rpc_res_ = AgentRpcResponse();  // Reset the response.
         full_agent_->RpcHandler(sb_->rpc_req_, sb_->rpc_args_, sb_->rpc_res_);
         sb_->rpc_done_.Notify();
       }
@@ -409,7 +415,7 @@ class AgentProcess {
   // don't need to suffer the overhead of copying the full response data.
   //
   // DISCLAIMER: This RPC mechanism is only meant to be used for the shared
-  // memory region on a single machine. See AgentRpcResponse for more details.
+  // memory region on a single machine. See AgentRpcBuffer for more details.
   int64_t Rpc(uint64_t req, const AgentRpcArgs& args = AgentRpcArgs()) {
     absl::MutexLock lock(&rpc_mutex_);
 
@@ -422,9 +428,9 @@ class AgentProcess {
   // be used by RPCs that actually use the full response data.
   //
   // DISCLAIMER: This RPC mechanism is naturally only meant to be used for the
-  // shared memory region on a single machine. See AgentRpcResponse for more
+  // shared memory region on a single machine. See AgentRpcBuffer for more
   // details.
-  AgentRpcResponse<> RpcWithResponse(uint64_t req,
+  AgentRpcResponse RpcWithResponse(uint64_t req,
                                    const AgentRpcArgs& args = AgentRpcArgs()) {
     absl::MutexLock lock(&rpc_mutex_);
 

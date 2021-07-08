@@ -83,6 +83,7 @@ class SimpleAgent : public Agent {
 constexpr int kWaitForIdle = 1;
 constexpr int kPingAgents = 2;
 constexpr int kRpcSerialize = 3;
+constexpr int kRpcDeserializeArgs = 4;
 
 template <size_t MAX_NOTIFICATIONS = 1, class ENCLAVE = LocalEnclave>
 class FullSimpleAgent : public FullAgent<ENCLAVE> {
@@ -128,7 +129,8 @@ class FullSimpleAgent : public FullAgent<ENCLAVE> {
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
-                  AgentRpcResponse<>& response) override {
+                  AgentRpcResponse& response) override {
+    int response_code = 0;
     switch (req) {
       case kWaitForIdle:
         // Wait for all agents to enter scheduling loop.
@@ -146,13 +148,16 @@ class FullSimpleAgent : public FullAgent<ENCLAVE> {
         }
         break;
       case kRpcSerialize:
-        response.Serialize<RpcTestData>(kRpcTestData);
+        response.buffer.Serialize<RpcTestData>(kRpcTestData);
+        break;
+      case kRpcDeserializeArgs:
+        response_code = args.buffer.Deserialize<RpcTestData>().three;
         break;
       default:
-        response.response_code = -1;
-        return;
+        response_code = -1;
+        break;
     }
-    response.response_code = 0;
+    response.response_code = response_code;
   }
 
  private:
@@ -194,9 +199,9 @@ TEST(AgentTest, RpcSerializationSimple) {
     .y = 5,
     .z = INT_MIN,
   };
-  AgentRpcResponse<> response;
-  response.Serialize<MyStruct>(s);
-  MyStruct deserialized = response.Deserialize<MyStruct>();
+  AgentRpcResponse response;
+  response.buffer.Serialize<MyStruct>(s);
+  MyStruct deserialized = response.buffer.Deserialize<MyStruct>();
 
   EXPECT_EQ(s.x, deserialized.x);
   EXPECT_EQ(s.y, deserialized.y);
@@ -208,11 +213,11 @@ TEST(AgentTest, RpcSerialization) {
   auto ap = AgentProcess<FullSimpleAgent<>, AgentConfig>(
       AgentConfig(MachineTopology(), MachineTopology()->all_cpus()));
 
-  const AgentRpcResponse<>& response = ap.RpcWithResponse(kRpcSerialize);
+  const AgentRpcResponse& response = ap.RpcWithResponse(kRpcSerialize);
   ASSERT_EQ(response.response_code, 0);
 
   FullSimpleAgent<>::RpcTestData data =
-      response.Deserialize<FullSimpleAgent<>::RpcTestData>();
+      response.buffer.Deserialize<FullSimpleAgent<>::RpcTestData>();
   EXPECT_EQ(data, FullSimpleAgent<>::kRpcTestData);
 }
 
@@ -222,7 +227,7 @@ TEST(AgentTest, RpcSerializationMaxSize) {
   struct LargeStruct {
     std::array<std::byte, kResponseSize> arr;
   };
-  AgentRpcResponse<kResponseSize> response;
+  AgentRpcBuffer<kResponseSize> response;
   constexpr std::byte val{10};
   const LargeStruct s = {
     .arr = {val},
@@ -230,6 +235,20 @@ TEST(AgentTest, RpcSerializationMaxSize) {
   response.Serialize<LargeStruct>(s);
   LargeStruct deserialized = response.Deserialize<LargeStruct>();
   EXPECT_EQ(s.arr, deserialized.arr);
+}
+
+// Test serialization of RPC arguments.
+TEST(AgentTest, RpcArgSerialization) {
+  auto ap = AgentProcess<FullSimpleAgent<>, AgentConfig>(
+      AgentConfig(MachineTopology(), MachineTopology()->all_cpus()));
+
+  const FullSimpleAgent<>::RpcTestData arg_data =
+      FullSimpleAgent<>::kRpcTestData;
+  AgentRpcArgs args;
+  args.buffer.Serialize<FullSimpleAgent<>::RpcTestData>(arg_data);
+
+  int64_t response = ap.Rpc(kRpcDeserializeArgs, args);
+  EXPECT_EQ(response, arg_data.three);
 }
 
 TEST(AgentTest, ExitHandler) {
@@ -328,7 +347,7 @@ class FullTickAgent : public FullAgent<ENCLAVE> {
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
-                  AgentRpcResponse<>& response) override {
+                  AgentRpcResponse& response) override {
     switch (req) {
       case kTickChecker: {
         SpinningAgent& agent = *AGENT_AS(this->agents_.front());

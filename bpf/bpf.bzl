@@ -48,16 +48,8 @@ def bpf_skeleton(name, bpf_object, skel_hdr, **kwargs):
         outs = [skel_hdr],
         cmd = (
             "$(BINDIR)/external/linux/bpftool/bin/bpftool gen skeleton $(location " + bpf_object + ") > $@ && " +
-            # Normally you use sed with the slash (/) as the separator. Thus,
-            # since we are replacing one path with another, we need to escape
-            # the slashes in the path (e.g., `\/path\/to\/file`). However,
-            # escaping the slashes makes bazel upset. To get around this issue,
-            # it turns out that sed lets you use any single character as a
-            # separator. Thus, instead of using the slash as the separator (and
-            # having to escape the slashes in the paths), I instead use the
-            # exclamation point (!) as the separator. Thus, I no longer need to
-            # escape the slashes in the paths and so bazel does not complain.
-            "sed -i 's!#include <bpf/libbpf.h>!#include \"libbpf.h\"!g' $@"
+            # The libbpf headers are located in `libbpf` rather than `bpf`.
+            "sed -i 's/#include <bpf/#include <libbpf/g' $@"
         ),
         **kwargs
     )

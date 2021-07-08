@@ -25,8 +25,8 @@
 #include "bpf/user/schedlat_bpf.skel.h"
 #include "bpf/user/schedlat_shared.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
-#include "bpf.h"
-#include "libbpf.h"
+#include "libbpf/bpf.h"
+#include "libbpf/libbpf.h"
 
 #define handle_error(msg) \
         do { perror(msg); exit(-1); } while (0)

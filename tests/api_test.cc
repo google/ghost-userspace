@@ -176,7 +176,7 @@ class FullDeadAgent final : public FullAgent<ENCLAVE> {
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
-                  AgentRpcResponse<>& response) final {
+                  AgentRpcResponse& response) final {
     response.response_code = -1;
   }
 
@@ -517,7 +517,7 @@ class SyncGroupAgent final : public FullAgent<ENCLAVE> {
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
-                  AgentRpcResponse<>& response) final {
+                  AgentRpcResponse& response) final {
     response.response_code = -1;
   }
 
@@ -662,7 +662,7 @@ class FullIdlingAgent final : public FullAgent<ENCLAVE> {
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
-                  AgentRpcResponse<>& response) final {
+                  AgentRpcResponse& response) final {
     if (req == kNeedCpuNotIdle) {
       const int num_cpus = this->enclave_.cpus()->Size();
       std::vector<int> not_idle_msg_count(num_cpus);
@@ -1189,6 +1189,221 @@ TEST(ApiTest, SchedGetAffinity) {
   CpuList cpus = MachineTopology()->EmptyCpuList();
   ASSERT_THAT(Ghost::SchedGetAffinity(Gtid::Current(), cpus), IsTrue());
   EXPECT_THAT(cpus, Eq(MachineTopology()->ToCpuList(set)));
+}
+
+// SetSchedAgent tries to induce a race between latching a task on a cpu
+// and then doing sched_setaffinity() to blacklist that cpu. As a result
+// of the setaffinity the kernel moves the task off the blacklisted cpu.
+// This in turn invalidates the latched_task which prior to the kernel
+// fix would just result in task stranding (task is no longer latched
+// and kernel did not produce any msg to let the agent know).
+class SetSchedAgent : public Agent {
+ public:
+  SetSchedAgent(Enclave* enclave, const Cpu& this_cpu, Channel* channel)
+      : Agent(enclave, this_cpu), channel_(channel) {}
+
+ protected:
+  void AgentThread() final {
+    // Boilerplate to synchronize startup until both agents are ready.
+    SignalReady();
+    WaitForEnclaveReady();
+
+    // Satellite agent that simply yields.
+    if (!channel_) {
+      RunRequest* req = enclave()->GetRunRequest(cpu());
+      while (!Finished()) {
+        req->LocalYield(status_word().barrier(), /*flags=*/0);
+      }
+      return;
+    }
+
+    // Spinning agent that continuously schedules `task`.
+    ASSERT_THAT(channel_, NotNull());
+
+    bool oncpu = false;
+    bool runnable = false;
+    std::unique_ptr<Task> task(nullptr);  // initialized in TASK_NEW handler.
+
+    CpuList task_cpulist = enclave()->topology()->all_cpus();
+    task_cpulist.Clear(cpu());  // don't schedule on spinning agent's cpu.
+    size_t task_cpu_idx = 0;    // schedule task on task_cpulist[task_cpu_idx]
+
+    while (true) {
+      while (true) {
+        Message msg = Peek(channel_);
+        if (msg.empty()) break;
+
+        // Ignore all types other than task messages (e.g. CPU_TICK).
+        if (msg.is_task_msg() && msg.type() != MSG_TASK_NEW) {
+          ASSERT_THAT(task, NotNull());
+          task->Advance(msg.seqnum());
+        }
+
+        // Scheduling is simple: we track whether the task is runnable
+        // and oncpu. If the task is runnable and not already oncpu the
+        // agent schedules it.
+        switch (msg.type()) {
+          case MSG_TASK_NEW: {
+            const ghost_msg_payload_task_new* payload =
+                static_cast<const ghost_msg_payload_task_new*>(msg.payload());
+
+            ASSERT_THAT(task, IsNull());
+            ASSERT_FALSE(oncpu);
+            ASSERT_FALSE(runnable);
+            task =
+                absl::make_unique<Task>(Gtid(payload->gtid), payload->sw_info);
+            task->seqnum = msg.seqnum();
+            runnable = payload->runnable;
+            break;
+          }
+
+          case MSG_TASK_WAKEUP:
+            ASSERT_THAT(task, NotNull());
+            ASSERT_FALSE(oncpu);
+            ASSERT_FALSE(runnable);
+            runnable = true;
+            break;
+
+          case MSG_TASK_BLOCKED:
+            ASSERT_THAT(task, NotNull());
+            ASSERT_TRUE(oncpu);
+            ASSERT_TRUE(runnable);
+            runnable = false;
+            oncpu = false;
+            break;
+
+          case MSG_TASK_DEAD:
+            ASSERT_THAT(task, NotNull());
+            ASSERT_FALSE(runnable);
+            ASSERT_FALSE(oncpu);
+            task = nullptr;
+            break;
+
+          case MSG_TASK_PREEMPT:
+          case MSG_TASK_YIELD:
+            ASSERT_THAT(task, NotNull());
+            ASSERT_TRUE(runnable);
+            ASSERT_TRUE(oncpu);
+            oncpu = false;
+            break;
+
+          default:
+            // This includes messages like CPU_TICK that don't influence
+            // runnability.
+            break;
+        }
+        Consume(channel_, msg);
+      }
+
+      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      const bool prio_boost = status_word().boosted_priority();
+
+      if (Finished() && !task) break;
+
+      if (prio_boost) {
+        RunRequest* req = enclave()->GetRunRequest(cpu());
+        req->LocalYield(agent_barrier, RTLA_ON_IDLE);
+      } else if (runnable && !oncpu) {
+        const Cpu& run_cpu = task_cpulist[task_cpu_idx++ % task_cpulist.Size()];
+        RunRequest* req = enclave()->GetRunRequest(run_cpu);
+        req->Open({
+            .target = task->gtid,
+            .target_barrier = task->seqnum,
+            .agent_barrier = StatusWord::NullBarrierToken(),
+            .commit_flags = COMMIT_AT_TXN_COMMIT,
+        });
+
+        // Commit the txn on `run_cpu` and then set the task's affinity to
+        // blacklist the same `run_cpu`. By committing the txn synchronously
+        // we hope setaffinity to catch it while the task is still latched.
+        if (req->Commit()) {
+          CpuList new_cpulist = task_cpulist;
+          new_cpulist.Clear(run_cpu);
+          if (!Ghost::SchedSetAffinity(task->gtid, new_cpulist)) {
+            ASSERT_THAT(errno, Eq(ESRCH));
+          }
+          oncpu = true;
+        }
+      } else {
+        // nothing: either task is not runnable or already oncpu.
+      }
+    }
+  }
+
+ private:
+  Channel* channel_;
+};
+
+template <class ENCLAVE = LocalEnclave>
+class FullSetSchedAgent final : public FullAgent<ENCLAVE> {
+ public:
+  explicit FullSetSchedAgent(const AgentConfig& config)
+      : FullAgent<ENCLAVE>(config),
+        sched_cpu_(config.cpus_.Front()),
+        channel_(GHOST_MAX_QUEUE_ELEMS, sched_cpu_.numa_node()) {
+    channel_.SetEnclaveDefault();
+    // Start an instance of SetSchedAgent on each cpu.
+    this->StartAgentTasks();
+
+    // Unblock all agents and start scheduling.
+    this->enclave_.Ready();
+  }
+
+  ~FullSetSchedAgent() final { this->TerminateAgentTasks(); }
+
+  std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) final {
+    Channel* channel_ptr = &channel_;
+    if (cpu != sched_cpu_) {
+      channel_ptr = nullptr;  // sentinel value to indicate a satellite cpu.
+    }
+    return absl::make_unique<SetSchedAgent>(&this->enclave_, cpu, channel_ptr);
+  }
+
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse& response) final {
+    response.response_code = -1;
+  }
+
+ private:
+  const Cpu sched_cpu_;   // CPU running the main scheduling loop.
+  Channel channel_;       // Channel configured to wakeup `sched_cpu_`.
+};
+
+TEST(ApiTest, SetSchedRace) {
+  // This test requires at least 3 cpus:
+  // - one cpu for the spinning agent.
+  // - at least two cpus for the ghost application thread (so that the cpuset
+  //   passed to sched_setaffinity() is not empty even after clearing one cpu).
+  Topology* topology = MachineTopology();
+  CpuList all_cpus = topology->all_cpus();
+  if (all_cpus.Size() < 3) {
+    GTEST_SKIP() << "must have at least 3 cpus";
+    return;
+  }
+
+  auto ap = AgentProcess<FullSetSchedAgent<>, AgentConfig>(
+      AgentConfig(topology, all_cpus));
+
+  GhostThread t(GhostThread::KernelScheduler::kGhost, [] {
+    // Empirically 10 iterations are more than sufficient to trigger the race
+    // between latching a task on a cpu and then calling sched_setaffinity()
+    // to blacklist that cpu. Prior to the kernel changes the test reliably
+    // hangs on both virtme and real machines.
+    for (int i = 0; i < 10; i++) {
+      sched_yield();
+    }
+  });
+  t.Join();
+
+  // When AgentProcess goes out of scope its destructor will trigger
+  // the FullSetSchedAgent destructor that in turn will Terminate()
+  // the agents.
+
+  // Since we were a ghOSt client, we were using an enclave.  Now that the test
+  // is over, we need to reset so we can get a fresh enclave later.  Note that
+  // we used AgentProcess, so the only user of the gbl_enclave_fd_ is us, the
+  // client.
+  Ghost::CloseGlobalEnclaveCtlFd();
 }
 
 }  // namespace

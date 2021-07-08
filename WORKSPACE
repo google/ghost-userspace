@@ -82,6 +82,8 @@ http_archive(
 # We clone Linux so that we can use libbpf when compiling our eBPF programs.
 # Ideally we would instead clone our kernel-ghost repository, but we cannot do
 # that until the repository is publicly available.
+#
+# The archive we are downloading is for the first commit in Linux 5.11.
 http_archive(
     name = "linux",
     url = "https://github.com/torvalds/linux/archive/f40ddce88593482919761f74910f42f4b84c004b.tar.gz",

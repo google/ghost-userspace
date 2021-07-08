@@ -388,7 +388,7 @@ class FullShinjukuAgent : public FullAgent<ENCLAVE> {
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
-                  AgentRpcResponse<>& response) override {
+                  AgentRpcResponse& response) override {
     switch (req) {
       case ShinjukuScheduler::kDebugRunqueue:
         global_scheduler_->debug_runqueue_ = true;

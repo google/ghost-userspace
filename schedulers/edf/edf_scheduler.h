@@ -288,7 +288,7 @@ class GlobalEdfAgent : public FullAgent<ENCLAVE> {
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
-                  AgentRpcResponse<>& response) override {
+                  AgentRpcResponse& response) override {
     switch (req) {
       case EdfScheduler::kDebugRunqueue:
         global_scheduler_->debug_runqueue_ = true;

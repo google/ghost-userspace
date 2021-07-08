@@ -24,8 +24,8 @@
 
 #include "bpf/user/schedrun_bpf.skel.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
-#include "bpf.h"
-#include "libbpf.h"
+#include "libbpf/bpf.h"
+#include "libbpf/libbpf.h"
 
 #define error_exit(msg) do {	\
 	perror(msg);		\

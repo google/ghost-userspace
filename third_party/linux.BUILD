@@ -47,7 +47,14 @@ make(
     # GNUMake.log, so look at that file to inspect them. You can also look at
     # that log to see which other environment variables exist.
     postfix_script = "cp $EXT_BUILD_ROOT/external/linux/tools/lib/bpf/libbpf.a $INSTALLDIR/lib/libbpf.a; " +
-    "cp $EXT_BUILD_ROOT/external/linux/tools/lib/bpf/*.h $INSTALLDIR/include",
+    # By making the `libbpf` directory and copying the libbpf header files into
+    # it, we can have the #include paths in the project prefixed by `libbpf`. In
+    # other words, we can do `#include "libbpf/header.h"` instead of
+    # `#include "header.h"`. With the latter, it is more confusing to figure out
+    # where the header file is and could cause conflicts if a header file in the
+    # project has the same name as a header file in libbpf.
+    "mkdir $INSTALLDIR/include/libbpf; " +
+    "cp $EXT_BUILD_ROOT/external/linux/tools/lib/bpf/*.h $INSTALLDIR/include/libbpf",
     visibility = ["//visibility:public"],
 )
 
