@@ -14,6 +14,7 @@
 
 #define MAX_PIDS 102400
 #define SCHED_GHOST 18
+#define TASK_RUNNING 0
 #define TASK_DEAD 0x0080
 
 static inline u64 bpf_ktime_get_us() {

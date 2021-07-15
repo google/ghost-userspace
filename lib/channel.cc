@@ -141,6 +141,14 @@ std::string Message::stringify() const {
       absl::StrAppend(&result, " l=", length());
       break;
 
+    case MSG_TASK_NEW: {
+      const ghost_msg_payload_task_new* new_payload =
+          static_cast<const ghost_msg_payload_task_new*>(payload());
+      absl::StrAppend(&result, " ",
+                      new_payload->runnable ? "runnable" : "blocked");
+      break;
+    }
+
     case MSG_TASK_SWITCHTO: {
       const ghost_msg_payload_task_switchto* switchto =
           static_cast<const ghost_msg_payload_task_switchto*>(payload());

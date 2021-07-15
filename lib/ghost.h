@@ -254,26 +254,26 @@ class Ghost {
 
   // Gets the CPU affinity for the task with the provided Gtid and writes the
   // result to the provided CpuList.
-  // Returns true on success. Otherwise, returns false with errno set.
-  static bool SchedGetAffinity(const Gtid& gtid, CpuList& cpulist) {
+  // Returns 0 on success. Otherwise, returns -1 with errno set.
+  static int SchedGetAffinity(const Gtid& gtid, CpuList& cpulist) {
     cpu_set_t allowed_cpus;
     CPU_ZERO(&allowed_cpus);
     if (sched_getaffinity(gtid.tid(), sizeof(allowed_cpus), &allowed_cpus)) {
-      return false;
+      return -1;
     }
     DCHECK_LE(CPU_COUNT(&allowed_cpus), MAX_CPUS);
     DCHECK_GT(CPU_COUNT(&allowed_cpus), 0);
 
     cpulist = cpulist.topology().ToCpuList(allowed_cpus);
-    return true;
+    return 0;
   }
 
   // Sets the CPU affinity for the task with the provided `gtid` from the
   // set of cpus in `cpulist`.
-  // Returns true on success. Otherwise, returns false with errno set.
-  static bool SchedSetAffinity(const Gtid& gtid, const CpuList& cpulist) {
+  // Returns 0 on success. Otherwise, returns -1 with errno set.
+  static int SchedSetAffinity(const Gtid& gtid, const CpuList& cpulist) {
     cpu_set_t cpuset = Topology::ToCpuSet(cpulist);
-    return sched_setaffinity(gtid.tid(), sizeof(cpuset), &cpuset) == 0;
+    return sched_setaffinity(gtid.tid(), sizeof(cpuset), &cpuset);
   }
 
   static constexpr const char kGhostfsMount[] = "/sys/fs/ghost";

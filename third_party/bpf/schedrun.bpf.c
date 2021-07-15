@@ -18,10 +18,8 @@
 // clang-format on
 
 #include "third_party/iovisor_bcc/bits.bpf.h"
+#include "third_party/bpf/schedrun_shared_bpf.h"
 #include "third_party/bpf/common.bpf.h"
-
-// Keep this in sync with schedrun.c.
-#define NUM_BUCKETS 25
 
 const volatile pid_t targ_tgid = 0;
 const volatile bool ghost_only = false;
@@ -34,27 +32,26 @@ struct {
 	__type(value, u64);
 } task_start_times SEC(".maps");
 
-// Map histogram bucket index to counts.
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
-	__uint(max_entries, NUM_BUCKETS);
+	__uint(max_entries, NR_HISTS);
 	__type(key, u32);
-	__type(value, u64);
-} hist SEC(".maps");
+	__type(value, struct hist);
+} hists SEC(".maps");
 
-static void update_hist(u64 value)
+// TODO: refactor (copied from schedlat.bpf.c).
+static void update_hist(u32 hist_id, u64 value)
 {
-	u64 bucket_idx, *count;
+	u64 slot; /* Gotta love BPF.  slot needs to be a u64, not a u32. */
+	struct hist *hist;
 
-	bucket_idx = log2l(value);
-	if (bucket_idx >= NUM_BUCKETS)
-		bucket_idx = NUM_BUCKETS - 1;
-
-	count = bpf_map_lookup_elem(&hist, &bucket_idx);
-	if (!count)
+	hist = bpf_map_lookup_elem(&hists, &hist_id);
+	if (!hist)
 		return;
-
-	*count += 1;
+	slot = log2l(value);
+	if (slot >= MAX_NR_HIST_SLOTS)
+		slot = MAX_NR_HIST_SLOTS - 1;
+	hist->slots[slot]++;
 }
 
 static void task_stop(struct task_struct *p)
@@ -65,9 +62,14 @@ static void task_stop(struct task_struct *p)
 
 	if (start) {
 		u64 diff = stop - *start;
-		update_hist(diff);
+		update_hist(RUNTIMES_ALL, diff);
 
 		long state = BPF_CORE_READ(p, state);
+		if (state == TASK_RUNNING) // prev yielded or was preempted.
+			update_hist(RUNTIMES_PREEMPTED_YIELDED, diff);
+		else // prev blocked.
+			update_hist(RUNTIMES_BLOCKED, diff);
+
 		if (state == TASK_DEAD)
 			bpf_map_delete_elem(&task_start_times, &pid);
 	}

@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include "bpf/user/schedrun_bpf.skel.h"
+#include "bpf/user/schedrun_shared.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
 #include "libbpf/bpf.h"
 #include "libbpf/libbpf.h"
@@ -32,40 +33,43 @@
 	exit(EXIT_FAILURE);	\
 } while (0)
 
-/* Keep this in sync with schedrun.bpf.c. */
-#define NUM_BUCKETS 25
-
 static bool ghost_only = false;
 static pid_t pid = 0;
 
-static void print_hist(int fd)
+static const char *titles[] = {
+	[RUNTIMES_PREEMPTED_YIELDED] = "Runtimes of preempted/yielded tasks",
+	[RUNTIMES_BLOCKED] = "Runtimes of tasks that blocked",
+	[RUNTIMES_ALL] = "All task runtimes",
+};
+
+// TODO: refactor (copied from schedlat.c).
+static void print_hists(int fd)
 {
-	uint64_t *counts;
-	unsigned int hist[NUM_BUCKETS] = {0};
+	unsigned int nr_cpus = libbpf_num_possible_cpus();
+	struct hist *hist;
+	uint32_t total[MAX_NR_HIST_SLOTS];
 
-	int ncpus = libbpf_num_possible_cpus();
-	if (ncpus < 0)
-		error_exit("libbpf_num_possible_cpus");
-
-	counts = calloc(ncpus, sizeof(*counts));
-	if (!counts)
+	/*
+	 * There are NR_HISTS members of the PERCPU_ARRAY.  Each one we read is
+	 * an *array[nr_cpus]* of the struct hist, one for each cpu.  This
+	 * differs from accessing an element from within a BPF program, where
+	 * we only get the percpu element.
+	 */
+	hist = calloc(nr_cpus, sizeof(struct hist));
+	if (!hist)
 		error_exit("calloc");
 
-	for (int i = 0; i < NUM_BUCKETS; ++i) {
-		if (bpf_map_lookup_elem(fd, &i, counts))
+	for (int i = 0; i < NR_HISTS; i++) {
+		if (bpf_map_lookup_elem(fd, &i, hist))
 			error_exit("bpf_map_lookup_elem");
-		hist[i] = 0;
-		for (int c = 0; c < ncpus; ++c)
-			hist[i] += counts[c];
+		memset(total, 0, sizeof(total));
+		for (int c = 0; c < nr_cpus; c++) {
+			for (int s = 0; s < MAX_NR_HIST_SLOTS; s++)
+				total[s] += hist[c].slots[s];
+		}
+		printf("\n%s:\n----------\n", titles[i]);
+		print_log2_hist(total, MAX_NR_HIST_SLOTS, "usec");
 	}
-
-	free(counts);
-
-	printf("\n");
-	printf("Task Runtime\n");
-	printf("------------\n");
-	print_log2_hist(hist, NUM_BUCKETS, "usec");
-	printf("\n");
 }
 
 int main(int argc, char **argv)
@@ -136,7 +140,7 @@ int main(int argc, char **argv)
 	if (sigwait(&set, &sig))
 		error_exit("sigwait");
 
-	print_hist(bpf_map__fd(skel->maps.hist));
+	print_hists(bpf_map__fd(skel->maps.hists));
 	printf("Exiting\n");
 
 cleanup:

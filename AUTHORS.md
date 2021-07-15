@@ -1,4 +1,6 @@
-The following people have contributed to ghOSt:
+The people below have contributed to ghOSt. The list is ordered by when each
+person first joined the project. If you contribute to ghOSt, feel free to add
+your name to the end.
 
 <ol>
 <li>Paul Turner</li>

@@ -92,7 +92,11 @@ void CfsOrchestrator::LoadGenerator(uint32_t sid) {
   if (!first_run().Triggered(sid)) {
     CHECK(first_run().Trigger(sid));
     CHECK_EQ(sid, kLoadGeneratorSid);
-    CHECK_EQ(ghost::SchedSetAffinity(0, options().load_generator_cpu), 0);
+    CHECK_EQ(ghost::Ghost::SchedSetAffinity(
+                 ghost::Gtid::Current(),
+                 ghost::MachineTopology()->ToCpuList(
+                     std::vector<int>{options().load_generator_cpu})),
+             0);
     // Use 'printf' instead of 'std::cout' so that the print contents do not get
     // interleaved with the dispatcher's, the workers', and the main thread's
     // print contents. 'printf' acquires a lock whereas 'std::cout' does not.
@@ -162,7 +166,11 @@ void CfsOrchestrator::Dispatcher(uint32_t sid) {
   if (!first_run().Triggered(sid)) {
     CHECK(first_run().Trigger(sid));
     CHECK_EQ(sid, kDispatcherSid);
-    CHECK_EQ(ghost::SchedSetAffinity(0, options().cfs_dispatcher_cpu), 0);
+    CHECK_EQ(ghost::Ghost::SchedSetAffinity(
+                 ghost::Gtid::Current(),
+                 ghost::MachineTopology()->ToCpuList(
+                     std::vector<int>{options().cfs_dispatcher_cpu})),
+             0);
     printf("Dispatcher (SID %u, TID: %ld, affined to CPU %u)\n", sid,
            syscall(SYS_gettid), options().cfs_dispatcher_cpu);
     // The load generator will not start generating requests until itself, the
@@ -223,7 +231,11 @@ void CfsOrchestrator::Worker(uint32_t sid) {
     CHECK(first_run().Trigger(sid));
     // The first worker SID is 2, so subtract 2 to get the worker's CPU
     // assignment.
-    CHECK_EQ(ghost::SchedSetAffinity(0, options().worker_cpus[sid - 2]), 0);
+    CHECK_EQ(ghost::Ghost::SchedSetAffinity(
+                 ghost::Gtid::Current(),
+                 ghost::MachineTopology()->ToCpuList(
+                     std::vector<int>{options().worker_cpus[sid - 2]})),
+             0);
     printf("Worker (SID %u, TID: %ld, affined to CPU %u)\n", sid,
            syscall(SYS_gettid), options().worker_cpus[sid - 2]);
     // Wait until the dispatcher assigns work to this worker.

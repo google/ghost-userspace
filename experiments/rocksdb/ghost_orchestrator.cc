@@ -134,7 +134,11 @@ void GhostOrchestrator::GetIdleWorkerSIDs() {
 void GhostOrchestrator::LoadGenerator(uint32_t sid) {
   if (!first_run().Triggered(sid)) {
     CHECK(first_run().Trigger(sid));
-    CHECK_EQ(ghost::SchedSetAffinity(0, options().load_generator_cpu), 0);
+    CHECK_EQ(ghost::Ghost::SchedSetAffinity(
+                 ghost::Gtid::Current(),
+                 ghost::MachineTopology()->ToCpuList(
+                     std::vector<int>{options().load_generator_cpu})),
+             0);
     // Use 'printf' instead of 'std::cout' so that the print contents do not get
     // interleaved with the dispatcher's and the workers' print contents.
     printf("Load generator (SID %u, TID: %ld, affined to CPU %u)\n", sid,

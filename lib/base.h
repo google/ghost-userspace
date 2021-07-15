@@ -44,7 +44,6 @@ namespace ghost {
 
 static inline int GetTID();
 void Exit(int code);
-int SchedSetAffinity(pid_t pid, int cpu);
 size_t GetFileSize(int fd);
 void PrintBacktrace(FILE* f, void* uctx = nullptr);
 

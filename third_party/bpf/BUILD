@@ -57,6 +57,7 @@ bpf_program(
     src = "schedrun.bpf.c",
     hdrs = [
         "common.bpf.h",
+        "schedrun_shared_bpf.h",
         "//:kernel/vmlinux_ghost_5_11.h",
         "//third_party:iovisor_bcc/bits.bpf.h",
     ],

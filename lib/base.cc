@@ -175,18 +175,6 @@ void Exit(int code) {
   std::exit(code);
 }
 
-int SchedSetAffinity(pid_t pid, int cpu) {
-  cpu_set_t set;
-
-  CHECK_GE(cpu, 0);
-  CHECK_LT(cpu, CPU_SETSIZE);
-
-  CPU_ZERO(&set);
-  CPU_SET(cpu, &set);
-
-  return sched_setaffinity(pid, sizeof(set), &set);
-}
-
 size_t GetFileSize(int fd) {
   struct stat stat_buf;
   CHECK_EQ(fstat(fd, &stat_buf), 0);

@@ -217,8 +217,10 @@ int main(int argc, char* argv[]) {
   // thread's affinity mask when they are spawned. Thus, the background threads
   // will automatically be affined to
   // 'ghost_test::Orchestrator::kBackgroundThreadCpu'.
-  CHECK_EQ(ghost::SchedSetAffinity(
-               0, ghost_test::Orchestrator::kBackgroundThreadCpu),
+  CHECK_EQ(ghost::Ghost::SchedSetAffinity(
+               ghost::Gtid::Current(),
+               ghost::MachineTopology()->ToCpuList(std::vector<int>{
+                   ghost_test::Orchestrator::kBackgroundThreadCpu})),
            0);
 
   absl::ParseCommandLine(argc, argv);

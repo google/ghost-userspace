@@ -741,7 +741,10 @@ TEST(IdleTest, NeedCpuNotIdle) {
     // the agent sets NEED_CPU_NOT_IDLE in `run_flags`.
     threads.emplace_back(
         new GhostThread(GhostThread::KernelScheduler::kCfs, [cpu] {
-          EXPECT_THAT(SchedSetAffinity(/*pid=*/0, cpu), Eq(0));
+          EXPECT_THAT(Ghost::SchedSetAffinity(
+                          Gtid::Current(),
+                          MachineTopology()->ToCpuList(std::vector<int>{cpu})),
+                      Eq(0));
           SpinFor(absl::Milliseconds(1));
           for (int i = 0; i < 100; i++) absl::SleepFor(absl::Microseconds(10));
           SpinFor(absl::Milliseconds(1));
@@ -1170,25 +1173,29 @@ TEST(ApiTest, KernelTimes) {
   agent.Terminate();
 }
 
-// Tests that `Ghost::SchedGetAffinity()` returns the correct affinity mask for
-// a thread.
+// Tests that `Ghost::SchedGetAffinity()` and `Ghost::SchedSetAffinity()`
+// returns/sets the affinity mask for a thread.
+//
+// It is possible for any CPU to be disallowed on a DevRez machine, such as when
+// this test is run inside a sys container via cpuset. Thus, to avoid this
+// issue, the test first gets its current affinity mask and then removes a CPU
+// from that mask rather than affine itself to arbitrary CPUs that may not be
+// available.
 TEST(ApiTest, SchedGetAffinity) {
-  // This test requires at least 4 CPUs.
-  if (MachineTopology()->num_cpus() < 4) {
-    GTEST_SKIP() << "must have at least 4 cpus";
+  CpuList cpus = MachineTopology()->EmptyCpuList();
+  ASSERT_THAT(Ghost::SchedGetAffinity(Gtid::Current(), cpus), Eq(0));
+  // This test requires at least 2 CPUs.
+  if (cpus.Size() < 2) {
+    GTEST_SKIP() << "must have at least 2 cpus";
     return;
   }
 
-  cpu_set_t set;
-  CPU_ZERO(&set);
-  CPU_SET(0, &set);
-  CPU_SET(2, &set);
-  CPU_SET(3, &set);
-  ASSERT_THAT(sched_setaffinity(0, sizeof(set), &set), Eq(0));
+  cpus.Clear(cpus.Front());
+  ASSERT_THAT(Ghost::SchedSetAffinity(Gtid::Current(), cpus), Eq(0));
 
-  CpuList cpus = MachineTopology()->EmptyCpuList();
-  ASSERT_THAT(Ghost::SchedGetAffinity(Gtid::Current(), cpus), IsTrue());
-  EXPECT_THAT(cpus, Eq(MachineTopology()->ToCpuList(set)));
+  CpuList set_cpus = MachineTopology()->EmptyCpuList();
+  ASSERT_THAT(Ghost::SchedGetAffinity(Gtid::Current(), set_cpus), Eq(0));
+  EXPECT_THAT(set_cpus, Eq(cpus));
 }
 
 // SetSchedAgent tries to induce a race between latching a task on a cpu
@@ -1319,7 +1326,7 @@ class SetSchedAgent : public Agent {
         if (req->Commit()) {
           CpuList new_cpulist = task_cpulist;
           new_cpulist.Clear(run_cpu);
-          if (!Ghost::SchedSetAffinity(task->gtid, new_cpulist)) {
+          if (Ghost::SchedSetAffinity(task->gtid, new_cpulist)) {
             ASSERT_THAT(errno, Eq(ESRCH));
           }
           oncpu = true;

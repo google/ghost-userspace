@@ -645,7 +645,10 @@ TEST(AgentTest, MsgCpuNotIdle) {
 
   // Schedule a CFS task on 'target_cpu' (this will trigger CPU_NOT_IDLE msg).
   std::thread thread([target_cpu] {
-    EXPECT_THAT(SchedSetAffinity(/*pid=*/0, target_cpu.id()), Eq(0));
+    EXPECT_THAT(Ghost::SchedSetAffinity(Gtid::Current(),
+                                        MachineTopology()->ToCpuList(
+                                            std::vector<int>{target_cpu.id()})),
+                Eq(0));
     absl::SleepFor(absl::Milliseconds(100));
   });
   thread.join();

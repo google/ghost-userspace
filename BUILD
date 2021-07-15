@@ -352,6 +352,7 @@ cc_library(
     name = "ghost",
     srcs = [
         "lib/ghost.cc",
+        "lib/topology.cc",
     ],
     hdrs = [
         "kernel/ghost_uapi.h",
@@ -359,11 +360,13 @@ cc_library(
         "lib/topology.h",
     ],
     copts = compiler_flags,
+    linkopts = ["-lnuma"],
     deps = [
         ":base",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
 
@@ -492,6 +495,7 @@ cc_binary(
     srcs = [
         "bpf/user/schedrun.c",
         "bpf/user/schedrun_bpf.skel.h",
+        "bpf/user/schedrun_shared.h",
         "//third_party:iovisor_bcc/trace_helpers.h",
     ],
     copts = compiler_flags,
