@@ -119,6 +119,8 @@ absl::string_view Message::describe_type() const {
       return "MSG_TASK_DEPARTED";
     case MSG_TASK_SWITCHTO:
       return "MSG_TASK_SWITCHTO";
+    case MSG_TASK_AFFINITY_CHANGED:
+      return "MSG_TASK_AFFINITY_CHANGED";
     default:
       GHOST_ERROR("Unknown message %d", type());
   }
