@@ -1198,15 +1198,15 @@ TEST(ApiTest, SchedGetAffinity) {
   EXPECT_THAT(set_cpus, Eq(cpus));
 }
 
-// SetSchedAgent tries to induce a race between latching a task on a cpu
+// SchedAffinityAgent tries to induce a race between latching a task on a cpu
 // and then doing sched_setaffinity() to blacklist that cpu. As a result
 // of the setaffinity the kernel moves the task off the blacklisted cpu.
 // This in turn invalidates the latched_task which prior to the kernel
 // fix would just result in task stranding (task is no longer latched
 // and kernel did not produce any msg to let the agent know).
-class SetSchedAgent : public Agent {
+class SchedAffinityAgent : public Agent {
  public:
-  SetSchedAgent(Enclave* enclave, const Cpu& this_cpu, Channel* channel)
+  SchedAffinityAgent(Enclave* enclave, const Cpu& this_cpu, Channel* channel)
       : Agent(enclave, this_cpu), channel_(channel) {}
 
  protected:
@@ -1231,7 +1231,7 @@ class SetSchedAgent : public Agent {
     bool runnable = false;
     std::unique_ptr<Task> task(nullptr);  // initialized in TASK_NEW handler.
 
-    CpuList task_cpulist = enclave()->topology()->all_cpus();
+    CpuList task_cpulist = *enclave()->cpus();
     task_cpulist.Clear(cpu());  // don't schedule on spinning agent's cpu.
     size_t task_cpu_idx = 0;    // schedule task on task_cpulist[task_cpu_idx]
 
@@ -1342,28 +1342,29 @@ class SetSchedAgent : public Agent {
 };
 
 template <class ENCLAVE = LocalEnclave>
-class FullSetSchedAgent final : public FullAgent<ENCLAVE> {
+class FullSchedAffinityAgent final : public FullAgent<ENCLAVE> {
  public:
-  explicit FullSetSchedAgent(const AgentConfig& config)
+  explicit FullSchedAffinityAgent(const AgentConfig& config)
       : FullAgent<ENCLAVE>(config),
         sched_cpu_(config.cpus_.Front()),
         channel_(GHOST_MAX_QUEUE_ELEMS, sched_cpu_.numa_node()) {
     channel_.SetEnclaveDefault();
-    // Start an instance of SetSchedAgent on each cpu.
+    // Start an instance of SchedAffinityAgent on each cpu.
     this->StartAgentTasks();
 
     // Unblock all agents and start scheduling.
     this->enclave_.Ready();
   }
 
-  ~FullSetSchedAgent() final { this->TerminateAgentTasks(); }
+  ~FullSchedAffinityAgent() final { this->TerminateAgentTasks(); }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) final {
     Channel* channel_ptr = &channel_;
     if (cpu != sched_cpu_) {
       channel_ptr = nullptr;  // sentinel value to indicate a satellite cpu.
     }
-    return absl::make_unique<SetSchedAgent>(&this->enclave_, cpu, channel_ptr);
+    return absl::make_unique<SchedAffinityAgent>(&this->enclave_, cpu,
+                                                 channel_ptr);
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
@@ -1376,20 +1377,20 @@ class FullSetSchedAgent final : public FullAgent<ENCLAVE> {
   Channel channel_;       // Channel configured to wakeup `sched_cpu_`.
 };
 
-TEST(ApiTest, SetSchedRace) {
+TEST(ApiTest, SchedAffinityRace) {
   // This test requires at least 3 cpus:
   // - one cpu for the spinning agent.
   // - at least two cpus for the ghost application thread (so that the cpuset
   //   passed to sched_setaffinity() is not empty even after clearing one cpu).
   Topology* topology = MachineTopology();
-  CpuList all_cpus = topology->all_cpus();
-  if (all_cpus.Size() < 3) {
+  CpuList agent_cpus = topology->all_cpus();
+  if (agent_cpus.Size() < 3) {
     GTEST_SKIP() << "must have at least 3 cpus";
     return;
   }
 
-  auto ap = AgentProcess<FullSetSchedAgent<>, AgentConfig>(
-      AgentConfig(topology, all_cpus));
+  auto ap = AgentProcess<FullSchedAffinityAgent<>, AgentConfig>(
+      AgentConfig(topology, agent_cpus));
 
   GhostThread t(GhostThread::KernelScheduler::kGhost, [] {
     // Empirically 10 iterations are more than sufficient to trigger the race
@@ -1403,7 +1404,7 @@ TEST(ApiTest, SetSchedRace) {
   t.Join();
 
   // When AgentProcess goes out of scope its destructor will trigger
-  // the FullSetSchedAgent destructor that in turn will Terminate()
+  // the FullSchedAffinityAgent destructor that in turn will Terminate()
   // the agents.
 
   // Since we were a ghOSt client, we were using an enclave.  Now that the test
