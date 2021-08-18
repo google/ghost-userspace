@@ -304,7 +304,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
           .target_barrier = target_barrier,
           .agent_barrier = agent_barrier,
           .commit_flags = COMMIT_AT_TXN_COMMIT,
-          .run_flags = ALLOW_TASK_ONCPU,
+          .run_flags = ALLOW_TASK_ONCPU | ELIDE_PREEMPT,
           .sync_group_owner = sync_group_owner,
           .allow_txn_target_on_cpu = true,
       });

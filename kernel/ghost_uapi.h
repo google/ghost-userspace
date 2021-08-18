@@ -32,7 +32,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	35
+#define GHOST_VERSION	36
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -359,6 +359,8 @@ enum ghost_base_ops {
 #define ALLOW_TASK_ONCPU  (1 << 8)  /* If task is already running on remote
 				     * cpu then let it keep running there.
 				     */
+#define ELIDE_PREEMPT     (1 << 9)  /* Do not send TASK_PREEMPT if we preempt
+				     * a previous ghost task on this cpu */
 
 /* txn->commit_flags */
 enum txn_commit_at {
