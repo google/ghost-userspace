@@ -1414,5 +1414,346 @@ TEST(ApiTest, SchedAffinityRace) {
   Ghost::CloseGlobalEnclaveCtlFd();
 }
 
+// DepartedRaceAgent tries to induce a race in producing MSG_TASK_NEW
+// and MSG_TASK_DEPARTED such that TASK_DEPARTED is the first message
+// produced for a task. This violates the assumption that TASK_NEW is
+// the first message produced and confuses the agent.
+//
+// The kernel defers producing a TASK_NEW msg when a running task switches
+// into ghost until the task schedules (the ghost set_curr_task handler
+// forces the issue by setting NEED_RESCHED on the task). The expectation
+// is that the task will schedule immediately and TASK_NEW is produced via
+// ghost_prepare_task_switch().
+//
+// In some cases however this assumption is broken. For e.g. when an oncpu
+// task is moved to the ghost sched_class while it is in the kernel moving
+// itself _out_ of the ghost sched_class.
+//
+//      Initial conditions: task p is running on cpu-x in the cfs sched_class.
+//      cpu-x                               cpu-y
+//  T0                                      sched_setscheduler(p, ghost)
+//                                          task_rq_lock(p)
+//  T1  sched_setscheduler(p, cfs)
+//      spinning on task_rq_lock(p)
+//      held by cpu-y.
+//  T2                                      p->sched_class = ghost_sched_class
+//
+//  T3                                      p->ghost.new_task = true via
+//                                          switched_to_ghost(). MSG_TASK_NEW
+//                                          deferred until 'p' gets offcpu.
+//
+//  T4                                      set_tsk_need_resched(curr) via
+//                                          set_curr_task_ghost() to get 'p'
+//                                          offcpu.
+//
+//  T5                                      task_rq_unlock(p) before returning
+//                                          from sched_setscheduler().
+//
+//  T6  ... acquire task_rq_lock(p)
+//      p->sched_class = cfs_sched_class
+//
+//  T7  produce TASK_DEPARTED msg via
+//      switched_from_ghost() while the
+//      TASK_NEW msg is still deferred.
+//
+// All current agents treat this is a benign error and just drop the
+// TASK_DEPARTED msg (regardless the message reordering is a kernel
+// bug that should not be condoned).
+//
+// It is possible for TASK_NEW and TASK_AFFINITY_CHANGED to be reordered
+// in a similar way. We reuse the same test to trigger this reordering.
+class DepartedRaceAgent : public Agent {
+ public:
+  DepartedRaceAgent(Enclave* enclave, const Cpu& this_cpu, Channel* channel)
+      : Agent(enclave, this_cpu), channel_(channel) {}
+
+ protected:
+  void AgentThread() final {
+    // Boilerplate to synchronize startup until both agents are ready.
+    SignalReady();
+    WaitForEnclaveReady();
+
+    // Satellite agent that simply yields.
+    if (!channel_) {
+      RunRequest* req = enclave()->GetRunRequest(cpu());
+      while (!Finished()) {
+        req->LocalYield(status_word().barrier(), /*flags=*/0);
+      }
+      return;
+    }
+
+    FifoRq run_queue;
+    int num_tasks = 0;
+    auto allocator =
+        std::make_unique<SingleThreadMallocTaskAllocator<FifoTask>>();
+
+    CpuList avail_cpus = *enclave()->cpus();
+    const Cpu& agent_cpu = cpu();
+    avail_cpus.Clear(agent_cpu);  // don't schedule on spinning agent's cpu.
+
+    while (true) {
+      while (true) {
+        Message msg = Peek(channel_);
+        if (msg.empty()) {
+          break;
+        }
+
+        // CPU_TICK msgs can be produced when the BPF program is not installed.
+        // (e.g. during agent startup and shutdown).
+        if (!msg.is_task_msg()) {
+          Consume(channel_, msg);
+          continue;
+        }
+
+        Gtid gtid = msg.gtid();
+        FifoTask* task = nullptr;
+
+        if (msg.type() == MSG_TASK_NEW) {
+          const ghost_msg_payload_task_new* payload =
+              static_cast<const ghost_msg_payload_task_new*>(msg.payload());
+          bool allocated;
+          std::tie(task, allocated) = allocator->GetTask(gtid,
+                                                         payload->sw_info);
+          ASSERT_THAT(allocated, IsTrue());
+        } else {
+          task = allocator->GetTask(gtid);
+          if (!task) {
+            // This is not supposed to happen except that we are inducing the
+            // race deliberately here. Prior to the kernel mitigation we got
+            // the following TASK_DEPARTED without a preceding TASK_NEW:
+            // MSG_TASK_DEPARTED seq=1 B0/2035 on cpu 8
+            //                   ^^^^^
+            // seq=1 indicates this is the first msg produced for this task.
+            absl::FPrintF(stderr, "%s\n", msg.stringify());
+          }
+          ASSERT_THAT(task, Ne(nullptr));
+          task->Advance(msg.seqnum());
+        }
+
+        // Scheduling is simple: we track whether the task is runnable
+        // and oncpu. If the task is runnable and not already oncpu the
+        // agent schedules it.
+        switch (msg.type()) {
+          case MSG_TASK_NEW: {
+            const ghost_msg_payload_task_new* payload =
+                static_cast<const ghost_msg_payload_task_new*>(msg.payload());
+            task->seqnum = msg.seqnum();
+            task->cpu = agent_cpu.id();
+            if (payload->runnable) {
+              task->run_state = FifoTaskState::kRunnable;
+              run_queue.Enqueue(task);
+            }
+            ASSERT_THAT(++num_tasks, Gt(0));
+            break;
+          }
+
+          case MSG_TASK_WAKEUP:
+            ASSERT_TRUE(task->blocked());
+            task->run_state = FifoTaskState::kRunnable;
+            run_queue.Enqueue(task);
+            break;
+
+          case MSG_TASK_BLOCKED: {
+            const ghost_msg_payload_task_blocked* payload =
+              static_cast<const ghost_msg_payload_task_blocked*>(msg.payload());
+            ASSERT_TRUE(task->oncpu() || payload->from_switchto);
+            ASSERT_FALSE(avail_cpus.IsSet(payload->cpu));
+            task->run_state = FifoTaskState::kBlocked;
+            avail_cpus.Set(payload->cpu);
+            break;
+          }
+
+          case MSG_TASK_PREEMPT: {
+            const ghost_msg_payload_task_preempt* payload =
+              static_cast<const ghost_msg_payload_task_preempt*>(msg.payload());
+            ASSERT_TRUE(task->oncpu() || payload->from_switchto);
+            ASSERT_FALSE(avail_cpus.IsSet(payload->cpu));
+            task->run_state = FifoTaskState::kRunnable;
+            run_queue.Enqueue(task);
+            avail_cpus.Set(payload->cpu);
+            break;
+          }
+
+          case MSG_TASK_YIELD: {
+            const ghost_msg_payload_task_yield* payload =
+              static_cast<const ghost_msg_payload_task_yield*>(msg.payload());
+            ASSERT_TRUE(task->oncpu() || payload->from_switchto);
+            ASSERT_FALSE(avail_cpus.IsSet(payload->cpu));
+            task->run_state = FifoTaskState::kRunnable;
+            run_queue.Enqueue(task);
+            avail_cpus.Set(payload->cpu);
+            break;
+          }
+
+          case MSG_TASK_DEPARTED: {
+            const ghost_msg_payload_task_departed* payload =
+             static_cast<const ghost_msg_payload_task_departed*>(msg.payload());
+            if (task->oncpu()) {
+              ASSERT_FALSE(avail_cpus.IsSet(payload->cpu));
+              avail_cpus.Set(payload->cpu);
+            } else if (task->queued()) {
+              ASSERT_TRUE(run_queue.Erase(task));
+            } else {
+              ASSERT_TRUE(task->blocked());
+            }
+            allocator->FreeTask(task);
+            ASSERT_THAT(--num_tasks, Ge(0));
+            break;
+          }
+
+          case MSG_TASK_DEAD: {
+            ASSERT_TRUE(task->blocked());
+            allocator->FreeTask(task);
+            ASSERT_THAT(--num_tasks, Ge(0));
+            break;
+          }
+
+          case MSG_TASK_AFFINITY_CHANGED:
+            break;
+
+          default:
+            ASSERT_FALSE(true);
+            break;
+        }
+        Consume(channel_, msg);
+      }
+
+      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      const bool prio_boost = status_word().boosted_priority();
+
+      if (Finished() && !num_tasks) {
+        break;
+      }
+
+      if (prio_boost) {
+        RunRequest* req = enclave()->GetRunRequest(agent_cpu);
+        req->LocalYield(agent_barrier, RTLA_ON_IDLE);
+        continue;
+      }
+
+      for (const Cpu& cpu : avail_cpus) {
+        ASSERT_THAT(cpu, Ne(agent_cpu));
+        FifoTask* task = run_queue.Dequeue();
+        if (!task) {
+          break;  // no more runnable tasks.
+        }
+
+        RunRequest* req = enclave()->GetRunRequest(cpu);
+        req->Open({
+            .target = task->gtid,
+            .target_barrier = task->seqnum,
+            .agent_barrier = StatusWord::NullBarrierToken(),
+            .commit_flags = COMMIT_AT_TXN_COMMIT,
+        });
+
+        if (req->Commit()) {
+          task->run_state = FifoTaskState::kOnCpu;
+          task->cpu = cpu.id();
+          avail_cpus.Clear(cpu);
+        } else {
+          run_queue.Enqueue(task);
+        }
+      }
+    }
+  }
+
+ private:
+  Channel* channel_;  // nullptr for all satellite agents.
+                      // non-nullptr for the global spinning agent.
+};
+
+template <class ENCLAVE = LocalEnclave>
+class FullDepartedRaceAgent final : public FullAgent<ENCLAVE> {
+ public:
+  explicit FullDepartedRaceAgent(const AgentConfig& config)
+      : FullAgent<ENCLAVE>(config),
+        sched_cpu_(config.cpus_.Front()),   // arbitrary.
+        channel_(GHOST_MAX_QUEUE_ELEMS, sched_cpu_.numa_node()) {
+    channel_.SetEnclaveDefault();
+    // Start an instance of DepartedRaceAgent on each cpu.
+    this->StartAgentTasks();
+
+    // Unblock all agents and start scheduling.
+    this->enclave_.Ready();
+  }
+
+  ~FullDepartedRaceAgent() final { this->TerminateAgentTasks(); }
+
+  std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) final {
+    Channel* channel_ptr = &channel_;
+    if (cpu != sched_cpu_) {
+      channel_ptr = nullptr;  // sentinel value to indicate a satellite cpu.
+    }
+    return absl::make_unique<DepartedRaceAgent>(&this->enclave_, cpu,
+                                                channel_ptr);
+  }
+
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse& response) final {
+    response.response_code = -1;
+  }
+
+ private:
+  const Cpu sched_cpu_;   // CPU running the main scheduling loop.
+  Channel channel_;       // Channel configured to wakeup `sched_cpu_`.
+};
+
+TEST(ApiTest, DepartedRace) {
+  // This test requires at least 3 cpus:
+  // - one cpu for the spinning agent.
+  // - one cpu each for the two threads that are trying to induce the race.
+  Topology* topology = MachineTopology();
+  const CpuList agent_cpus = topology->all_cpus();
+  constexpr int kMinCpus = 3;
+  if (agent_cpus.Size() < kMinCpus) {
+    GTEST_SKIP() << "must have at least " << kMinCpus << " cpus";
+    return;
+  }
+
+  auto ap = AgentProcess<FullDepartedRaceAgent<>, AgentConfig>(
+      AgentConfig(topology, agent_cpus));
+
+  GhostThread t1(GhostThread::KernelScheduler::kCfs, [agent_cpus] {
+    const uint32_t kNumAgentCpus = agent_cpus.Size();
+    for (int i = 0; i < 1000; i++) {
+      CpuList new_cpulist = agent_cpus;
+      new_cpulist.Clear(agent_cpus[i % kNumAgentCpus]);
+
+      // Try to induce a TASK_NEW and TASK_DEPARTED reordering.
+      const sched_param param = {0};
+      EXPECT_THAT(sched_setscheduler(/*pid=*/0, SCHED_OTHER, &param), Eq(0));
+
+      // Try to induce a TASK_NEW and TASK_AFFINITY_CHANGED reordering.
+      EXPECT_THAT(Ghost::SchedSetAffinity(Gtid::Current(), new_cpulist), Eq(0));
+    }
+  });
+
+  const pid_t t1_tid = t1.tid();
+  Notification done;
+  GhostThread t2(GhostThread::KernelScheduler::kGhost, [t1_tid, &done] {
+    while (!done.HasBeenNotified()) {
+      if (SchedTaskEnterGhost(t1_tid) != 0) {
+        // EPERM: t1 was already in ghost.
+        // ESRCH: t1 had already exited.
+        EXPECT_THAT(errno, AnyOf(ESRCH, EPERM));
+      }
+    }
+  });
+
+  t1.Join();        // wait for 't1' to exit.
+  done.Notify();    // 't2' is done.
+  t2.Join();        // wait for 't2' to exit.
+
+  // When AgentProcess goes out of scope its destructor will trigger
+  // the FullDepartedRaceAgent destructor that in turn will Terminate()
+  // the agents.
+
+  // Since we were a ghOSt client, we were using an enclave.  Now that the test
+  // is over, we need to reset so we can get a fresh enclave later.  Note that
+  // we used AgentProcess, so the only user of the gbl_enclave_fd_ is us, the
+  // client.
+  Ghost::CloseGlobalEnclaveCtlFd();
+}
+
 }  // namespace
 }  // namespace ghost

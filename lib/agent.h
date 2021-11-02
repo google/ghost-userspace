@@ -42,8 +42,7 @@ class Agent;
 class Agent {
  public:
   explicit Agent(Enclave* enclave, const Cpu& cpu)
-      : enclave_(enclave), cpu_(cpu) {
-  }
+      : enclave_(enclave), cpu_(cpu) {}
   virtual ~Agent();
 
   // Initiates binding of *this to the constructor passed CPU.  Must call
