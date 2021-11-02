@@ -12,6 +12,21 @@
 #ifndef GHOST_LIB_BPF_COMMON_BPF_H_
 #define GHOST_LIB_BPF_COMMON_BPF_H_
 
+#include "libbpf/bpf_core_read.h"
+
+/*
+ * Declarations for ghost's bpf_helpers.  These functions would normally be
+ * available in linux_tools/.../bpf_helpers.h, however that file was generated
+ * from the uapi/linux/bpf.h from a non-ghost kernel.
+ *
+ * The function ID numbers (e.g. 204) come from the ghost kernel's bpf.h
+ * header's enum bpf_func_id (built from __BPF_FUNC_MAPPER).  The format is the
+ * same as what bpf_doc.py would auto-generate.
+ */
+static long (*bpf_ghost_wake_agent)(struct bpf_ghost_sched *ctx, __u32 cpu) = (void *) 204;
+static long (*bpf_ghost_run_gtid)(struct bpf_ghost_sched *ctx, __s64 gtid, __u32 task_barrier, __s32 run_flags) = (void *) 205;
+
+
 #define MAX_PIDS 102400
 #define SCHED_GHOST 18
 #define TASK_RUNNING 0

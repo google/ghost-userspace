@@ -16,6 +16,8 @@
 #include "libbpf/bpf_tracing.h"
 // clang-format on
 
+#include "third_party/bpf/common.bpf.h"
+
 // Keep this struct in sync with edf_scheduler.h
 struct edf_bpf_per_cpu_data {
 	__u8 example_bool;
@@ -40,6 +42,12 @@ SEC("ghost_sched/skip_tick")
 int edf_send_tick(struct bpf_ghost_sched *ctx)
 {
 	return 1;
+}
+
+SEC("ghost_sched/pnt")
+int edf_pnt(struct bpf_ghost_sched *ctx)
+{
+	return 0;
 }
 
 char LICENSE[] SEC("license") = "GPL";

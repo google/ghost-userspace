@@ -92,6 +92,7 @@ static int insert_prog(int ctl_fd, struct bpf_program *prog)
 
 	switch (eat) {
 	case BPF_GHOST_SCHED_SKIP_TICK:
+	case BPF_GHOST_SCHED_PNT:
 		ret = bpf_link_create(prog_fd, ctl_fd, eat, NULL);
 		break;
 	default:
