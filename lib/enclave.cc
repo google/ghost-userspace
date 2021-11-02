@@ -581,7 +581,7 @@ bool LocalEnclave::CompleteRunRequest(RunRequest* req) {
 }
 
 bool LocalEnclave::LocalYieldRunRequest(
-    const RunRequest* const req, const StatusWord::BarrierToken agent_barrier,
+    const RunRequest* req, const StatusWord::BarrierToken agent_barrier,
     const int flags) {
   DCHECK_EQ(sched_getcpu(), req->cpu().id());
   int error = Ghost::Run(Gtid(0), agent_barrier, StatusWord::NullBarrierToken(),
@@ -591,12 +591,12 @@ bool LocalEnclave::LocalYieldRunRequest(
   return error == 0;
 }
 
-bool LocalEnclave::PingRunRequest(RunRequest* req, Cpu remote_cpu) {
+bool LocalEnclave::PingRunRequest(const RunRequest* req) {
   const int run_flags = 0;
   int rc = Ghost::Run(Gtid(GHOST_AGENT_GTID),
                       StatusWord::NullBarrierToken(),  // agent_barrier
                       StatusWord::NullBarrierToken(),  // task_barrier
-                      remote_cpu.id(), run_flags);
+                      req->cpu().id(), run_flags);
   return rc == 0;
 }
 

@@ -109,11 +109,11 @@ class Enclave {
                                     StatusWord::BarrierToken agent_barrier,
                                     int flags) = 0;
 
-  // Ping agent on 'remote_cpu'. Ping may fail if there is no agent
-  // associated with the 'remote_cpu'.
+  // Ping agent on the CPU that corresponds to `req`. Ping may fail if there is
+  // no agent associated with that CPU.
   //
-  // Returns 'true' on success and 'false' otherwise.
-  virtual bool PingRunRequest(RunRequest* req, Cpu remote_cpu) = 0;
+  // Returns `true` on success and `false` otherwise.
+  virtual bool PingRunRequest(const RunRequest* req) = 0;
 
   // Enclave implementations may provide more efficient batch-dispatch methods.
   //
@@ -318,7 +318,7 @@ class RunRequest {
   // the transaction) so use the Ghost::Run() based ping to sidestep the issue.
   //
   // TODO: revisit when agent is able to to arbitrate txn ownership.
-  bool Ping() { return enclave_->PingRunRequest(this, cpu()); }
+  bool Ping() { return enclave_->PingRunRequest(this); }
 
   // REQUIRES: Clients should use State() and not errno to interact with
   // results.  It is likely that this function stops returning information via
@@ -421,7 +421,7 @@ class LocalEnclave final : public Enclave {
   bool LocalYieldRunRequest(const RunRequest* req,
                             StatusWord::BarrierToken agent_barrier,
                             int flags) final;
-  bool PingRunRequest(RunRequest* req, Cpu remote_cpu) final;
+  bool PingRunRequest(const RunRequest* req) final;
 
   bool CommitRunRequests(const CpuList& cpu_list) final;
   void SubmitRunRequests(const CpuList& cpu_list) final;
