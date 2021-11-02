@@ -282,7 +282,7 @@ class Notification {
 
   // Returns true if the notification has been notified. Returns false
   // otherwise.
-  bool HasBeenNotified() {
+  bool HasBeenNotified() const {
     return notified_.load(std::memory_order_relaxed) ==
            NotifiedState::kNotified;
   }

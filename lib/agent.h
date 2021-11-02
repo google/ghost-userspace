@@ -69,7 +69,7 @@ class Agent {
 
   // Returns true iff TerminateBegin() has been called.
   // Agents should test Finished() before each call to Run()
-  inline bool Finished() { return finished_.HasBeenNotified(); }
+  bool Finished() const { return finished_.HasBeenNotified(); }
 
   Cpu cpu() const { return cpu_; }
 
