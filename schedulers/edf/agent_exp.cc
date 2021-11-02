@@ -60,9 +60,9 @@ void ParseGlobalConfig(GlobalConfig* config) {
   Topology* topology = MachineTopology();
   config->topology_ = topology;
   config->cpus_ = topology->ToCpuList(std::move(all_cpus_v));
-  config->tick_config_ = absl::GetFlag(FLAGS_ticks) ? CpuTickConfig::kAllTicks
-                                                    : CpuTickConfig::kNoTicks;
 
+  config->edf_ticks_ = absl::GetFlag(FLAGS_ticks) ? CpuTickConfig::kAllTicks
+                                                  : CpuTickConfig::kNoTicks;
   config->global_cpu_ = topology->cpu(globalcpu);
 
   std::string enclave = absl::GetFlag(FLAGS_enclave);

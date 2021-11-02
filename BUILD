@@ -272,6 +272,12 @@ cc_test(
     ],
 )
 
+bpf_skeleton(
+    name = "edf_bpf_skel",
+    bpf_object = "//third_party/bpf:edf_bpf",
+    skel_hdr = "schedulers/edf/edf_bpf.skel.h",
+)
+
 cc_library(
     name = "edf_scheduler",
     srcs = [
@@ -279,6 +285,7 @@ cc_library(
         "schedulers/edf/orchestrator.cc",
     ],
     hdrs = [
+        "schedulers/edf/edf_bpf.skel.h",
         "schedulers/edf/edf_scheduler.h",
         "schedulers/edf/orchestrator.h",
     ],
@@ -290,6 +297,7 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/strings:str_format",
+        "@linux//:libbpf",
     ],
 )
 

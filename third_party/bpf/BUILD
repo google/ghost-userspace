@@ -22,6 +22,15 @@ bpf_program(
 )
 
 bpf_program(
+    name = "edf_bpf",
+    src = "edf.bpf.c",
+    hdrs = [
+        "//:kernel/vmlinux_ghost_5_11.h",
+    ],
+    bpf_object = "edf_bpf.o",
+)
+
+bpf_program(
     name = "schedclasstop_bpf",
     src = "schedclasstop.bpf.c",
     hdrs = [

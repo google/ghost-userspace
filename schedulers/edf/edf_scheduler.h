@@ -23,6 +23,7 @@
 #include "absl/functional/bind_front.h"
 #include "lib/agent.h"
 #include "lib/scheduler.h"
+#include "schedulers/edf/edf_bpf.skel.h"
 #include "schedulers/edf/orchestrator.h"
 #include "shared/prio_table.h"
 
@@ -132,11 +133,34 @@ struct EdfTask : public Task {
   uint32_t wcid = std::numeric_limits<uint32_t>::max();
 };
 
+// Keep this struct in sync with edf.bpf.c
+struct edf_bpf_per_cpu_data {
+  uint8_t example_bool;
+} __attribute__((aligned(64)));
+
+// Config for a global agent scheduler.
+class GlobalConfig : public AgentConfig {
+ public:
+  GlobalConfig() {
+    // Set AgentConfig::tick_config_ = kAllTicks to disable the generic BPF
+    // program attached to `skip_tick`.  EDF has its own specific BPF programs,
+    // controlled by edf_ticks_.
+    tick_config_ = CpuTickConfig::kAllTicks;
+  }
+  GlobalConfig(Topology* topology, const CpuList& cpus, const Cpu& global_cpu)
+      : AgentConfig(topology, cpus), global_cpu_(global_cpu) {
+    tick_config_ = CpuTickConfig::kAllTicks;
+  }
+
+  Cpu global_cpu_{Cpu::UninitializedType::kUninitialized};
+  CpuTickConfig edf_ticks_ = CpuTickConfig::kNoTicks;
+};
+
 class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
  public:
   explicit EdfScheduler(Enclave* enclave, CpuList cpus,
                         std::shared_ptr<TaskAllocator<EdfTask>> allocator,
-                        int32_t global_cpu);
+                        const GlobalConfig& config);
   ~EdfScheduler() final;
 
   void EnclaveReady() final;
@@ -217,11 +241,14 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
 
   const Orchestrator::SchedCallbackFunc kSchedCallbackFunc =
       absl::bind_front(&EdfScheduler::SchedParamsCallback, this);
+
+  struct edf_bpf* bpf_obj_;
+  struct edf_bpf_per_cpu_data* bpf_data_;
 };
 
 std::unique_ptr<EdfScheduler> SingleThreadEdfScheduler(Enclave* enclave,
                                                        CpuList cpus,
-                                                       int32_t global_cpu);
+                                                       GlobalConfig& config);
 
 // Operates as the Global or Satellite agent depending on input from the
 // global_scheduler->GetGlobalCPU callback.
@@ -237,25 +264,14 @@ class GlobalSatAgent : public Agent {
   EdfScheduler* global_scheduler_;
 };
 
-// Config for an global agent scheduler.  In addition to the usual AgentConfig,
-// it has an global_cpu_, where the global agent prefers to run.
-class GlobalConfig : public AgentConfig {
- public:
-  GlobalConfig() {}
-  GlobalConfig(Topology* topology, CpuList cpus, Cpu global_cpu)
-      : AgentConfig(topology, cpus), global_cpu_(global_cpu) {}
-
-  Cpu global_cpu_{Cpu::UninitializedType::kUninitialized};
-};
-
-// An global agent scheduler.  It runs a single-threaded EDF scheduler on the
+// A global agent scheduler.  It runs a single-threaded EDF scheduler on the
 // global_cpu.
 template <class ENCLAVE>
 class GlobalEdfAgent : public FullAgent<ENCLAVE> {
  public:
   explicit GlobalEdfAgent(GlobalConfig config) : FullAgent<ENCLAVE>(config) {
     global_scheduler_ = SingleThreadEdfScheduler(
-        &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id());
+        &this->enclave_, *this->enclave_.cpus(), config);
     this->StartAgentTasks();
     this->enclave_.Ready();
   }

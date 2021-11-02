@@ -15,6 +15,7 @@
 #include "schedulers/edf/edf_scheduler.h"
 
 #include "absl/strings/str_format.h"
+#include "bpf/user/agent.h"
 
 namespace ghost {
 
@@ -64,18 +65,52 @@ void EdfTask::CalculateSchedDeadline() {
 
 EdfScheduler::EdfScheduler(Enclave* enclave, CpuList cpus,
                            std::shared_ptr<TaskAllocator<EdfTask>> allocator,
-                           int32_t global_cpu)
+                           const GlobalConfig& config)
     : BasicDispatchScheduler(enclave, std::move(cpus), std::move(allocator)),
-      global_cpu_(global_cpu),
+      global_cpu_(config.global_cpu_.id()),
       global_channel_(GHOST_MAX_QUEUE_ELEMS, /*node=*/0) {
   if (!cpus.IsSet(global_cpu_)) {
     Cpu c = cpus.Front();
     CHECK(c.valid());
     global_cpu_ = c.id();
   }
+
+  bpf_obj_ = edf_bpf__open();
+  CHECK_NE(bpf_obj_, nullptr);
+
+  bpf_map__resize(bpf_obj_->maps.cpu_data, libbpf_num_possible_cpus());
+
+  bpf_program__set_types(bpf_obj_->progs.edf_skip_tick,
+                         BPF_PROG_TYPE_GHOST_SCHED, BPF_GHOST_SCHED_SKIP_TICK);
+  bpf_program__set_types(bpf_obj_->progs.edf_send_tick,
+                         BPF_PROG_TYPE_GHOST_SCHED, BPF_GHOST_SCHED_SKIP_TICK);
+
+  CHECK_EQ(edf_bpf__load(bpf_obj_), 0);
+
+  switch (config.edf_ticks_) {
+    case CpuTickConfig::kNoTicks:
+      CHECK_EQ(agent_bpf_register(bpf_obj_->progs.edf_skip_tick,
+                                  BPF_GHOST_SCHED_SKIP_TICK),
+               0);
+      break;
+    case CpuTickConfig::kAllTicks:
+      CHECK_EQ(agent_bpf_register(bpf_obj_->progs.edf_send_tick,
+                                  BPF_GHOST_SCHED_SKIP_TICK),
+               0);
+      break;
+    case CpuTickConfig::kTickOnRequest:
+      GHOST_ERROR("Must pick kAllTicks or kNoTicks");
+  }
+
+  bpf_data_ = static_cast<struct edf_bpf_per_cpu_data*>(
+      bpf_map__mmap(bpf_obj_->maps.cpu_data));
+  CHECK_NE(bpf_data_, MAP_FAILED);
 }
 
-EdfScheduler::~EdfScheduler() {}
+EdfScheduler::~EdfScheduler() {
+  bpf_map__munmap(bpf_obj_->maps.cpu_data, bpf_data_);
+  edf_bpf__destroy(bpf_obj_);
+}
 
 void EdfScheduler::EnclaveReady() {
   for (const Cpu& cpu : cpus()) {
@@ -762,10 +797,10 @@ void EdfScheduler::PickNextGlobalCPU() {
 
 std::unique_ptr<EdfScheduler> SingleThreadEdfScheduler(Enclave* enclave,
                                                        CpuList cpus,
-                                                       int32_t global_cpu) {
+                                                       GlobalConfig& config) {
   auto allocator = std::make_shared<SingleThreadMallocTaskAllocator<EdfTask>>();
   auto scheduler = absl::make_unique<EdfScheduler>(
-      enclave, std::move(cpus), std::move(allocator), global_cpu);
+      enclave, std::move(cpus), std::move(allocator), config);
   return scheduler;
 }
 
