@@ -30,8 +30,10 @@ for instructions to install Bazel on your operating system.
 
 ```
 sudo apt update
-sudo apt install libnuma-dev libcap-dev libelf-dev libbfd-dev clang llvm zlib1g-dev python-is-python3
+sudo apt install libnuma-dev libcap-dev libelf-dev libbfd-dev gcc clang llvm zlib1g-dev python-is-python3
 ```
+
+Note that ghOSt requires GCC 9 or newer.
 
 3\. Compile the ghOSt userspace component. Run the following from the root of
 the repository:
