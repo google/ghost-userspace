@@ -16,11 +16,6 @@
 // We need different headers for BPF and C programs due to various Google3
 // reasons.
 
-#define BPF_PROG_TYPE_GHOST_SCHED 35
-#define BPF_GHOST_SCHED_SKIP_TICK 50
-
-// end uapi/linux/bpf.h
-
 struct ghost_per_cpu_data {
   __u8 want_tick;
 } __attribute__((aligned(64)));

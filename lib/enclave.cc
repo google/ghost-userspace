@@ -417,7 +417,18 @@ LocalEnclave::LocalEnclave(AgentConfig config)
 
   BuildCpuReps();
 
-  CHECK_EQ(bpf_init(), 0);
+  bool tick_on_request;
+  switch (config_.tick_config_) {
+    case CpuTickConfig::kNoTicks:
+    case CpuTickConfig::kTickOnRequest:
+      // kNoTicks is the same as kTickOnRequest: you just never ask for one.
+      tick_on_request = true;
+      break;
+    case CpuTickConfig::kAllTicks:
+      tick_on_request = false;
+      break;
+  };
+  CHECK_EQ(agent_bpf_init(tick_on_request), 0);
 }
 
 LocalEnclave::~LocalEnclave() {
@@ -434,19 +445,9 @@ LocalEnclave::~LocalEnclave() {
 }
 
 void LocalEnclave::InsertBpfPrograms() {
-  int progs[1];
-  switch (config_.tick_config_) {
-    case CpuTickConfig::kNoTicks:
-    case CpuTickConfig::kTickOnRequest:
-      // kNoTicks is the same as kTickOnRequest: you just never ask for one.
-      progs[0] = GHOST_BPF_TICK_ON_REQUEST;
-      break;
-    case CpuTickConfig::kAllTicks:
-      progs[0] = GHOST_BPF_NONE;
-  };
   int ret;
   do {
-    ret = bpf_insert(ctl_fd_, progs, ABSL_ARRAYSIZE(progs));
+    ret = agent_bpf_insert_registered(ctl_fd_);
   } while (ret && errno == EBUSY);
   CHECK_EQ(ret, 0);
 }
@@ -625,7 +626,7 @@ void LocalEnclave::AdvertiseOnline() {
 void LocalEnclave::PrepareToExit() {
   close(agent_online_fd_);
   agent_online_fd_ = -1;
-  bpf_destroy();
+  agent_bpf_destroy();
 }
 
 void LocalEnclave::WaitForOldAgent() {

@@ -21,21 +21,6 @@
 // We need different headers for BPF and C programs due to various Google3
 // reasons.
 
-// From include/uapi/linux/bpf.h for the ghost kernel.  When we build the BPF
-// program from Google3, we're getting the vmlinux from third_party/linux_tools.
-// That header was not generated from the ghost/ghost kernel, so we need to
-// manually include these bits.
-//
-// We can't just include the uapi header directly, since the uapi header pulls
-// in extra things that will conflict when BPF builds.  The long term fix is to
-// use a vmlinux generated against the ghost kernel.
-struct bpf_ghost_sched {};
-
-#define BPF_PROG_TYPE_GHOST_SCHED 35
-#define BPF_GHOST_SCHED_SKIP_TICK 50
-
-// end uapi/linux/bpf.h
-
 #include <stdint.h>
 
 struct ghost_per_cpu_data {

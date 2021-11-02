@@ -29,42 +29,52 @@
 #include "bpf/user/ghost_bpf.skel.h"
 #include "bpf/user/ghost_shared.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
-#include "libbpf/bpf.h"
-#include "libbpf/libbpf.h"
 
+// The ghost_bpf object and its cpu_data mmap is our set of
+// "scheduler-independent" BPF programs.  Right now, we have a generic one that
+// controls whether the kernel generates a timer tick message.
 static struct ghost_bpf *obj;
 static struct ghost_per_cpu_data *cpu_data;
-static struct {
+static bool gbl_tick_on_request;
+
+// This contains all registered BPF programs, both from struct ghost_bpf as well
+// as any scheduler-specific programs.  The kernel lets you insert up to one
+// program at each attach point.
+static struct bpf_registration {
+	struct bpf_program *prog;
 	bool inserted;
 	int fd;
-} bpf_info [GHOST_BPF_MAX_NR_PROGS];
+} bpf_registry [BPF_GHOST_SCHED_MAX_ATTACH_TYPE];
 
-// mmaps a bpf map.  Returns MAP_FAILED on error; unmap it with munmap().
-static void *bpf_map__mmap(struct bpf_map *map)
+static size_t map_mmap_sz(struct bpf_map *map)
 {
 	const struct bpf_map_def *def = bpf_map__def(map);
 	size_t mmap_sz;
 
 	mmap_sz = (size_t)roundup(def->value_size, 8) * def->max_entries;
 	mmap_sz = roundup(mmap_sz, sysconf(_SC_PAGE_SIZE));
-	return mmap(NULL, mmap_sz, PROT_READ | PROT_WRITE, MAP_SHARED,
+
+	return mmap_sz;
+}
+
+// mmaps a bpf map.  Returns MAP_FAILED on error.
+// munmap it with bpf_map__munmap().
+void *bpf_map__mmap(struct bpf_map *map)
+{
+	return mmap(NULL, map_mmap_sz(map), PROT_READ | PROT_WRITE, MAP_SHARED,
 		    bpf_map__fd(map), 0);
 }
 
-static void bpf_program__set_types(struct bpf_program *prog, int prog_type,
-				   int expected_attach_type)
+int bpf_map__munmap(struct bpf_map *map, void *addr)
+{
+	return munmap(addr, map_mmap_sz(map));
+}
+
+void bpf_program__set_types(struct bpf_program *prog, int prog_type,
+			    int expected_attach_type)
 {
 	bpf_program__set_type(prog, prog_type);
 	bpf_program__set_expected_attach_type(prog, expected_attach_type);
-}
-
-// libbpf doesn't know about ghost-specific BPF programs, so you have to set the
-// type and attach type for every bpf program before they are loaded.
-static void set_all_program_types(struct ghost_bpf *obj)
-{
-	bpf_program__set_types(obj->progs.ghost_sched_skip_tick,
-			       BPF_PROG_TYPE_GHOST_SCHED,
-			       BPF_GHOST_SCHED_SKIP_TICK);
 }
 
 // Inserts the program in the the kernel.  The program must already be loaded.
@@ -106,37 +116,14 @@ static int insert_prog(int ctl_fd, struct bpf_program *prog)
 	return ret;
 }
 
-// Returns 0 on success, or -1 with errno set on failure.
-// You can attempt to insert the same program multiple times; it will only be
-// inserted once.
-static int insert_prog_by_id(struct ghost_bpf *obj, int ctl_fd, int id)
-{
-	int ret;
-
-	if (bpf_info[id].inserted)
-		return 0;
-
-	switch (id) {
-	case GHOST_BPF_NONE:
-		return 0;
-	case GHOST_BPF_TICK_ON_REQUEST:
-		ret = insert_prog(ctl_fd, obj->progs.ghost_sched_skip_tick);
-		if (ret < 0)
-			return ret;
-		break;
-	default:
-		errno = ENOENT;
-		return -1;
-	}
-
-	bpf_info[id].inserted = true;
-	bpf_info[id].fd = ret;
-
-	return 0;
-}
-
+// Initializes the BPF infrastructure.
+//
+// Additionally, this loads and registers programs for scheduler-independent
+// policies, such as how to handle the timer tick.  If a scheduler plans to
+// insert its own timer tick program, then unset tick_on_request.
+//
 // Returns 0 on success, -1 with errno set on failure.
-int bpf_init(void)
+int agent_bpf_init(bool tick_on_request)
 {
 	int err;
 
@@ -155,38 +142,81 @@ int bpf_init(void)
 
 	bpf_map__resize(obj->maps.cpu_data, libbpf_num_possible_cpus());
 
-	set_all_program_types(obj);
+	bpf_program__set_types(obj->progs.ghost_sched_skip_tick,
+			       BPF_PROG_TYPE_GHOST_SCHED,
+			       BPF_GHOST_SCHED_SKIP_TICK);
 
 	err = ghost_bpf__load(obj);
+
 	if (err) {
-		ghost_bpf__destroy(obj);
-		errno = -err;
+		// ghost_bpf__load() returns a *negative* error code.
+		err = -err;
+		goto out_error;
+	}
+
+	if (tick_on_request) {
+		err = agent_bpf_register(obj->progs.ghost_sched_skip_tick,
+					 BPF_GHOST_SCHED_SKIP_TICK);
+		if (err) {
+			err = errno;
+			goto out_error;
+		}
+		gbl_tick_on_request = true;
+	}
+
+	cpu_data = bpf_map__mmap(obj->maps.cpu_data);
+	if (cpu_data == MAP_FAILED) {
+		err = errno;
+		goto out_error;
+	}
+
+
+	return 0;
+
+out_error:
+	ghost_bpf__destroy(obj);
+	errno = err;
+	return -1;
+}
+
+// We'd like to use `enum bpf_attach_type eat` here, but for now we need an int
+// because the ghost bpf values are not in the uapi available to userspace yet.
+// They are in the kernel repo.  We keep them in sync in bpf/user/agent.h.
+int agent_bpf_register(struct bpf_program *prog, int eat)
+{
+	if (eat >= BPF_GHOST_SCHED_MAX_ATTACH_TYPE) {
+		errno = ERANGE;
 		return -1;
 	}
+	if (bpf_registry[eat].prog) {
+		errno = EBUSY;
+		return -1;
+	}
+
+	bpf_registry[eat].prog = prog;
+
 	return 0;
 }
 
 // Returns 0 on success, -1 with errno set on failure.  Any programs inserted
-// are not removed; call bpf_destroy() or just exit your process.
-int bpf_insert(int ctl_fd, int *progs, size_t nr_progs)
+// are not removed on error; call bpf_destroy() or just exit your process.
+int agent_bpf_insert_registered(int ctl_fd)
 {
-	int ret;
+	int fd;
+	struct bpf_registration *r;
 
-	if (!obj) {
-		errno = ENXIO;
-		return -1;
+	for (int i = 0; i < BPF_GHOST_SCHED_MAX_ATTACH_TYPE; i++) {
+		r = &bpf_registry[i];
+		if (!r->prog)
+			continue;
+		if (r->inserted)
+			continue;
+		fd = insert_prog(ctl_fd, r->prog);
+		if (fd < 0)
+			return fd;
+		r->inserted = true;
+		r->fd = fd;
 	}
-
-	for (int i = 0; i < nr_progs; i++) {
-		ret = insert_prog_by_id(obj, ctl_fd, progs[i]);
-		if (ret)
-			return ret;
-	}
-
-	cpu_data = bpf_map__mmap(obj->maps.cpu_data);
-
-	if (cpu_data == MAP_FAILED)
-		return -1;
 
 	return 0;
 }
@@ -194,25 +224,34 @@ int bpf_insert(int ctl_fd, int *progs, size_t nr_progs)
 // Gracefully unlinks and unloads the BPF programs.  When agents call this, they
 // explicitly close (and thus unlink/detach) BPF programs from the enclave,
 // which will speed up agent upgrade/handoff.
-void bpf_destroy(void)
+void agent_bpf_destroy(void)
 {
-	for (int i = 0; i < GHOST_BPF_MAX_NR_PROGS; ++i) {
-		if (bpf_info[i].inserted) {
-			close(bpf_info[i].fd);
-			bpf_info[i].inserted = false;
+	struct bpf_registration *r;
+
+	for (int i = 0; i < BPF_GHOST_SCHED_MAX_ATTACH_TYPE; ++i) {
+		r = &bpf_registry[i];
+		if (r->inserted) {
+			close(r->fd);
+			r->inserted = false;
 		}
 	}
+
 	ghost_bpf__destroy(obj);
 	obj = NULL;
+	gbl_tick_on_request = false;
 }
 
-// Returns 0 on success, -1 with errno set on failure.  Must have selected
-// GHOST_BPF_TICK_ON_REQUEST.
-int request_tick_on_cpu(int cpu)
+// Returns 0 on success, -1 with errno set on failure.  Must have called
+// agent_bpf_init() with tick_on_request.
+int agent_bpf_request_tick_on_cpu(int cpu)
 {
 	unsigned int nr_cpus = libbpf_num_possible_cpus();
 
-	if (!bpf_info[GHOST_BPF_TICK_ON_REQUEST].inserted) {
+	if (!gbl_tick_on_request) {
+		errno = EINVAL;
+		return -1;
+	}
+	if (!bpf_registry[BPF_GHOST_SCHED_SKIP_TICK].inserted) {
 		errno = ENOENT;
 		return -1;
 	}

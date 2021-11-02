@@ -19,30 +19,65 @@
 
 #include <stdlib.h>
 
+#include "libbpf/bpf.h"
+#include "libbpf/libbpf.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define GHOST_BPF_NONE 0
-#define GHOST_BPF_TICK_ON_REQUEST 1
-#define GHOST_BPF_MAX_NR_PROGS 2
+// From include/uapi/linux/bpf.h for the ghost kernel.
 
-// Initializes BPF, loading the programs into the kernel.
+struct bpf_ghost_sched {};
+
+enum {
+  BPF_PROG_TYPE_GHOST_SCHED = 35,
+
+  BPF_GHOST_SCHED_SKIP_TICK = 50,
+  BPF_GHOST_SCHED_PNT,
+  BPF_GHOST_SCHED_MAX_ATTACH_TYPE,  // __MAX_BPF_ATTACH_TYPE
+};
+
+// end include/uapi/linux/bpf.h
+
+// Generic BPF helpers
+
+void *bpf_map__mmap(struct bpf_map *map);
+int bpf_map__munmap(struct bpf_map *map, void *addr);
+void bpf_program__set_types(struct bpf_program *prog, int prog_type,
+                            int expected_attach_type);
+
+// Initializes the BPF infrastructure.
+//
+// Additionally, this loads and registers programs for scheduler-independent
+// policies, such as how to handle the timer tick.  If a scheduler plans to
+// insert its own timer tick program, then unset tick_on_request.
+//
 // Returns 0 on success, -1 with errno set on failure.
-int bpf_init(void);
-// Inserts the programs you select.  Must call bpf_init() first.  Pass an array
-// of GHOST_BPF program numbers.  Returns 0 on success, -1 with errno set on
-// failure.  Any programs inserted are not removed; call bpf_destroy() or just
-// exit your process.
-int bpf_insert(int ctl_fd, int *progs, size_t nr_progs);
+int agent_bpf_init(bool tick_on_request);
+
+// Registers `prog` to be inserted at attach point `eat` during
+// agent_bpf_insert_registered().  You must load the programs before calling
+// insert.  You may call this repeatedly, and it will only insert each program
+// once.  In particular, you may temporarily get EBUSY during an agent handoff.
+//
+// Returns 0 on success, -1 with errno set on failure.
+int agent_bpf_register(struct bpf_program *prog, int eat);
+
+// Inserts the programs you previously registered and loaded.
+//
+// Returns 0 on success, -1 with errno set on failure.  Any programs inserted
+// are not removed on error; call bpf_destroy() or just exit your process.
+int agent_bpf_insert_registered(int ctl_fd);
+
 // Gracefully unlinks and unloads the BPF programs.  When agents call this, they
 // explicitly close (and thus unlink/detach) BPF programs from the enclave,
 // which will speed up agent upgrade/handoff.
-void bpf_destroy(void);
+void agent_bpf_destroy(void);
 
-// Returns 0 on success, -1 with errno set on failure.  Must have selected
-// GHOST_BPF_TICK_ON_REQUEST.
-int request_tick_on_cpu(int cpu);
+// Returns 0 on success, -1 with errno set on failure.  Must have called
+// agent_bpf_init() with tick_on_request.
+int agent_bpf_request_tick_on_cpu(int cpu);
 
 #ifdef __cplusplus
 } /* extern "C" */
