@@ -373,6 +373,8 @@ class RunRequest {
 
   bool allow_txn_target_on_cpu() const { return allow_txn_target_on_cpu_; }
 
+  uint64_t cpu_seqnum() const { return txn_->cpu_seqnum; }
+
  private:
   RunRequest() : cpu_(Cpu::UninitializedType::kUninitialized) {}
   void Init(Enclave* enclave, Cpu cpu, struct ghost_txn* txn) {

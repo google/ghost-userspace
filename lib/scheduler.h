@@ -307,6 +307,7 @@ class BasicDispatchScheduler : public Scheduler {
   virtual void TaskPreempted(TaskType* task, const Message& msg) = 0;
   virtual void TaskSwitchto(TaskType* task, const Message& msg) {}
   virtual void TaskAffinityChanged(TaskType* task, const Message& msg) {}
+  virtual void TaskLatched(TaskType* task, const Message& msg) {}
 
   virtual void TaskDiscovered(TaskType* task) {}
   virtual void DiscoveryStart() {}
@@ -471,10 +472,6 @@ void BasicDispatchScheduler<TaskType>::DispatchMessage(const Message& msg) {
     }
   }
 
-  // DEPARTED can be delivered for 'task' regardless of its state. All other
-  // messages must be delivered either when it is on a CPU or waking up.
-  CHECK(!task->preempted || msg.type() == MSG_TASK_DEPARTED);
-
   bool update_seqnum = true;
 
   // Above asserts we've missed no messages, state below should be consistent.
@@ -511,6 +508,9 @@ void BasicDispatchScheduler<TaskType>::DispatchMessage(const Message& msg) {
       break;
     case MSG_TASK_AFFINITY_CHANGED:
       TaskAffinityChanged(task, msg);
+      break;
+    case MSG_TASK_LATCHED:
+      TaskLatched(task, msg);
       break;
     default:
       GHOST_ERROR("Unhandled message type %d", msg.type());

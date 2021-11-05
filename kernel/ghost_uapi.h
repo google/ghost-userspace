@@ -32,7 +32,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	36
+#define GHOST_VERSION	41
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -178,6 +178,7 @@ enum {
 	MSG_TASK_DEPARTED,
 	MSG_TASK_SWITCHTO,
 	MSG_TASK_AFFINITY_CHANGED,
+	MSG_TASK_LATCHED,
 
 	/* cpu messages */
 	MSG_CPU_TICK		= _MSG_CPU_FIRST,
@@ -196,13 +197,16 @@ struct ghost_msg_payload_task_new {
 struct ghost_msg_payload_task_preempt {
 	uint64_t gtid;
 	uint64_t runtime;	/* cumulative runtime in ns */
+	uint64_t cpu_seqnum;	/* cpu sequence number */
 	int cpu;
 	char from_switchto;
+	char was_latched;
 };
 
 struct ghost_msg_payload_task_yield {
 	uint64_t gtid;
 	uint64_t runtime;	/* cumulative runtime in ns */
+	uint64_t cpu_seqnum;
 	int cpu;
 	char from_switchto;
 };
@@ -210,6 +214,7 @@ struct ghost_msg_payload_task_yield {
 struct ghost_msg_payload_task_blocked {
 	uint64_t gtid;
 	uint64_t runtime;	/* cumulative runtime in ns */
+	uint64_t cpu_seqnum;
 	int cpu;
 	char from_switchto;
 };
@@ -220,8 +225,10 @@ struct ghost_msg_payload_task_dead {
 
 struct ghost_msg_payload_task_departed {
 	uint64_t gtid;
+	uint64_t cpu_seqnum;
 	int cpu;
 	char from_switchto;
+	char was_current;
 };
 
 struct ghost_msg_payload_task_affinity_changed {
@@ -250,7 +257,16 @@ struct ghost_msg_payload_task_wakeup {
 struct ghost_msg_payload_task_switchto {
 	uint64_t gtid;
 	uint64_t runtime;	/* cumulative runtime in ns */
+	uint64_t cpu_seqnum;
 	int cpu;
+};
+
+struct ghost_msg_payload_task_latched {
+	uint64_t gtid;
+	uint64_t commit_time;
+	uint64_t cpu_seqnum;
+	int cpu;
+	char latched_preempt;
 };
 
 struct ghost_msg_payload_cpu_not_idle {
@@ -360,7 +376,9 @@ enum ghost_base_ops {
 				     * cpu then let it keep running there.
 				     */
 #define ELIDE_PREEMPT     (1 << 9)  /* Do not send TASK_PREEMPT if we preempt
-				     * a previous ghost task on this cpu */
+				     * a previous ghost task on this cpu
+				     */
+#define SEND_TASK_LATCHED (1 << 10) /* Send TASK_LATCHED at commit time */
 
 /* txn->commit_flags */
 enum txn_commit_at {
@@ -441,6 +459,7 @@ struct ghost_txn {
 	uint8_t unused;
 	int64_t gtid;
 	int64_t commit_time;	/* the time that the txn commit succeeded/failed */
+	uint64_t cpu_seqnum;
 	/*
 	 * Context-dependent fields.
 	 */
