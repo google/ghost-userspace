@@ -417,7 +417,7 @@ LocalEnclave::LocalEnclave(AgentConfig config)
 
   BuildCpuReps();
 
-  bool tick_on_request;
+  bool tick_on_request = false;
   switch (config_.tick_config_) {
     case CpuTickConfig::kNoTicks:
     case CpuTickConfig::kTickOnRequest:
