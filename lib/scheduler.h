@@ -136,7 +136,7 @@ class BasicDispatchScheduler : public Scheduler {
   // schedulers.
   BasicDispatchScheduler(Enclave* enclave, CpuList cpus,
                          std::shared_ptr<TaskAllocator<TaskType>> allocator)
-      : Scheduler(enclave, cpus), allocator_(std::move(allocator)) {}
+      : Scheduler(enclave, std::move(cpus)), allocator_(std::move(allocator)) {}
   ~BasicDispatchScheduler() override {}
 
   virtual void DispatchMessage(const Message& msg);
