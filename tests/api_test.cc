@@ -303,8 +303,8 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
           .target = target,
           .target_barrier = target_barrier,
           .agent_barrier = agent_barrier,
-          .commit_flags = COMMIT_AT_TXN_COMMIT,
-          .run_flags = ALLOW_TASK_ONCPU | ELIDE_PREEMPT,
+          .commit_flags = COMMIT_AT_TXN_COMMIT | ALLOW_TASK_ONCPU,
+          .run_flags = ELIDE_PREEMPT,
           .sync_group_owner = sync_group_owner,
           .allow_txn_target_on_cpu = true,
       });
@@ -616,7 +616,7 @@ class IdlingAgent : public Agent {
       for (const Cpu& remote_cpu : remote_cpus) {
         ASSERT_THAT(remote_cpu, Ne(cpu()));
 
-        int run_flags = ALLOW_TASK_ONCPU;
+        int run_flags = 0;
 
         // NEED_CPU_NOT_IDLE enabled on odd numbered cpus.
         if (remote_cpu.id() % 2) {
@@ -627,7 +627,7 @@ class IdlingAgent : public Agent {
         req->Open({
             .target = Gtid(GHOST_IDLE_GTID),
             .agent_barrier = agent_barrier,
-            .commit_flags = COMMIT_AT_TXN_COMMIT,
+            .commit_flags = COMMIT_AT_TXN_COMMIT | ALLOW_TASK_ONCPU,
             .run_flags = run_flags,
         });
       }

@@ -242,8 +242,7 @@ struct RunRequestOptions {
   StatusWord::BarrierToken agent_barrier = StatusWord::NullBarrierToken();
 
   // `commit_flags` is copied directly into txn->commit_flags and controls
-  // when a transaction is committed. The ghost uapi header defines the
-  // specific values that may be passed here in the `enum txn_commit_at`.
+  // how a transaction is committed.
   int commit_flags = 0;
 
   // `run_flags` is copied directly into txn->run_flags to control a variety
