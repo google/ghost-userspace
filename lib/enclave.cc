@@ -213,6 +213,17 @@ int LocalEnclave::GetEnclaveDirectory(int ctl_fd) {
 }
 
 // static
+void LocalEnclave::WriteEnclaveTunable(int dir_fd,
+                                       absl::string_view tunable_path,
+                                       absl::string_view tunable_value) {
+  int tunable_fd = openat(dir_fd, std::string(tunable_path).c_str(), O_RDWR);
+  CHECK_GE(tunable_fd, 0);
+  CHECK_EQ(write(tunable_fd, tunable_value.data(), tunable_value.length()),
+           tunable_value.length());
+  close(tunable_fd);
+}
+
+// static
 int LocalEnclave::GetCpuDataRegion(int dir_fd) {
   CHECK_GE(dir_fd, 0);
   return openat(dir_fd, "cpu_data", O_RDWR);

@@ -452,6 +452,8 @@ class LocalEnclave final : public Enclave {
 
   static int MakeNextEnclave();
   static int GetEnclaveDirectory(int ctl_fd);
+  static void WriteEnclaveTunable(int dir_fd, absl::string_view tunable_path,
+                                  absl::string_view tunable_value);
   static int GetCpuDataRegion(int dir_fd);
   // Waits on an enclave's agent_online until the value of the file was 'until'
   // (either 0 or 1) at some point in time.
