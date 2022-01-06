@@ -18,8 +18,8 @@
 // clang-format on
 
 #include "third_party/iovisor_bcc/bits.bpf.h"
-#include "third_party/bpf/schedrun_shared_bpf.h"
 #include "third_party/bpf/common.bpf.h"
+#include "third_party/bpf/schedrun.h"
 
 const volatile pid_t targ_tgid = 0;
 const volatile bool ghost_only = false;

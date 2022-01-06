@@ -21,6 +21,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/functional/bind_front.h"
+#include "third_party/bpf/edf.h"
 #include "lib/agent.h"
 #include "lib/scheduler.h"
 #include "schedulers/edf/edf_bpf.skel.h"
@@ -132,11 +133,6 @@ struct EdfTask : public Task {
   bool has_work = false;
   uint32_t wcid = std::numeric_limits<uint32_t>::max();
 };
-
-// Keep this struct in sync with edf.bpf.c
-struct edf_bpf_per_cpu_data {
-  uint8_t example_bool;
-} __attribute__((aligned(64)));
 
 // Config for a global agent scheduler.
 class GlobalConfig : public AgentConfig {

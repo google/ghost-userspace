@@ -11,11 +11,19 @@ package(default_visibility = ["//:__pkg__"])
 # Google.
 licenses(["restricted"])
 
+exports_files([
+    "common.bpf.h",
+    "edf.h",
+    "ghost.h",
+    "schedlat.h",
+    "schedrun.h",
+])
+
 bpf_program(
     name = "ghost_bpf",
     src = "ghost.bpf.c",
     hdrs = [
-        "ghost_shared_bpf.h",
+        "ghost.h",
         "//:kernel/vmlinux_ghost_5_11.h",
     ],
     bpf_object = "ghost_bpf.o",
@@ -26,6 +34,7 @@ bpf_program(
     src = "edf.bpf.c",
     hdrs = [
         "common.bpf.h",
+        "edf.h",
         "//:kernel/vmlinux_ghost_5_11.h",
     ],
     bpf_object = "edf_bpf.o",
@@ -55,7 +64,7 @@ bpf_program(
     src = "schedlat.bpf.c",
     hdrs = [
         "common.bpf.h",
-        "schedlat_shared_bpf.h",
+        "schedlat.h",
         "//:kernel/vmlinux_ghost_5_11.h",
         "//third_party:iovisor_bcc/bits.bpf.h",
     ],
@@ -67,7 +76,7 @@ bpf_program(
     src = "schedrun.bpf.c",
     hdrs = [
         "common.bpf.h",
-        "schedrun_shared_bpf.h",
+        "schedrun.h",
         "//:kernel/vmlinux_ghost_5_11.h",
         "//third_party:iovisor_bcc/bits.bpf.h",
     ],

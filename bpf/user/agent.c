@@ -26,8 +26,8 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
+#include "third_party/bpf/ghost.h"
 #include "bpf/user/ghost_bpf.skel.h"
-#include "bpf/user/ghost_shared.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
 
 // The ghost_bpf object and its cpu_data mmap is our set of

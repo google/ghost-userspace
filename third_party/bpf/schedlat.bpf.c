@@ -18,8 +18,8 @@
 // clang-format on
 
 #include "third_party/iovisor_bcc/bits.bpf.h"
-#include "third_party/bpf/schedlat_shared_bpf.h"
 #include "third_party/bpf/common.bpf.h"
+#include "third_party/bpf/schedlat.h"
 
 /*
  * vmlinux.h does not include #defines.  We can't include the kernel headers,

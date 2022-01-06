@@ -16,7 +16,7 @@
 #include "libbpf/bpf_tracing.h"
 // clang-format on
 
-#include "third_party/bpf/ghost_shared_bpf.h"
+#include "third_party/bpf/ghost.h"
 
 /* max_entries is patched at runtime to num_possible_cpus */
 struct {

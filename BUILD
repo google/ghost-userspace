@@ -43,13 +43,13 @@ cc_library(
     hdrs = [
         "bpf/user/agent.h",
         "bpf/user/ghost_bpf.skel.h",
-        "bpf/user/ghost_shared.h",
         "lib/agent.h",
         "lib/channel.h",
         "lib/enclave.h",
         "lib/scheduler.h",
         "lib/topology.h",
         "//third_party:iovisor_bcc/trace_helpers.h",
+        "//third_party/bpf:ghost.h",
     ],
     copts = compiler_flags,
     linkopts = bpf_linkopts + ["-lnuma"],
@@ -288,6 +288,7 @@ cc_library(
         "schedulers/edf/edf_bpf.skel.h",
         "schedulers/edf/edf_scheduler.h",
         "schedulers/edf/orchestrator.h",
+        "//third_party/bpf:edf.h",
     ],
     copts = compiler_flags,
     deps = [
@@ -482,8 +483,8 @@ cc_binary(
     srcs = [
         "bpf/user/schedlat.c",
         "bpf/user/schedlat_bpf.skel.h",
-        "bpf/user/schedlat_shared.h",
         "//third_party:iovisor_bcc/trace_helpers.h",
+        "//third_party/bpf:schedlat.h",
     ],
     copts = compiler_flags,
     linkopts = bpf_linkopts,
@@ -503,8 +504,8 @@ cc_binary(
     srcs = [
         "bpf/user/schedrun.c",
         "bpf/user/schedrun_bpf.skel.h",
-        "bpf/user/schedrun_shared.h",
         "//third_party:iovisor_bcc/trace_helpers.h",
+        "//third_party/bpf:schedrun.h",
     ],
     copts = compiler_flags,
     linkopts = bpf_linkopts,

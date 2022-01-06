@@ -22,8 +22,8 @@
 #include <sys/param.h>
 #include <unistd.h>
 
+#include "third_party/bpf/schedrun.h"
 #include "bpf/user/schedrun_bpf.skel.h"
-#include "bpf/user/schedrun_shared.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
 #include "libbpf/bpf.h"
 #include "libbpf/libbpf.h"

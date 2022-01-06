@@ -17,11 +17,7 @@
 // clang-format on
 
 #include "third_party/bpf/common.bpf.h"
-
-// Keep this struct in sync with edf_scheduler.h
-struct edf_bpf_per_cpu_data {
-	__u8 example_bool;
-} __attribute__((aligned(64)));
+#include "third_party/bpf/edf.h"
 
 /* max_entries is patched at runtime to num_possible_cpus */
 struct {

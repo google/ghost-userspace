@@ -22,8 +22,8 @@
 #include <sys/param.h>
 #include <unistd.h>
 
+#include "third_party/bpf/schedlat.h"
 #include "bpf/user/schedlat_bpf.skel.h"
-#include "bpf/user/schedlat_shared.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
 #include "libbpf/bpf.h"
 #include "libbpf/libbpf.h"
