@@ -1,6 +1,17 @@
 workspace(name = "com_google_ghost")
 
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# We clone the ghOSt Linux kernel so that we can use libbpf and bpftool when
+# compiling our eBPF programs, eBPF skeleton headers, and eBPF userspace
+# programs.
+new_git_repository(
+    name = "linux",
+    remote = "https://github.com/google/ghost-kernel",
+    branch = "ghost-v5.11",
+    build_file = "//third_party:linux.BUILD",
+)
 
 # Abseil depends on this.
 http_archive(
@@ -16,6 +27,7 @@ http_archive(
     sha256 = "06fb31803fe3d2552f988f3c2fee430b10d566bc77dd7688897eca5388107883",
     strip_prefix = "rules_foreign_cc-99ea7e75c2a48cc233ff5e7682c1a31516faa84b",
 )
+
 load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
 rules_foreign_cc_dependencies()
 
@@ -76,19 +88,6 @@ http_archive(
     url = "https://github.com/bazelbuild/rules_python/archive/6f37aa9966f53e063c41b7509a386d53a9f156c3.tar.gz",
     sha256 = "ecd139e703b41ae2ea115f4f4229b4ea2d70bab908fb75a3b49640f976213009",
     strip_prefix = "rules_python-6f37aa9966f53e063c41b7509a386d53a9f156c3",
-)
-
-# We clone Linux so that we can use libbpf when compiling our eBPF programs.
-# Ideally we would instead clone our kernel-ghost repository, but we cannot do
-# that until the repository is publicly available.
-#
-# The archive we are downloading is for the first commit in Linux 5.11.
-http_archive(
-    name = "linux",
-    url = "https://github.com/torvalds/linux/archive/f40ddce88593482919761f74910f42f4b84c004b.tar.gz",
-    sha256 = "6e96995653ba8433970a72282de69a78262f5d8c3fff99083c59a6c877427cba",
-    strip_prefix = "linux-f40ddce88593482919761f74910f42f4b84c004b",
-    build_file = "//third_party:linux.BUILD",
 )
 
 load("@rules_python//python:pip.bzl", "pip_install")
