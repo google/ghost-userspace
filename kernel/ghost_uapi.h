@@ -32,7 +32,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	44
+#define GHOST_VERSION	45
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -383,6 +383,7 @@ enum ghost_base_ops {
  * latched task while the agent is runnable.
  */
 #define DEFER_LATCHED_PREEMPTION_BY_AGENT (1 << 11)
+#define DO_NOT_PREEMPT	  (1 << 12) /* Do not preempt running tasks */
 
 /* txn->commit_flags */
 #define COMMIT_AT_SCHEDULE	(1 << 0) /* commit when oncpu task schedules */
