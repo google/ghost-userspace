@@ -32,7 +32,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	45
+#define GHOST_VERSION	46
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -126,6 +126,7 @@ struct ghost_status_word {
 
 #define GHOST_SW_F_INUSE	(1U << 0)    /* status_word in use */
 #define GHOST_SW_F_CANFREE	(1U << 1)    /* status_word can be freed */
+#define GHOST_SW_F_ALLOCATED	(1U << 2)    /* status_word is allocated */
 
 /* agent-specific status_word.flags */
 #define GHOST_SW_CPU_AVAIL	(1U << 8)    /* CPU available hint */
