@@ -210,6 +210,30 @@ class BasicDispatchScheduler : public Scheduler {
             allocator()->FreeTask(task);
             return;
           case ESTALE:
+            // Task departed and came back into ghost.
+            //
+            // The ESTALE is due to a mismatch between the barrier in the
+            // task's _live_ status_word compared to the barrier we provided
+            // from a status_word associated with an earlier incarnation.
+            //
+            // Reclaim the orphaned status_word (it is not reachable from
+            // the task associated with sw_gtid).
+            //
+            // TODO: harden this further by never resetting the sw->barrier
+            // across incarnations (i.e. msg->seqnum increases monotonically
+            // even if the task departs and comes back into ghost). Without
+            // this it is possible for the association to "succeed" and the
+            // status_word to leak.
+            //
+            // TODO: this is relevant only if a task has the same gtid across
+            // incarnations (this is the case currently). However if we adopt
+            // an approach where each incarnation allocates a new gtid then we
+            // can drop this special case.
+            if (sw_flags & GHOST_SW_F_CANFREE) {
+              CHECK_EQ(Ghost::FreeStatusWordInfo(&swi), 0);
+              return;
+            }
+
             // We shouldn't have *too many* state changes to the task while we
             // are discovering.  Tasks are not allowed to run while we are in
             // discovery.  This is the "system must be quiescent" requirement.
