@@ -158,7 +158,7 @@ class Ghost {
 
   static int AssociateQueue(const int queue_fd, const ghost_type type,
                             const uint64_t arg, const int barrier,
-                            const int flags, int* status = nullptr) {
+                            const int flags, int* status) {
     ghost_msg_src msg_src = {
         .type = type,
         .arg = arg,

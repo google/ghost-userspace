@@ -53,7 +53,8 @@ Channel::~Channel() {
 }
 
 bool Channel::AssociateTask(Gtid gtid, int barrier, int* status) const {
-  return Ghost::AssociateQueue(fd_, GHOST_TASK, gtid.id(), barrier, 0) == 0;
+  return Ghost::AssociateQueue(
+      fd_, GHOST_TASK, gtid.id(), barrier, 0, status) == 0;
 }
 
 void Channel::Consume(const Message& msg) {
