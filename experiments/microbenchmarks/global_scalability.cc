@@ -18,6 +18,8 @@
 #include "schedulers/shinjuku/shinjuku_scheduler.h"
 #include "schedulers/sol/sol_scheduler.h"
 
+ABSL_FLAG(std::string, o, "/dev/stdout", "output file");
+
 namespace ghost {
 
 enum class WorkClass { kWcIdle, kWcOneShot, kWcRepeatable, kWcNum };
@@ -60,13 +62,16 @@ void SetupWorkClasses(PrioTable* table) {
 
 // This will print the result to stdout.  Due to the layers of forking, that's
 // simpler than trying to pass the result back.
-static void RunThreads(int nr_task_cpus, int nr_threads, int nr_loops) {
+static void RunThreads(FILE* outfile, int nr_task_cpus, int nr_threads,
+                       int nr_loops) {
   if (!nr_loops) {
-    printf("%d,%f,%d\n", nr_task_cpus, 0.0, 0);
+    fprintf(outfile, "%d,%f,%d\n", nr_task_cpus, 0.0, 0);
     return;
   }
   // It's simpler to fork a process to run each set of threads so we can have
-  // a fresh Priotable.
+  // a fresh Priotable.  Careful with the outfile.  Flush it before forking and
+  // again before exiting the child.
+  fflush(outfile);
   ForkedProcess fp([&]() {
     std::unique_ptr<PrioTable> table = absl::make_unique<PrioTable>(
         nr_threads, static_cast<int>(WorkClass::kWcNum),
@@ -103,37 +108,38 @@ static void RunThreads(int nr_task_cpus, int nr_threads, int nr_loops) {
 
     int64_t total_ns = ToInt64Nanoseconds(finish - start);
     double tput = (1.0 * nr_threads * nr_loops / total_ns) * 1000000000;
-    printf("%d,%f,%d\n", nr_task_cpus, tput, nr_loops);
+    fprintf(outfile, "%d,%f,%d\n", nr_task_cpus, tput, nr_loops);
+    fflush(outfile);
 
     return 0;
   });
   fp.WaitForChildExit();
 }
 
-static void RunEdf(GlobalConfig cfg, int nr_task_cpus, int nr_threads,
-                   int nr_loops) {
+static void RunEdf(FILE* outfile, GlobalConfig cfg, int nr_task_cpus,
+                   int nr_threads, int nr_loops) {
   auto uap = new AgentProcess<GlobalEdfAgent<LocalEnclave>, GlobalConfig>(cfg);
 
-  RunThreads(nr_task_cpus, nr_threads, nr_loops);
+  RunThreads(outfile, nr_task_cpus, nr_threads, nr_loops);
 
   delete uap;
 }
 
-static void RunShinjuku(ShinjukuConfig cfg, int nr_task_cpus, int nr_threads,
-                        int nr_loops) {
+static void RunShinjuku(FILE* outfile, ShinjukuConfig cfg, int nr_task_cpus,
+                        int nr_threads, int nr_loops) {
   auto uap =
       new AgentProcess<FullShinjukuAgent<LocalEnclave>, ShinjukuConfig>(cfg);
 
-  RunThreads(nr_task_cpus, nr_threads, nr_loops);
+  RunThreads(outfile, nr_task_cpus, nr_threads, nr_loops);
 
   delete uap;
 }
 
-static void RunSol(SolConfig cfg, int nr_task_cpus, int nr_threads,
-                   int nr_loops) {
+static void RunSol(FILE* outfile, SolConfig cfg, int nr_task_cpus,
+                   int nr_threads, int nr_loops) {
   auto uap = new AgentProcess<FullSolAgent<LocalEnclave>, SolConfig>(cfg);
 
-  RunThreads(nr_task_cpus, nr_threads, nr_loops);
+  RunThreads(outfile, nr_task_cpus, nr_threads, nr_loops);
 
   delete uap;
 }
@@ -229,12 +235,16 @@ enum class Sched {
   kSol,
 };
 static Sched sched_type;
-static const char usage[] = "edf|shinjuku|sol";
+static const char usage[] =
+    "edf|shinjuku|sol"
+    ;
 
 int main(int argc, char* argv[]) {
-  absl::SetProgramUsageMessage(usage);
-  std::vector<char*> pos_args = absl::ParseCommandLine(argc, argv);
+ absl::SetProgramUsageMessage(usage);
+ std::vector<char*> pos_args = absl::ParseCommandLine(argc, argv);
 
+  FILE* outfile = fopen(absl::GetFlag(FLAGS_o).c_str(), "w");
+  CHECK_NE(outfile, nullptr);
   ghost::Topology* t = ghost::MachineTopology();
 
   int nr_threads_per_cpu = absl::GetFlag(FLAGS_threads_per_cpu);
@@ -266,14 +276,15 @@ int main(int argc, char* argv[]) {
     exit(1);
   }
 
-  printf("testing sched %s\n", pos_args[1]);
-  printf("global agent on cpu %d\n", global_cpu);
-  printf("testing up to %d worker cpus\n", num_cpus - (skip_cpu0 ? 2 : 1));
-  printf("nr_loops total: %d\n", total_loops);
-  printf("nr_threads per cpu: %d\n", nr_threads_per_cpu);
-  printf("%sskipping cpu 0\n", skip_cpu0 ? "" : "not ");
-  printf("\n");
-  printf("nr_task_cpus,scheds_per_sec,loops_per_thread\n");
+  fprintf(outfile, "testing sched %s\n", pos_args[1]);
+  fprintf(outfile, "global agent on cpu %d\n", global_cpu);
+  fprintf(outfile, "testing up to %d worker cpus\n",
+          num_cpus - (skip_cpu0 ? 2 : 1));
+  fprintf(outfile, "nr_loops total: %d\n", total_loops);
+  fprintf(outfile, "nr_threads per cpu: %d\n", nr_threads_per_cpu);
+  fprintf(outfile, "%sskipping cpu 0\n", skip_cpu0 ? "" : "not ");
+  fprintf(outfile, "\n");
+  fprintf(outfile, "nr_task_cpus,scheds_per_sec,loops_per_thread\n");
 
   // num_cpus includes cpu0, which we might be skipping.  We're going to run the
   // test for all possible numbers of cpus for which the test can run, i.e. from
@@ -294,21 +305,22 @@ int main(int argc, char* argv[]) {
     switch (sched_type) {
       case Sched::kEdf: {
         ghost::GlobalConfig cfg(t, cpus, t->cpu(global_cpu));
-        ghost::RunEdf(cfg, nr_task_cpus, nr_threads, nr_loops);
+        ghost::RunEdf(outfile, cfg, nr_task_cpus, nr_threads, nr_loops);
         break;
       }
       case Sched::kShinjuku: {
         ghost::ShinjukuConfig cfg(t, cpus, t->cpu(global_cpu));
         cfg.preemption_time_slice_ = absl::Microseconds(50),
-        ghost::RunShinjuku(cfg, nr_task_cpus, nr_threads, nr_loops);
+        ghost::RunShinjuku(outfile, cfg, nr_task_cpus, nr_threads, nr_loops);
         break;
       }
       case Sched::kSol: {
         ghost::SolConfig cfg(t, cpus, t->cpu(global_cpu));
-        ghost::RunSol(cfg, nr_task_cpus, nr_threads, nr_loops);
+        ghost::RunSol(outfile, cfg, nr_task_cpus, nr_threads, nr_loops);
         break;
       }
     }
   }
+  fclose(outfile);
   return 0;
 }
