@@ -112,6 +112,13 @@ int main(int argc, char **argv)
 	print_time_ns = get_ktime_ns();
 	print_hist(bpf_map__fd(obj->maps.hist));
 
+	printf("Total latches: %lu, bpf_latches %lu (%f), idle_to_bpf_latches %lu (%f)\n\n",
+	       obj->bss->nr_latches,
+	       obj->bss->nr_bpf_latches,
+	       100.0 * obj->bss->nr_bpf_latches / obj->bss->nr_latches,
+	       obj->bss->nr_idle_to_bpf_latches,
+	       100.0 * obj->bss->nr_idle_to_bpf_latches / obj->bss->nr_latches);
+
 cleanup:
 	schedghostidle_bpf__destroy(obj);
 

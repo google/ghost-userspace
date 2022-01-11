@@ -125,15 +125,19 @@ static void print_class_times(int fd)
 	printf("\n");
 
 	float total_sec = 1.0 * (print_time_ns - start_time_ns) / NSEC_PER_SEC;
+	float total_cpu_sec = nr_cpus * total_sec;
 
 	printf("Total: %u cpus over %f seconds: %f cpu-sec\n", nr_cpus,
-	       total_sec, nr_cpus * total_sec);
+	       total_sec, total_cpu_sec);
 	printf("------------------------------------------------\n");
 	for (int i = 0; i < MAX_SCHED_CLASS; i++) {
 		if (sched_class[i].total) {
-			printf("%-10s (%c): %20f cpu-seconds\n",
+			float cpu_sec = 1.0 * sched_class[i].total /
+				NSEC_PER_SEC;
+
+			printf("%-10s (%c): %20f cpu-seconds (%f)\n",
 			       sched_class[i].name, sched_class[i].symbol,
-			       1.0 * sched_class[i].total / NSEC_PER_SEC);
+			       cpu_sec, cpu_sec / total_cpu_sec);
 		}
 	}
 	printf("\n");

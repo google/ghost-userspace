@@ -23,6 +23,10 @@
 /* Keep this in sync with schedghostidle.c. */
 #define NR_SLOTS 25
 
+uint64_t nr_latches;
+uint64_t nr_bpf_latches;
+uint64_t nr_idle_to_bpf_latches;
+
 /*
  * This array maps is racy, but it's fine.  Both the latcher and sched_switch
  * tracepoints hold the RQ lock.  We want to access a cpu's data from another
@@ -94,18 +98,31 @@ static void update_hist(u64 nsec)
 	*count += 1;
 }
 
+#define SEND_TASK_LATCHED (1 << 10)
+
 SEC("tp_btf/sched_ghost_latched")
 int BPF_PROG(sched_ghost_latched, struct task_struct *old,
-	     struct task_struct *new)
+	     struct task_struct *new, int run_flags)
 {
 	u32 cpu = task_cpu(new);
 	struct cpu_info *ci = bpf_map_lookup_elem(&cpu_info, &cpu);
 
-	if (!ci)
-		return 0;
+	__sync_fetch_and_add(&nr_latches, 1);
+	/* BPF-PNT is the only one who uses SEND_TASK_LATCHED. */
+	if (run_flags & SEND_TASK_LATCHED)
+		__sync_fetch_and_add(&nr_bpf_latches, 1);
 
-	if (!ci->is_idle)
+	if (!ci || !ci->is_idle) {
+		/*
+		 * When BPF-PNT latches a task, the cpu might not go idle.
+		 * However, we'd like to measure those events.
+		 */
+		if (run_flags & SEND_TASK_LATCHED)
+			update_hist(0);
 		return 0;
+	}
+	__sync_fetch_and_add(&nr_idle_to_bpf_latches, 1);
+
 	update_hist(bpf_ktime_get_ns() - ci->idle_start);
 	/*
 	 * Technically, the cpu is still idle, and our latch may get aborted or
