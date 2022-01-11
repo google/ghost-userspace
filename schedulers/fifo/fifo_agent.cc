@@ -24,6 +24,7 @@
 
 ABSL_FLAG(int32_t, firstcpu, 1, "First cpu to start scheduling from.");
 ABSL_FLAG(int32_t, ncpus, 5, "Schedule on <ncpus> starting from <firstcpu>");
+ABSL_FLAG(std::string, enclave, "", "Connect to preexisting enclave directory");
 
 namespace ghost {
 
@@ -46,6 +47,12 @@ static void ParseAgentConfig(AgentConfig* config) {
   Topology* topology = MachineTopology();
   config->topology_ = topology;
   config->cpus_ = topology->ToCpuList(std::move(all_cpus_v));
+  std::string enclave = absl::GetFlag(FLAGS_enclave);
+  if (!enclave.empty()) {
+    int fd = open(enclave.c_str(), O_PATH);
+    CHECK_GE(fd, 0);
+    config->enclave_fd_ = fd;
+  }
 }
 
 }  // namespace ghost
