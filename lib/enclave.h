@@ -155,6 +155,7 @@ class Enclave {
   virtual void InsertBpfPrograms() {}
   // LocalEnclaves have a ctl fd, which various agent functions use.
   virtual int GetCtlFd() { return -1; }
+  virtual void SetRunnableTimeout(absl::Duration d) {}
 
   // REQUIRES: Must be called by an implementation when all Schedulers and
   // Agents have been constructed.
@@ -434,6 +435,11 @@ class LocalEnclave final : public Enclave {
   void DetachAgent(Agent* agent) final;
 
   int GetNrTasks() { return LocalEnclave::GetNrTasks(dir_fd_); }
+
+  void SetRunnableTimeout(absl::Duration d) final {
+    WriteEnclaveTunable(dir_fd_, "runnable_timeout",
+                        std::to_string(ToInt64Milliseconds(d)));
+  }
 
   // Runs l on every non-agent, ghost-task status word.
   void ForEachTaskStatusWord(
