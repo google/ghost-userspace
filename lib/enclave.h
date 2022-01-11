@@ -60,7 +60,7 @@ class AgentConfig {
 
   explicit AgentConfig(Topology* topology = nullptr,
                        CpuList cpus = MachineTopology()->EmptyCpuList())
-      : topology_(topology), cpus_(cpus) {}
+      : topology_(topology), cpus_(std::move(cpus)) {}
   virtual ~AgentConfig() {}
 };
 

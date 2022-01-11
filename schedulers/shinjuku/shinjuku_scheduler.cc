@@ -41,15 +41,15 @@ void ShinjukuTask::UpdateRuntime() {
 }
 
 ShinjukuScheduler::ShinjukuScheduler(
-    Enclave* enclave, CpuList cpus,
+    Enclave* enclave, CpuList cpulist,
     std::shared_ptr<TaskAllocator<ShinjukuTask>> allocator, int32_t global_cpu,
     absl::Duration preemption_time_slice)
-    : BasicDispatchScheduler(enclave, std::move(cpus), std::move(allocator)),
+    : BasicDispatchScheduler(enclave, std::move(cpulist), std::move(allocator)),
       global_cpu_(global_cpu),
       global_channel_(GHOST_MAX_QUEUE_ELEMS, /*node=*/0),
       preemption_time_slice_(preemption_time_slice) {
-  if (!cpus.IsSet(global_cpu_)) {
-    Cpu c = cpus.Front();
+  if (!cpus().IsSet(global_cpu_)) {
+    Cpu c = cpus().Front();
     CHECK(c.valid());
     global_cpu_ = c.id();
   }
@@ -854,12 +854,12 @@ void ShinjukuScheduler::PickNextGlobalCPU(
 }
 
 std::unique_ptr<ShinjukuScheduler> SingleThreadShinjukuScheduler(
-    Enclave* enclave, CpuList cpus, int32_t global_cpu,
+    Enclave* enclave, CpuList cpulist, int32_t global_cpu,
     absl::Duration preemption_time_slice) {
   auto allocator =
       std::make_shared<SingleThreadMallocTaskAllocator<ShinjukuTask>>();
   auto scheduler = absl::make_unique<ShinjukuScheduler>(
-      enclave, std::move(cpus), std::move(allocator), global_cpu,
+      enclave, std::move(cpulist), std::move(allocator), global_cpu,
       preemption_time_slice);
   return scheduler;
 }

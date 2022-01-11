@@ -86,7 +86,7 @@ struct SolTask : public Task {
 
 class SolScheduler : public BasicDispatchScheduler<SolTask> {
  public:
-  explicit SolScheduler(Enclave* enclave, CpuList cpus,
+  explicit SolScheduler(Enclave* enclave, CpuList cpulist,
                         std::shared_ptr<TaskAllocator<SolTask>> allocator,
                         int32_t global_cpu);
   ~SolScheduler() final;
@@ -220,7 +220,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 
 // Initializes the task allocator and the Sol scheduler.
 std::unique_ptr<SolScheduler> SingleThreadSolScheduler(Enclave* enclave,
-                                                       CpuList cpus,
+                                                       CpuList cpulist,
                                                        int32_t global_cpu);
 
 // Operates as the Global or Satellite agent depending on input from the
@@ -240,8 +240,8 @@ class SolAgent : public Agent {
 class SolConfig : public AgentConfig {
  public:
   SolConfig() {}
-  SolConfig(Topology* topology, CpuList cpus, Cpu global_cpu)
-      : AgentConfig(topology, cpus), global_cpu_(global_cpu) {}
+  SolConfig(Topology* topology, CpuList cpulist, Cpu global_cpu)
+      : AgentConfig(topology, std::move(cpulist)), global_cpu_(global_cpu) {}
 
   Cpu global_cpu_{Cpu::UninitializedType::kUninitialized};
 };

@@ -156,7 +156,7 @@ struct ShinjukuTask : public Task {
 class ShinjukuScheduler : public BasicDispatchScheduler<ShinjukuTask> {
  public:
   explicit ShinjukuScheduler(
-      Enclave* enclave, CpuList cpus,
+      Enclave* enclave, CpuList cpulist,
       std::shared_ptr<TaskAllocator<ShinjukuTask>> allocator,
       int32_t global_cpu, absl::Duration preemption_time_slice);
   ~ShinjukuScheduler() final;
@@ -319,7 +319,7 @@ class ShinjukuScheduler : public BasicDispatchScheduler<ShinjukuTask> {
 
 // Initializes the task allocator and the Shinjuku scheduler.
 std::unique_ptr<ShinjukuScheduler> SingleThreadShinjukuScheduler(
-    Enclave* enclave, CpuList cpus, int32_t global_cpu,
+    Enclave* enclave, CpuList cpulist, int32_t global_cpu,
     absl::Duration preemption_time_slice);
 
 // Operates as the Global or Satellite agent depending on input from the
@@ -339,8 +339,8 @@ class ShinjukuAgent : public Agent {
 class ShinjukuConfig : public AgentConfig {
  public:
   ShinjukuConfig() {}
-  ShinjukuConfig(Topology* topology, CpuList cpus, Cpu global_cpu)
-      : AgentConfig(topology, cpus), global_cpu_(global_cpu) {}
+  ShinjukuConfig(Topology* topology, CpuList cpulist, Cpu global_cpu)
+      : AgentConfig(topology, std::move(cpulist)), global_cpu_(global_cpu) {}
 
   Cpu global_cpu_{Cpu::UninitializedType::kUninitialized};
   absl::Duration preemption_time_slice_;

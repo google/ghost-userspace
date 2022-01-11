@@ -144,7 +144,7 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
 };
 
 std::unique_ptr<FifoScheduler> MultiThreadedFifoScheduler(Enclave* enclave,
-                                                          CpuList cpus);
+                                                          CpuList cpulist);
 class FifoAgent : public Agent {
  public:
   FifoAgent(Enclave* enclave, Cpu cpu, FifoScheduler* scheduler)

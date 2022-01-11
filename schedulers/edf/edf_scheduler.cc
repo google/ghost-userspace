@@ -63,14 +63,14 @@ void EdfTask::CalculateSchedDeadline() {
                absl::FormatTime(sched_deadline, absl::UTCTimeZone()).c_str());
 }
 
-EdfScheduler::EdfScheduler(Enclave* enclave, CpuList cpus,
+EdfScheduler::EdfScheduler(Enclave* enclave, CpuList cpulist,
                            std::shared_ptr<TaskAllocator<EdfTask>> allocator,
                            const GlobalConfig& config)
-    : BasicDispatchScheduler(enclave, std::move(cpus), std::move(allocator)),
+    : BasicDispatchScheduler(enclave, std::move(cpulist), std::move(allocator)),
       global_cpu_(config.global_cpu_.id()),
       global_channel_(GHOST_MAX_QUEUE_ELEMS, /*node=*/0) {
-  if (!cpus.IsSet(global_cpu_)) {
-    Cpu c = cpus.Front();
+  if (!cpus().IsSet(global_cpu_)) {
+    Cpu c = cpus().Front();
     CHECK(c.valid());
     global_cpu_ = c.id();
   }
@@ -800,11 +800,11 @@ void EdfScheduler::PickNextGlobalCPU() {
 }
 
 std::unique_ptr<EdfScheduler> SingleThreadEdfScheduler(Enclave* enclave,
-                                                       CpuList cpus,
+                                                       CpuList cpulist,
                                                        GlobalConfig& config) {
   auto allocator = std::make_shared<SingleThreadMallocTaskAllocator<EdfTask>>();
   auto scheduler = absl::make_unique<EdfScheduler>(
-      enclave, std::move(cpus), std::move(allocator), config);
+      enclave, std::move(cpulist), std::move(allocator), config);
   return scheduler;
 }
 

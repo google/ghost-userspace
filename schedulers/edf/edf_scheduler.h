@@ -143,8 +143,8 @@ class GlobalConfig : public AgentConfig {
     // controlled by edf_ticks_.
     tick_config_ = CpuTickConfig::kAllTicks;
   }
-  GlobalConfig(Topology* topology, const CpuList& cpus, const Cpu& global_cpu)
-      : AgentConfig(topology, cpus), global_cpu_(global_cpu) {
+  GlobalConfig(Topology* topology, CpuList cpus, const Cpu& global_cpu)
+      : AgentConfig(topology, std::move(cpus)), global_cpu_(global_cpu) {
     tick_config_ = CpuTickConfig::kAllTicks;
   }
 
@@ -154,7 +154,7 @@ class GlobalConfig : public AgentConfig {
 
 class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
  public:
-  explicit EdfScheduler(Enclave* enclave, CpuList cpus,
+  explicit EdfScheduler(Enclave* enclave, CpuList cpulist,
                         std::shared_ptr<TaskAllocator<EdfTask>> allocator,
                         const GlobalConfig& config);
   ~EdfScheduler() final;
@@ -243,7 +243,7 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
 };
 
 std::unique_ptr<EdfScheduler> SingleThreadEdfScheduler(Enclave* enclave,
-                                                       CpuList cpus,
+                                                       CpuList cpulist,
                                                        GlobalConfig& config);
 
 // Operates as the Global or Satellite agent depending on input from the

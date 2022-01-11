@@ -22,14 +22,14 @@ void SolScheduler::CpuNotIdle(const Message& msg) { CHECK(0); }
 
 void SolScheduler::CpuTimerExpired(const Message& msg) { CHECK(0); }
 
-SolScheduler::SolScheduler(Enclave* enclave, CpuList cpus,
+SolScheduler::SolScheduler(Enclave* enclave, CpuList cpulist,
                            std::shared_ptr<TaskAllocator<SolTask>> allocator,
                            int32_t global_cpu)
-    : BasicDispatchScheduler(enclave, std::move(cpus), std::move(allocator)),
+    : BasicDispatchScheduler(enclave, std::move(cpulist), std::move(allocator)),
       global_cpu_(global_cpu),
       global_channel_(GHOST_MAX_QUEUE_ELEMS, /*node=*/0) {
-  if (!cpus.IsSet(global_cpu_)) {
-    Cpu c = cpus.Front();
+  if (!cpus().IsSet(global_cpu_)) {
+    Cpu c = cpus().Front();
     CHECK(c.valid());
     global_cpu_ = c.id();
   }

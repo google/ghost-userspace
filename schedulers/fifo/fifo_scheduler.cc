@@ -365,9 +365,9 @@ bool FifoRq::Erase(const FifoTask* task) {
 }
 
 std::unique_ptr<FifoScheduler> MultiThreadedFifoScheduler(Enclave* enclave,
-                                                          CpuList cpus) {
+                                                          CpuList cpulist) {
   auto allocator = std::make_shared<ThreadSafeMallocTaskAllocator<FifoTask>>();
-  auto scheduler = absl::make_unique<FifoScheduler>(enclave, std::move(cpus),
+  auto scheduler = absl::make_unique<FifoScheduler>(enclave, std::move(cpulist),
                                                     std::move(allocator));
   return scheduler;
 }
