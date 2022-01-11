@@ -32,7 +32,8 @@
         do { perror(msg); exit(-1); } while (0)
 
 #define SCHED_GHOST 18
-#define MAX_SCHED_CLASS (SCHED_GHOST + 1)
+#define SCHED_AGENT 19  /* Not a real sched class */
+#define MAX_SCHED_CLASS (SCHED_AGENT + 1)
 
 static struct sched_class {
 	char *name;
@@ -58,6 +59,7 @@ static struct sched_class {
 	[16] = {"SCH_16",	'X'},
 	[17] = {"SCH_17",	'Y'},
 	[18] = {"GHOST",	'g'},
+	[19] = {"AGENT",	'a'},
 };
 
 static uint64_t start_time_ns;

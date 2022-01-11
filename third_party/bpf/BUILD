@@ -44,6 +44,7 @@ bpf_program(
     name = "schedclasstop_bpf",
     src = "schedclasstop.bpf.c",
     hdrs = [
+        "common.bpf.h",
         "//:kernel/vmlinux_ghost_5_11.h",
     ],
     bpf_object = "schedclasstop_bpf.o",

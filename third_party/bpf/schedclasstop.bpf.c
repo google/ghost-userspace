@@ -17,8 +17,11 @@
 #include "libbpf/bpf_tracing.h"
 // clang-format on
 
+#include "third_party/bpf/common.bpf.h"
+
 #define SCHED_GHOST 18
-#define MAX_SCHED_CLASS (SCHED_GHOST + 1)
+#define SCHED_AGENT 19  /* Not a real sched class */
+#define MAX_SCHED_CLASS (SCHED_AGENT + 1)
 
 /* Using this map as a per-cpu u64 */
 struct {
@@ -47,6 +50,13 @@ static int task_sched_policy(struct task_struct *p)
 	 */
 	if (flags & PF_IDLE)
 		return 4;
+	if (task_has_ghost_policy(p)) {
+		if (is_agent(p))
+			return SCHED_AGENT;
+		else
+			return SCHED_GHOST;
+
+	}
 	return BPF_CORE_READ(p, policy);
 }
 
