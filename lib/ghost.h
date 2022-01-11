@@ -325,11 +325,6 @@ class StatusWord {
 
   bool empty() { return sw_ == nullptr; }
 
-  // This wants generalization once we support multi-regions, etc.  Currently we
-  // just hide the underlying table for simplicity.
-  // TODO: return empty StatusWord if gtid not found.
-  static StatusWord Get(Gtid gtid);
-
   // Returns a 'Null' barrier token, for call-sites where it is not required.
   static BarrierToken NullBarrierToken() { return 0; }
 
@@ -363,9 +358,6 @@ class StatusWord {
  private:
   struct AgentSW {};
   explicit StatusWord(AgentSW);
-
-  struct TaskSW {};
-  StatusWord(TaskSW, Gtid gtid);
 
   Gtid owner_;  // Debug only, remove at some point.
   struct ghost_sw_info sw_info_;

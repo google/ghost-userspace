@@ -104,12 +104,6 @@ StatusWord::StatusWord(AgentSW) {
   owner_ = Gtid::Current();
 }
 
-StatusWord::StatusWord(TaskSW, Gtid gtid) {
-  CHECK_ZERO(Ghost::GetStatusWordInfo(GHOST_TASK, gtid.id(), &sw_info_));
-  sw_ = status_word_from_info(&sw_info_);
-  owner_ = gtid;
-}
-
 StatusWord::StatusWord(Gtid gtid, struct ghost_sw_info sw_info) {
   sw_info_ = sw_info;
   sw_ = status_word_from_info(&sw_info_);
@@ -124,9 +118,6 @@ void StatusWord::Free() {
   sw_ = nullptr;
   owner_ = Gtid(0);
 }
-
-// static
-StatusWord StatusWord::Get(Gtid gtid) { return StatusWord(TaskSW{}, gtid); }
 
 // static
 bool Ghost::GhostIsMountedAt(const char* path) {
