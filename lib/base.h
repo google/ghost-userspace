@@ -84,6 +84,11 @@ static inline T READ_ONCE(const T& x) {
       std::memory_order_relaxed);
 }
 
+template <typename T>
+static inline void WRITE_ONCE(T& x, T val) {
+  reinterpret_cast<std::atomic<T>*>(&x)->store(val, std::memory_order_relaxed);
+}
+
 // You can pass the `-Wunused-result` flag to some compilers, which generates a
 // warning if you do not use the return value of some functions. There may be
 // functions whose return values we do want to ignore, so we can wrap each
