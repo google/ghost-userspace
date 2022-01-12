@@ -23,8 +23,8 @@
  * header's enum bpf_func_id (built from __BPF_FUNC_MAPPER).  The format is the
  * same as what bpf_doc.py would auto-generate.
  */
-static long (*bpf_ghost_wake_agent)(struct bpf_ghost_sched *ctx, __u32 cpu) = (void *) 204;
-static long (*bpf_ghost_run_gtid)(struct bpf_ghost_sched *ctx, __s64 gtid, __u32 task_barrier, __s32 run_flags) = (void *) 205;
+static long (*bpf_ghost_wake_agent)(__u32 cpu) = (void *) 204;
+static long (*bpf_ghost_run_gtid)(__s64 gtid, __u32 task_barrier, __s32 run_flags) = (void *) 205;
 
 
 #define MAX_PIDS 102400
