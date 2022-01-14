@@ -86,6 +86,8 @@ EdfScheduler::EdfScheduler(Enclave* enclave, CpuList cpulist,
                          BPF_PROG_TYPE_GHOST_SCHED, BPF_GHOST_SCHED_SKIP_TICK);
   bpf_program__set_types(bpf_obj_->progs.edf_pnt,
                          BPF_PROG_TYPE_GHOST_SCHED, BPF_GHOST_SCHED_PNT);
+  bpf_program__set_types(bpf_obj_->progs.edf_msg_send, BPF_PROG_TYPE_GHOST_MSG,
+                         BPF_GHOST_MSG_SEND);
 
   CHECK_EQ(edf_bpf__load(bpf_obj_), 0);
 
@@ -104,6 +106,8 @@ EdfScheduler::EdfScheduler(Enclave* enclave, CpuList cpulist,
       GHOST_ERROR("Must pick kAllTicks or kNoTicks");
   }
   CHECK_EQ(agent_bpf_register(bpf_obj_->progs.edf_pnt, BPF_GHOST_SCHED_PNT),
+           0);
+  CHECK_EQ(agent_bpf_register(bpf_obj_->progs.edf_msg_send, BPF_GHOST_MSG_SEND),
            0);
 
   bpf_data_ = static_cast<struct edf_bpf_per_cpu_data*>(

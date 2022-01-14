@@ -46,4 +46,40 @@ int edf_pnt(struct bpf_ghost_sched *ctx)
 	return 0;
 }
 
+/*
+ * You have to play games to get the compiler to not modify the context pointer
+ * (msg).  You can load X bytes off a ctx, but if you add to ctx, then load,
+ * you'll get the dreaded: "dereference of modified ctx ptr" error.
+ *
+ * You can also sprinkle asm volatile ("" ::: "memory") to help reduce compiler
+ * optimizations on the context.
+ */
+static void __attribute__((noinline)) handle_yield(struct bpf_ghost_msg *msg)
+{
+	struct ghost_msg_payload_task_yield *yield = &msg->yield;
+
+	yield->agent_data = 1;
+}
+
+static void __attribute__((noinline)) handle_wakeup(struct bpf_ghost_msg *msg)
+{
+	struct ghost_msg_payload_task_wakeup *wakeup = &msg->wakeup;
+
+	wakeup->agent_data = 1;
+}
+
+SEC("ghost_msg/msg_send")
+int edf_msg_send(struct bpf_ghost_msg *msg)
+{
+	switch (msg->type) {
+	case MSG_TASK_WAKEUP:
+		handle_wakeup(msg);
+		break;
+	case MSG_TASK_YIELD:
+		handle_yield(msg);
+		break;
+	}
+	return 0;
+}
+
 char LICENSE[] SEC("license") = "GPL";

@@ -44,7 +44,7 @@ static struct bpf_registration {
 	struct bpf_program *prog;
 	bool inserted;
 	int fd;
-} bpf_registry [BPF_GHOST_SCHED_MAX_ATTACH_TYPE];
+} bpf_registry [BPF_GHOST_MAX_ATTACH_TYPE];
 
 static size_t map_mmap_sz(struct bpf_map *map)
 {
@@ -93,6 +93,7 @@ static int insert_prog(int ctl_fd, struct bpf_program *prog)
 	switch (eat) {
 	case BPF_GHOST_SCHED_SKIP_TICK:
 	case BPF_GHOST_SCHED_PNT:
+	case BPF_GHOST_MSG_SEND:
 		ret = bpf_link_create(prog_fd, ctl_fd, eat, NULL);
 		break;
 	default:
@@ -185,7 +186,7 @@ out_error:
 // They are in the kernel repo.  We keep them in sync in bpf/user/agent.h.
 int agent_bpf_register(struct bpf_program *prog, int eat)
 {
-	if (eat >= BPF_GHOST_SCHED_MAX_ATTACH_TYPE) {
+	if (eat >= BPF_GHOST_MAX_ATTACH_TYPE) {
 		errno = ERANGE;
 		return -1;
 	}
@@ -206,7 +207,7 @@ int agent_bpf_insert_registered(int ctl_fd)
 	int fd;
 	struct bpf_registration *r;
 
-	for (int i = 0; i < BPF_GHOST_SCHED_MAX_ATTACH_TYPE; i++) {
+	for (int i = 0; i < BPF_GHOST_MAX_ATTACH_TYPE; i++) {
 		r = &bpf_registry[i];
 		if (!r->prog)
 			continue;
@@ -229,7 +230,7 @@ void agent_bpf_destroy(void)
 {
 	struct bpf_registration *r;
 
-	for (int i = 0; i < BPF_GHOST_SCHED_MAX_ATTACH_TYPE; ++i) {
+	for (int i = 0; i < BPF_GHOST_MAX_ATTACH_TYPE; ++i) {
 		r = &bpf_registry[i];
 		if (r->inserted) {
 			close(r->fd);

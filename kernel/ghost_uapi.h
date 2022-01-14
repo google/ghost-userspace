@@ -19,7 +19,9 @@
 
 #include <linux/ioctl.h>
 
-#ifndef __KERNEL__
+#ifdef __KERNEL__
+#include <linux/limits.h>
+#else
 #include <limits.h>
 #include <stdint.h>
 #endif
@@ -32,7 +34,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	47
+#define GHOST_VERSION	49
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -199,6 +201,7 @@ struct ghost_msg_payload_task_preempt {
 	uint64_t gtid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint64_t cpu_seqnum;	/* cpu sequence number */
+	uint64_t agent_data;
 	int cpu;
 	char from_switchto;
 	char was_latched;
@@ -208,6 +211,7 @@ struct ghost_msg_payload_task_yield {
 	uint64_t gtid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint64_t cpu_seqnum;
+	uint64_t agent_data;
 	int cpu;
 	char from_switchto;
 };
@@ -238,6 +242,7 @@ struct ghost_msg_payload_task_affinity_changed {
 
 struct ghost_msg_payload_task_wakeup {
 	uint64_t gtid;
+	uint64_t agent_data;
 	char deferrable;	/* bool: 0 or 1 */
 
 	int last_ran_cpu;	/*
@@ -282,6 +287,26 @@ struct ghost_msg_payload_cpu_tick {
 struct ghost_msg_payload_timer {
 	int cpu;
 	uint64_t cookie;
+};
+
+struct bpf_ghost_msg {
+	union {
+		struct ghost_msg_payload_task_dead	dead;
+		struct ghost_msg_payload_task_blocked	blocked;
+		struct ghost_msg_payload_task_wakeup	wakeup;
+		struct ghost_msg_payload_task_new	newt;
+		struct ghost_msg_payload_task_preempt	preempt;
+		struct ghost_msg_payload_task_yield	yield;
+		struct ghost_msg_payload_task_departed	departed;
+		struct ghost_msg_payload_task_switchto	switchto;
+		struct ghost_msg_payload_task_affinity_changed	affinity;
+		struct ghost_msg_payload_task_latched	latched;
+		struct ghost_msg_payload_cpu_tick	cpu_tick;
+		struct ghost_msg_payload_timer		timer;
+		struct ghost_msg_payload_cpu_not_idle	cpu_not_idle;
+	};
+	uint16_t type;
+	uint32_t seqnum;
 };
 
 #ifdef __cplusplus
