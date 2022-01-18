@@ -138,6 +138,8 @@ struct ghost_status_word {
 #define GHOST_SW_TASK_ONCPU	(1U << 16)   /* task is oncpu */
 #define GHOST_SW_TASK_RUNNABLE	(1U << 17)   /* task is runnable */
 #define GHOST_SW_TASK_IS_AGENT  (1U << 18)
+#define GHOST_SW_TASK_MSG_GATED (1U << 19)   /* all task msgs are gated until
+                                              * status_word is freed by agent */
 
 /*
  * Queue APIs.
