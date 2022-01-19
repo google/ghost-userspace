@@ -243,8 +243,14 @@ class Ghost {
         .flags = cpu.valid() ? TIMERFD_GHOST_ENABLED : 0,
         .cookie = cookie,
     };
-    return syscall(__NR_ghost, GHOST_TIMERFD_SETTIME, fd, flags, itimerspec,
-                   NULL, &timerfd_ghost);
+    ghost_ioc_timerfd_settime data = {
+        .timerfd = fd,
+        .flags = flags,
+        .in_tmr = itimerspec,
+        .out_tmr = NULL,
+        .timerfd_ghost = timerfd_ghost,
+    };
+    return ioctl(gbl_ctl_fd_, GHOST_IOC_TIMERFD_SETTIME, &data);
   }
 
   static bool GhostIsMountedAt(const char* path);

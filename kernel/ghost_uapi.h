@@ -35,7 +35,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	54
+#define GHOST_VERSION	55
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -86,6 +86,14 @@ struct ghost_msg_src {
 	uint64_t arg;
 };
 #define GHOST_THIS_CPU	-1
+
+/* GHOST_TIMERFD_SETTIME */
+struct timerfd_ghost {
+	int cpu;
+	int flags;
+	uint64_t cookie;
+};
+#define TIMERFD_GHOST_ENABLED	(1 << 0)
 
 struct ghost_sw_info {
 	uint32_t id;		/* status_word region id */
@@ -138,6 +146,19 @@ struct ghost_ioc_commit_txn {
 	int flags;
 };
 
+struct ghost_ioc_timerfd_settime {
+	int timerfd;
+	int flags;
+#ifdef __KERNEL__
+	struct __kernel_itimerspec *in_tmr;
+	struct __kernel_itimerspec *out_tmr;
+#else
+	struct itimerspec *in_tmr;
+	struct itimerspec *out_tmr;
+#endif
+	struct timerfd_ghost timerfd_ghost;
+};
+
 #define GHOST_IOC_NULL			_IO('g', 0)
 #define GHOST_IOC_SW_GET_INFO		_IOWR('g', 1, struct ghost_ioc_sw_get_info *)
 #define GHOST_IOC_SW_FREE		_IOW('g', 2, struct ghost_sw_info *)
@@ -148,6 +169,7 @@ struct ghost_ioc_commit_txn {
 #define GHOST_IOC_GET_CPU_TIME		_IOWR('g', 7, struct ghost_ioc_get_cpu_time *)
 #define GHOST_IOC_COMMIT_TXN		_IOW('g', 8, struct ghost_ioc_commit_txn *)
 #define GHOST_IOC_SYNC_GROUP_TXN	_IOW('g', 9, struct ghost_ioc_commit_txn *)
+#define GHOST_IOC_TIMERFD_SETTIME	_IOWR('g', 10, struct ghost_ioc_timerfd_settime *)
 
 /*
  * Status word region APIs.
@@ -398,7 +420,6 @@ struct ghost_ring {
  * 'ops' supported by gsys_ghost().
  */
 enum ghost_ops {
-	GHOST_TIMERFD_SETTIME,
 	GHOST_GTID_LOOKUP,
 };
 
@@ -551,14 +572,6 @@ struct ghost_cpu_data {
 } __ghost_page_aligned;
 
 #define GHOST_TXN_VERSION	0
-
-/* GHOST_TIMERFD_SETTIME */
-struct timerfd_ghost {
-	int cpu;
-	int flags;
-	uint64_t cookie;
-};
-#define TIMERFD_GHOST_ENABLED	(1 << 0)
 
 /* GHOST_GTID_LOOKUP */
 enum {
