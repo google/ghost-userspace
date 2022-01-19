@@ -33,27 +33,12 @@ void BM_ghost_null_ioctl(benchmark::State& state) {
 }
 BENCHMARK(BM_ghost_null_ioctl);
 
-void BM_ghost_null_gsys_lookup(benchmark::State& state) {
-  Ghost::InitCore();
-  Topology* topology = MachineTopology();
-  LocalEnclave enclave(AgentConfig(topology, CpuList(*topology)));
-
+void BM_getpid(benchmark::State& state) {
   for (auto _ : state) {
-    CHECK_EQ(Ghost::Null(true), 0);
+    CHECK_GT(syscall(SYS_getpid), 0);
   }
 }
-BENCHMARK(BM_ghost_null_gsys_lookup);
-
-void BM_ghost_null_gsys_nolookup(benchmark::State& state) {
-  Ghost::InitCore();
-  Topology* topology = MachineTopology();
-  LocalEnclave enclave(AgentConfig(topology, CpuList(*topology)));
-
-  for (auto _ : state) {
-    CHECK_EQ(Ghost::Null(false), 0);
-  }
-}
-BENCHMARK(BM_ghost_null_gsys_nolookup);
+BENCHMARK(BM_getpid);
 
 }  // namespace ghost
 

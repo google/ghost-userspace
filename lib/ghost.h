@@ -91,10 +91,6 @@ class Ghost {
  public:
   static void InitCore();
 
-  static int Null(const bool lookup_enclave) {
-    return syscall(__NR_ghost, GHOST_NULL, lookup_enclave, gbl_ctl_fd_);
-  }
-
   static int Run(const Gtid gtid, const uint32_t agent_barrier,
                  const uint32_t task_barrier, const int cpu, const int flags) {
     return syscall(__NR_ghost_run, gtid.id(), agent_barrier, task_barrier, cpu,
