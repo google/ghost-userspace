@@ -118,13 +118,6 @@ class Ghost {
     return Commit(cpuset);
   }
 
-  enum class GhostOption {};
-  static int SetOption1(const GhostOption option, const int64_t val) {
-    int rc = syscall(__NR_ghost, GHOST_SET_OPTION, option, val);
-    CHECK_EQ(rc, 0);  // No false negatives on option setting.
-    return rc;
-  }
-
   static int CreateQueue(const int elems, const int node, const int flags,
                          uint64_t& mapsize) {
     ghost_ioc_create_queue data = {
@@ -217,11 +210,12 @@ class Ghost {
   // closure. We want to update the runtime of the task so that we don't bill
   // the new closure for CPU time used by the old closure.
   static int GetTaskRuntime(const Gtid gtid, absl::Duration* const cpu_time) {
-    uint64_t raw_time;
-    const int ret =
-        syscall(__NR_ghost, GHOST_GET_CPU_TIME, gtid.id(), &raw_time);
+    ghost_ioc_get_cpu_time data = {
+        .gtid = gtid.id(),
+    };
+    const int ret = ioctl(gbl_ctl_fd_, GHOST_IOC_GET_CPU_TIME, &data);
     if (ret == 0) {
-      *cpu_time = absl::Nanoseconds(raw_time);
+      *cpu_time = absl::Nanoseconds(data.runtime);
     }
     return ret;
   }

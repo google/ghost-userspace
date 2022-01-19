@@ -34,7 +34,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	52
+#define GHOST_VERSION	53
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -122,6 +122,11 @@ struct ghost_ioc_config_queue_wakeup {
 	int flags;
 };
 
+struct ghost_ioc_get_cpu_time {
+	int64_t gtid;
+	uint64_t runtime;
+};
+
 #define GHOST_IOC_NULL			_IO('g', 0)
 #define GHOST_IOC_SW_GET_INFO		_IOWR('g', 1, struct ghost_ioc_sw_get_info *)
 #define GHOST_IOC_SW_FREE		_IOW('g', 2, struct ghost_sw_info *)
@@ -129,6 +134,7 @@ struct ghost_ioc_config_queue_wakeup {
 #define GHOST_IOC_ASSOC_QUEUE		_IOWR('g', 4, struct ghost_ioc_assoc_queue *)
 #define GHOST_IOC_SET_DEFAULT_QUEUE	_IOW('g', 5, struct ghost_ioc_set_default_queue *)
 #define GHOST_IOC_CONFIG_QUEUE_WAKEUP	_IOW('g', 6, struct ghost_ioc_config_queue_wakeup *)
+#define GHOST_IOC_GET_CPU_TIME		_IOWR('g', 7, struct ghost_ioc_get_cpu_time *)
 
 /*
  * Status word region APIs.
@@ -379,14 +385,10 @@ struct ghost_ring {
  * 'ops' supported by gsys_ghost().
  */
 enum ghost_ops {
-	GHOST_SET_OPTION,
-	GHOST_GET_CPU_TIME,
 	GHOST_COMMIT_TXN,
 	GHOST_SYNC_GROUP_TXN,
 	GHOST_TIMERFD_SETTIME,
 	GHOST_GTID_LOOKUP,
-	GHOST_GET_GTID_10,	/* TODO: deprecate */
-	GHOST_GET_GTID_11,	/* TODO: deprecate */
 };
 
 /*

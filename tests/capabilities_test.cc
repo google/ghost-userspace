@@ -29,16 +29,6 @@ namespace {
 
 using ::testing::Gt;
 
-// Tests that the `GetTaskRuntime` ghOSt syscall succeeds when the
-// `CAP_SYS_NICE` capability is set.
-TEST(CapabilitiesTest, GetTaskRuntimeNice) {
-  AssertNiceCapabilitySet();
-
-  absl::Duration cpu_time;
-  EXPECT_THAT(Ghost::GetTaskRuntime(Gtid::Current(), &cpu_time), Eq(0));
-  EXPECT_THAT(cpu_time, Gt(absl::ZeroDuration()));
-}
-
 // Tests that the `Run` ghOSt syscall succeeds when the `CAP_SYS_NICE`
 // capability is set. We do not want to invoke the scheduler, so we pass
 // nonsense values to make the syscall fail. We know that we have the ability to
@@ -124,21 +114,6 @@ TEST(CapabilitiesTest, AgentNice) {
   notification.WaitForNotification();
 
   agent.Terminate();
-}
-
-// Drops the `CAP_SYS_NICE` capability and tests that the `GetTaskRuntime` ghOSt
-// syscall fails. Note that a capability cannot be regained after it is dropped,
-// so we spawn a separate thread to run the test. By doing so, we ensure that
-// tests run after this one still hold the `CAP_SYS_NICE` capability.
-TEST(CapabilitiesTest, GetTaskRuntimeNoNice) {
-  GhostThread thread(GhostThread::KernelScheduler::kCfs, []() {
-    DropNiceCapability();
-
-    absl::Duration cpu_time;
-    EXPECT_THAT(Ghost::GetTaskRuntime(Gtid::Current(), &cpu_time), Eq(-1));
-    EXPECT_THAT(errno, Eq(EPERM));
-  });
-  thread.Join();
 }
 
 // Drops the `CAP_SYS_NICE` capability and tests that the `Run` ghOSt syscall
