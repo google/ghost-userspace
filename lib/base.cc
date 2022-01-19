@@ -21,6 +21,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <fstream>
 #include <iostream>
 #include <unordered_map>
 #include <utility>
@@ -91,10 +92,19 @@ pid_t Gtid::tid() const { return gtid_raw_ >> GHOST_TID_SEQNUM_BITS; }
 
 int64_t GetGtid() {
   int64_t gtid;
-  int ret = syscall(__NR_ghost, GHOST_BASE_GET_GTID, &gtid);
-  if (ABSL_PREDICT_FALSE(ret < 0)) {
-    return (int64_t)GetTID() << GHOST_TID_SEQNUM_BITS;
+
+  std::string gtid_path = absl::StrCat("/proc/", GetTID(), "/ghost/gtid");
+
+  std::ifstream ifs(gtid_path);
+  if (ifs) {
+    ifs >> gtid;
+  } else {  // Fallback to syscall.
+    int ret = syscall(__NR_ghost, GHOST_BASE_GET_GTID, &gtid);
+    if (ABSL_PREDICT_FALSE(ret < 0)) {
+      gtid = (int64_t)GetTID() << GHOST_TID_SEQNUM_BITS;
+    }
   }
+
   return gtid;
 }
 
