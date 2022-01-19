@@ -154,8 +154,16 @@ class Ghost {
       }
     }
 
-    return syscall(__NR_ghost, GHOST_CONFIG_QUEUE_WAKEUP, queue_fd,
-                   wakeup.data(), wakeup.size(), flags);
+    int ninfo = wakeup.size();
+
+    ghost_ioc_config_queue_wakeup data = {
+        .qfd = queue_fd,
+        .w = wakeup.data(),
+        .ninfo = ninfo,
+        .flags = flags,
+    };
+
+    return ioctl(gbl_ctl_fd_, GHOST_IOC_CONFIG_QUEUE_WAKEUP, &data);
   }
 
   static int AssociateQueue(const int queue_fd, const ghost_type type,
@@ -182,7 +190,11 @@ class Ghost {
   }
 
   static int SetDefaultQueue(const int queue_fd) {
-    return syscall(__NR_ghost, GHOST_SET_DEFAULT_QUEUE, queue_fd);
+    ghost_ioc_set_default_queue data = {
+        .fd = queue_fd,
+    };
+
+    return ioctl(gbl_ctl_fd_, GHOST_IOC_SET_DEFAULT_QUEUE, &data);
   }
 
   static int GetStatusWordInfo(const ghost_type type, const uint64_t arg,
