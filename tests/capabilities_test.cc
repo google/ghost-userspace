@@ -27,8 +27,6 @@
 namespace ghost {
 namespace {
 
-using ::testing::Gt;
-
 // Tests that the `Run` ghOSt syscall succeeds when the `CAP_SYS_NICE`
 // capability is set. We do not want to invoke the scheduler, so we pass
 // nonsense values to make the syscall fail. We know that we have the ability to
