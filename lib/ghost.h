@@ -97,14 +97,22 @@ class Ghost {
                    flags);
   }
 
-  static int SyncCommit(const cpu_set_t& cpuset) {
-    return syscall(__NR_ghost, GHOST_SYNC_GROUP_TXN, &cpuset, sizeof(cpu_set_t),
-                   /*flags=*/0);
+  static int SyncCommit(cpu_set_t* const cpuset) {
+    ghost_ioc_commit_txn data = {
+        .mask_ptr = cpuset,
+        .mask_len = sizeof(cpu_set_t),
+        .flags = 0,
+    };
+    return ioctl(gbl_ctl_fd_, GHOST_IOC_SYNC_GROUP_TXN, &data);
   }
 
-  static int Commit(const cpu_set_t& cpuset) {
-    return syscall(__NR_ghost, GHOST_COMMIT_TXN, &cpuset, sizeof(cpu_set_t),
-                   /*flags=*/0);
+  static int Commit(cpu_set_t* const cpuset) {
+    ghost_ioc_commit_txn data = {
+        .mask_ptr = cpuset,
+        .mask_len = sizeof(cpu_set_t),
+        .flags = 0,
+    };
+    return ioctl(gbl_ctl_fd_, GHOST_IOC_COMMIT_TXN, &data);
   }
 
   static int Commit(const int cpu) {
@@ -115,7 +123,7 @@ class Ghost {
 
     CPU_ZERO(&cpuset);
     CPU_SET(cpu, &cpuset);
-    return Commit(cpuset);
+    return Commit(&cpuset);
   }
 
   static int CreateQueue(const int elems, const int node, const int flags,

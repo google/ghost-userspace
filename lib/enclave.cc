@@ -475,7 +475,8 @@ bool LocalEnclave::CommitRunRequests(const CpuList& cpu_list) {
 }
 
 void LocalEnclave::SubmitRunRequests(const CpuList& cpu_list) {
-  CHECK_EQ(Ghost::Commit(topology()->ToCpuSet(cpu_list)), 0);
+  cpu_set_t cpus = topology()->ToCpuSet(cpu_list);
+  CHECK_EQ(Ghost::Commit(&cpus), 0);
 }
 
 bool LocalEnclave::CommitSyncRequests(const CpuList& cpu_list) {
@@ -504,7 +505,8 @@ bool LocalEnclave::CommitSyncRequests(const CpuList& cpu_list) {
 }
 
 bool LocalEnclave::SubmitSyncRequests(const CpuList& cpu_list) {
-  int ret = Ghost::SyncCommit(topology()->ToCpuSet(cpu_list));
+  cpu_set_t cpus = topology()->ToCpuSet(cpu_list);
+  int ret = Ghost::SyncCommit(&cpus);
   CHECK(ret == 0 || ret == 1);
   return ret;
 }

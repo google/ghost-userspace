@@ -23,6 +23,7 @@
 #include <linux/limits.h>
 #else
 #include <limits.h>
+#include <sched.h>
 #include <stdint.h>
 #endif
 
@@ -34,7 +35,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	53
+#define GHOST_VERSION	54
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -127,6 +128,16 @@ struct ghost_ioc_get_cpu_time {
 	uint64_t runtime;
 };
 
+struct ghost_ioc_commit_txn {
+#ifdef __KERNEL__
+	ulong *mask_ptr;
+#else
+	cpu_set_t *mask_ptr;
+#endif
+	uint32_t mask_len;
+	int flags;
+};
+
 #define GHOST_IOC_NULL			_IO('g', 0)
 #define GHOST_IOC_SW_GET_INFO		_IOWR('g', 1, struct ghost_ioc_sw_get_info *)
 #define GHOST_IOC_SW_FREE		_IOW('g', 2, struct ghost_sw_info *)
@@ -135,6 +146,8 @@ struct ghost_ioc_get_cpu_time {
 #define GHOST_IOC_SET_DEFAULT_QUEUE	_IOW('g', 5, struct ghost_ioc_set_default_queue *)
 #define GHOST_IOC_CONFIG_QUEUE_WAKEUP	_IOW('g', 6, struct ghost_ioc_config_queue_wakeup *)
 #define GHOST_IOC_GET_CPU_TIME		_IOWR('g', 7, struct ghost_ioc_get_cpu_time *)
+#define GHOST_IOC_COMMIT_TXN		_IOW('g', 8, struct ghost_ioc_commit_txn *)
+#define GHOST_IOC_SYNC_GROUP_TXN	_IOW('g', 9, struct ghost_ioc_commit_txn *)
 
 /*
  * Status word region APIs.
@@ -385,8 +398,6 @@ struct ghost_ring {
  * 'ops' supported by gsys_ghost().
  */
 enum ghost_ops {
-	GHOST_COMMIT_TXN,
-	GHOST_SYNC_GROUP_TXN,
 	GHOST_TIMERFD_SETTIME,
 	GHOST_GTID_LOOKUP,
 };
