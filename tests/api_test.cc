@@ -1236,6 +1236,8 @@ class SchedAffinityAgent : public Agent {
     size_t task_cpu_idx = 0;    // schedule task on task_cpulist[task_cpu_idx]
 
     while (true) {
+      const StatusWord::BarrierToken agent_barrier = status_word().barrier();
+
       while (true) {
         Message msg = Peek(channel_);
         if (msg.empty()) break;
@@ -1302,22 +1304,42 @@ class SchedAffinityAgent : public Agent {
         Consume(channel_, msg);
       }
 
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
-      const bool prio_boost = status_word().boosted_priority();
-
       if (Finished() && !task) break;
 
-      if (prio_boost) {
+      if (status_word().boosted_priority()) {
         RunRequest* req = enclave()->GetRunRequest(cpu());
         req->LocalYield(agent_barrier, RTLA_ON_IDLE);
       } else if (runnable && !oncpu) {
-        const Cpu& run_cpu = task_cpulist[task_cpu_idx++ % task_cpulist.Size()];
+        Cpu run_cpu = task_cpulist[task_cpu_idx++ % task_cpulist.Size()];
+        int run_flags = 0;
+
+        // Finished() returned 'true' which means that the FullAgent object
+        // is being destroyed:
+        // ~FullSchedAffinityAgent()->TerminateAgentTasks()->TerminateBegin()
+        //
+        // This implies that the main thread has made its way beyond t.Join().
+        //
+        // However this does not mean that the task is dead: pthread_join()
+        // can return much before the dying task has made its way to TASK_DEAD
+        // (CLONE_CHILD_CLEARTID sync via do_exit()->exit_mm()->mm_release()).
+        //
+        // At this point we cannot reliably schedule on satellite cpus (agents
+        // on those cpus may have observed Finished() and exited). But we must
+        // schedule 'task' somewhere so it can proceed to TASK_DEAD.
+        //
+        // Schedule the task on our local cpu in this situation.
+        if (Finished()) {
+          run_cpu = cpu();
+          run_flags = RTLA_ON_PREEMPT | RTLA_ON_BLOCKED | RTLA_ON_YIELD;
+        }
+
         RunRequest* req = enclave()->GetRunRequest(run_cpu);
         req->Open({
             .target = task->gtid,
             .target_barrier = task->seqnum,
-            .agent_barrier = StatusWord::NullBarrierToken(),
+            .agent_barrier = agent_barrier,
             .commit_flags = COMMIT_AT_TXN_COMMIT,
+            .run_flags = run_flags,
         });
 
         // Commit the txn on `run_cpu` and then set the task's affinity to
