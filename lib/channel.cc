@@ -33,7 +33,7 @@ struct ghost_msg Message::kEmpty = {
 
 Channel::Channel(int elems, int node, CpuList cpulist)
     : elems_(elems), node_(node) {
-  fd_ = Ghost::CreateQueue(elems_, node_, 0, &map_size_);
+  fd_ = Ghost::CreateQueue(elems_, node_, 0, map_size_);
   CHECK_GT(fd_, 0);
 
   header_ = static_cast<struct ghost_queue_header*>(

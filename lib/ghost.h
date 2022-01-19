@@ -126,9 +126,15 @@ class Ghost {
   }
 
   static int CreateQueue(const int elems, const int node, const int flags,
-                         uint64_t* const mapsize) {
-    return syscall(__NR_ghost, GHOST_CREATE_QUEUE, elems, node, flags, mapsize,
-                   gbl_ctl_fd_);
+                         uint64_t& mapsize) {
+    ghost_ioc_create_queue data = {
+        .elems = elems,
+        .node = node,
+        .flags = flags,
+    };
+    int fd = ioctl(gbl_ctl_fd_, GHOST_IOC_CREATE_QUEUE, &data);
+    mapsize = data.mapsize;
+    return fd;
   }
 
   // Configure the set of candidate cpus to wake up when a message is produced
@@ -159,8 +165,20 @@ class Ghost {
         .type = type,
         .arg = arg,
     };
-    return syscall(__NR_ghost, GHOST_ASSOCIATE_QUEUE, queue_fd, &msg_src,
-                   barrier, flags, status);
+
+    ghost_ioc_assoc_queue data = {
+        .fd = queue_fd,
+        .src = msg_src,
+        .barrier = barrier,
+        .flags = flags,
+    };
+
+    int err = ioctl(gbl_ctl_fd_, GHOST_IOC_ASSOC_QUEUE, &data);
+
+    if (status != nullptr) {
+      *status = data.status;
+    }
+    return err;
   }
 
   static int SetDefaultQueue(const int queue_fd) {
