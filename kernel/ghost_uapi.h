@@ -160,16 +160,16 @@ struct ghost_ioc_timerfd_settime {
 };
 
 #define GHOST_IOC_NULL			_IO('g', 0)
-#define GHOST_IOC_SW_GET_INFO		_IOWR('g', 1, struct ghost_ioc_sw_get_info *)
-#define GHOST_IOC_SW_FREE		_IOW('g', 2, struct ghost_sw_info *)
-#define GHOST_IOC_CREATE_QUEUE		_IOWR('g', 3, struct ghost_ioc_create_queue *)
-#define GHOST_IOC_ASSOC_QUEUE		_IOWR('g', 4, struct ghost_ioc_assoc_queue *)
-#define GHOST_IOC_SET_DEFAULT_QUEUE	_IOW('g', 5, struct ghost_ioc_set_default_queue *)
-#define GHOST_IOC_CONFIG_QUEUE_WAKEUP	_IOW('g', 6, struct ghost_ioc_config_queue_wakeup *)
-#define GHOST_IOC_GET_CPU_TIME		_IOWR('g', 7, struct ghost_ioc_get_cpu_time *)
-#define GHOST_IOC_COMMIT_TXN		_IOW('g', 8, struct ghost_ioc_commit_txn *)
-#define GHOST_IOC_SYNC_GROUP_TXN	_IOW('g', 9, struct ghost_ioc_commit_txn *)
-#define GHOST_IOC_TIMERFD_SETTIME	_IOWR('g', 10, struct ghost_ioc_timerfd_settime *)
+#define GHOST_IOC_SW_GET_INFO		_IOWR('g', 1, struct ghost_ioc_sw_get_info)
+#define GHOST_IOC_SW_FREE		_IOW('g', 2, struct ghost_sw_info)
+#define GHOST_IOC_CREATE_QUEUE		_IOWR('g', 3, struct ghost_ioc_create_queue)
+#define GHOST_IOC_ASSOC_QUEUE		_IOWR('g', 4, struct ghost_ioc_assoc_queue)
+#define GHOST_IOC_SET_DEFAULT_QUEUE	_IOW('g', 5, struct ghost_ioc_set_default_queue)
+#define GHOST_IOC_CONFIG_QUEUE_WAKEUP	_IOW('g', 6, struct ghost_ioc_config_queue_wakeup)
+#define GHOST_IOC_GET_CPU_TIME		_IOWR('g', 7, struct ghost_ioc_get_cpu_time)
+#define GHOST_IOC_COMMIT_TXN		_IOW('g', 8, struct ghost_ioc_commit_txn)
+#define GHOST_IOC_SYNC_GROUP_TXN	_IOW('g', 9, struct ghost_ioc_commit_txn)
+#define GHOST_IOC_TIMERFD_SETTIME	_IOWR('g', 10, struct ghost_ioc_timerfd_settime)
 
 /*
  * Status word region APIs.
