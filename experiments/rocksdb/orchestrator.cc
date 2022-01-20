@@ -249,6 +249,14 @@ void Orchestrator::Spin(absl::Duration duration,
     return;
   }
 
+  // We are using the CPU time consumed by the thread to determine how much
+  // synthetic work has been performed. We are not just looking at wall clock
+  // times, since the thread could be preempted and the clock would still
+  // advance, wrongly causing us to think that the thread has performed
+  // synthetic work while it was preempted. Using the CPU time consumed by the
+  // thread is an accurate way of tracking synthetic work since the CPU time
+  // only advances while the thread is running on a CPU, not while the thread is
+  // preempted.
   while (GetThreadCpuTime() - start_duration < duration) {
     // We are doing synthetic work, so do not issue 'pause' instructions.
   }
