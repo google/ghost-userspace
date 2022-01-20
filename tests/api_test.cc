@@ -1022,6 +1022,18 @@ class TimeAgent : public Agent {
     channel_.SetEnclaveDefault();
   }
 
+  ~TimeAgent() {
+    std::cout << "switch_delays:" << std::endl;
+    for (absl::Duration delay : switch_delays_) {
+      std::cout << absl::ToInt64Nanoseconds(delay) << " ns" << std::endl;
+    }
+
+    std::cout << "commit_delays:" << std::endl;
+    for (absl::Duration delay : commit_delays_) {
+      std::cout << absl::ToInt64Nanoseconds(delay) << " ns" << std::endl;
+    }
+  }
+
   // Wait for agent to idle.
   void WaitForIdle() { idle_.WaitForNotification(); }
 
@@ -1081,7 +1093,10 @@ class TimeAgent : public Agent {
             absl::Duration switch_delay =
                 task->status_word.switch_time() - commit_time_;
             EXPECT_THAT(switch_delay, Gt(absl::ZeroDuration()));
-            EXPECT_THAT(switch_delay, Lt(absl::Microseconds(100)));
+            if (num_yields_++) {
+              EXPECT_THAT(switch_delay, Lt(absl::Microseconds(100)));
+            }
+            switch_delays_.push_back(switch_delay);
             break;
           }
 
@@ -1123,7 +1138,10 @@ class TimeAgent : public Agent {
         commit_time_ = req->commit_time();
         absl::Duration commit_delay = commit_time_ - now;
         EXPECT_THAT(commit_delay, Gt(absl::ZeroDuration()));
-        EXPECT_THAT(commit_delay, Lt(absl::Microseconds(100)));
+        if (num_commits_++) {
+          EXPECT_THAT(commit_delay, Lt(absl::Microseconds(100)));
+        }
+        commit_delays_.push_back(commit_delay);
       }
     }
   }
@@ -1145,6 +1163,10 @@ class TimeAgent : public Agent {
   Notification idle_;
   absl::Time commit_time_;
   bool first_idle_ = true;
+  int num_commits_ = 0;
+  int num_yields_ = 0;
+  std::vector<absl::Duration> switch_delays_;
+  std::vector<absl::Duration> commit_delays_;
 };
 
 // Tests that the kernel writes plausible commit times to transactions and
@@ -1166,7 +1188,8 @@ TEST(ApiTest, KernelTimes) {
   agent.WaitForIdle();
 
   GhostThread t(GhostThread::KernelScheduler::kGhost, [] {
-    sched_yield();  // MSG_TASK_YIELD.
+    for (int i = 0; i < 10; i++)
+      sched_yield();  // MSG_TASK_YIELD.
   });
   t.Join();
 
