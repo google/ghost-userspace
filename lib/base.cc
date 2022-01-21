@@ -240,13 +240,15 @@ void ForkedProcess::HandleSigchild(int signum) {
   }
 }
 
-ForkedProcess::ForkedProcess() {
+ForkedProcess::ForkedProcess(int stderr_fd) {
   pid_t ppid = getpid();
   pid_t p = fork();
 
   CHECK_GE(p, 0);
 
   if (p == 0) {
+    CHECK_EQ(dup2(stderr_fd, 2), 2);
+
     // Drop our parent's children. No need to lock, since we're single threaded.
     ForkedProcess::GetAllChildren().clear();
 

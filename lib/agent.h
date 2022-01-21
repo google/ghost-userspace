@@ -362,7 +362,7 @@ class AgentProcess {
   explicit AgentProcess(AGENT_CONFIG config) {
     sb_ = absl::make_unique<SharedBlob>();
 
-    agent_proc_ = absl::make_unique<ForkedProcess>();
+    agent_proc_ = absl::make_unique<ForkedProcess>(config.stderr_fd);
     if (!agent_proc_->IsChild()) {
       sb_->agent_ready_.WaitForNotification();
       return;
@@ -390,6 +390,7 @@ class AgentProcess {
         sb_->rpc_done_.Notify();
       }
     });
+    rpc_handler.detach();
 
     sb_->agent_ready_.Notify();
     sb_->kill_agent_.WaitForNotification();

@@ -348,7 +348,9 @@ class Notification {
 class ForkedProcess {
  public:
   // Returns to both the child and parent.  Caller needs to handle both cases.
-  ForkedProcess();
+  // stderr_fd is the FD in the caller (parent) that the child will use for
+  // stderr.
+  ForkedProcess(int stderr_fd = 2);
   // The child runs 'lambda' and exits.
   explicit ForkedProcess(std::function<int()> lambda);
   ForkedProcess(const ForkedProcess&) = delete;

@@ -57,6 +57,7 @@ class AgentConfig {
   CpuList cpus_;
   int enclave_fd_ = -1;
   CpuTickConfig tick_config_ = CpuTickConfig::kNoTicks;
+  int stderr_fd = 2;
 
   explicit AgentConfig(Topology* topology = nullptr,
                        CpuList cpus = MachineTopology()->EmptyCpuList())
