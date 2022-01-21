@@ -28,6 +28,7 @@
 
 #include "third_party/bpf/ghost.h"
 #include "bpf/user/ghost_bpf.skel.h"
+#include "bpf/user/schedghostidle_bpf.skel.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
 
 // The ghost_bpf object and its cpu_data mmap is our set of
@@ -267,4 +268,144 @@ int agent_bpf_request_tick_on_cpu(int cpu)
 	}
 	cpu_data[cpu].want_tick = true;
 	return 0;
+}
+
+/* schedghostidle tracer */
+
+static void *sgi_make_skel_obj(void)
+{
+	struct schedghostidle_bpf *obj;
+
+	obj = schedghostidle_bpf__open_and_load();
+	if (!obj) {
+		fprintf(stderr, "failed to open/load schedghostidle\n");
+		return NULL;
+	}
+
+	if (schedghostidle_bpf__attach(obj)) {
+		fprintf(stderr, "failed to attach schedghostidle\n");
+		schedghostidle_bpf__destroy(obj);
+		return NULL;
+	}
+	return obj;
+}
+
+/* Keep this in sync with schedghostidle.bpf.c. */
+#define SGI_NR_SLOTS 25
+
+static void sgi_output(void *obj, FILE *to)
+{
+	struct schedghostidle_bpf *sgi_obj = obj;
+	unsigned int nr_cpus = libbpf_num_possible_cpus();
+	unsigned int hist[SGI_NR_SLOTS] = {0};
+	uint64_t *count;
+	int fd = bpf_map__fd(sgi_obj->maps.hist);
+
+	count = calloc(nr_cpus, sizeof(*count));
+	if (!count) {
+		fprintf(to, "sgi calloc failed!\n");
+		return;
+	}
+
+	for (int i = 0; i < SGI_NR_SLOTS; i++) {
+		if (bpf_map_lookup_elem(fd, &i, count)) {
+			fprintf(to, "sgi lookup failed!");
+			return;
+		}
+		hist[i] = 0;
+		for (int c = 0; c < nr_cpus; c++)
+			hist[i] += count[c];
+	}
+	free(count);
+
+	fprintf(to, "\n");
+	fprintf(to, "Latency of a CPU going Idle until a task is Latched:\n");
+	fprintf(to, "----------------------------------------------------\n");
+	print_log2_hist_to(to, hist, SGI_NR_SLOTS, "usec");
+}
+
+static void sgi_reset(void *obj)
+{
+	struct schedghostidle_bpf *sgi_obj = obj;
+	unsigned int nr_cpus = libbpf_num_possible_cpus();
+	uint64_t *zeros;
+	int fd = bpf_map__fd(sgi_obj->maps.hist);
+
+	zeros = calloc(nr_cpus, sizeof(uint64_t));
+	if (!zeros) {
+		fprintf(stderr, "sgi calloc failed!\n");
+		return;
+	}
+
+	/*
+	 * As a reminder, the way you update per-cpu arrays is one array index
+	 * at a time, for all cpus at once.
+	 */
+	for (int i = 0; i < SGI_NR_SLOTS; i++) {
+		if (bpf_map_update_elem(fd, &i, zeros, BPF_ANY)) {
+			fprintf(stderr, "sgi zeroing failed!");
+			return;
+		}
+	}
+	free(zeros);
+}
+
+static struct agent_bpf_trace {
+	void *skel_obj;
+	void *(*make_skel_obj)(void);
+	void (*output)(void *skel_obj, FILE *to);
+	void (*reset)(void *skel_obj);
+} tracers[] = {
+	[AGENT_BPF_TRACE_SCHEDGHOSTIDLE] = {
+		.make_skel_obj = sgi_make_skel_obj,
+		.output = sgi_output,
+		.reset = sgi_reset,
+	},
+};
+
+int agent_bpf_trace_init(unsigned int type)
+{
+	struct agent_bpf_trace *abt;
+
+	if (type >= MAX_AGENT_BPF_TRACE) {
+		fprintf(stderr, "cannot init unknown trace type %d\n", type);
+		return -1;
+	}
+	abt = &tracers[type];
+	abt->skel_obj = abt->make_skel_obj();
+	if (!abt->skel_obj)
+		return -1;
+	return 0;
+}
+
+void agent_bpf_trace_output(FILE *to, unsigned int type)
+{
+	struct agent_bpf_trace *abt;
+
+	if (type >= MAX_AGENT_BPF_TRACE) {
+		fprintf(stderr, "cannot output unknown trace type %d\n", type);
+		return;
+	}
+	abt = &tracers[type];
+	if (!abt->skel_obj) {
+		fprintf(stderr, "cannot output uninit trace type %d\n", type);
+		return;
+	}
+	abt->output(abt->skel_obj, to);
+}
+
+void agent_bpf_trace_reset(unsigned int type)
+{
+	struct agent_bpf_trace *abt;
+
+	if (type >= MAX_AGENT_BPF_TRACE) {
+		fprintf(stderr, "cannot reset unknown trace type %d\n", type);
+		return;
+	}
+	abt = &tracers[type];
+	if (!abt->skel_obj) {
+		fprintf(stderr, "cannot output uninit trace type %d\n", type);
+		return;
+	}
+	abt->reset(abt->skel_obj);
 }

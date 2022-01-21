@@ -43,6 +43,7 @@ cc_library(
     hdrs = [
         "bpf/user/agent.h",
         "bpf/user/ghost_bpf.skel.h",
+        "bpf/user/schedghostidle_bpf.skel.h",
         "lib/agent.h",
         "lib/channel.h",
         "lib/enclave.h",
