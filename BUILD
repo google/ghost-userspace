@@ -129,8 +129,6 @@ cc_library(
     copts = compiler_flags,
     deps = [
         ":agent",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
     ],
@@ -354,6 +352,37 @@ cc_library(
     copts = compiler_flags,
     deps = [
         ":agent",
+    ],
+)
+
+cc_binary(
+    name = "fifo_centralized_agent",
+    srcs = [
+        "schedulers/fifo/centralized/fifo_agent.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        ":fifo_centralized_scheduler",
+        "@com_google_absl//absl/debugging:symbolize",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+cc_library(
+    name = "fifo_centralized_scheduler",
+    srcs = [
+        "schedulers/fifo/centralized/fifo_scheduler.cc",
+        "schedulers/fifo/centralized/fifo_scheduler.h",
+    ],
+    hdrs = [
+        "schedulers/fifo/centralized/fifo_scheduler.h",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/time",
     ],
 )
 
