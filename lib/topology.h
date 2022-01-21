@@ -58,7 +58,18 @@ class Cpu {
     std::vector<int> siblings;
     std::vector<int> l3_siblings;
     int numa_node;
+    // If any additional fields are added to this struct, then update the
+    // implementation of the override of the `==` operator below.
 
+    // std::vector overrides the `==` operator. Two std::vector's are equal if
+    // they are the same length and each element in one vector is equal to the
+    // element in the same index in the other vector.
+    bool operator==(const Raw& other) const {
+      return cpu == other.cpu && core == other.core &&
+             smt_idx == other.smt_idx && siblings == other.siblings &&
+             l3_siblings == other.l3_siblings && numa_node == other.numa_node;
+    }
+    bool operator!=(const Raw& other) const { return !(*this == other); }
     bool operator<(const Raw& other) const { return cpu < other.cpu; }
   };
 
@@ -158,6 +169,18 @@ class CpuList {
 
     for (uint32_t i = 0; i < size; i++) {
       cpus.push_back(GetNthCpu(i));
+    }
+    return cpus;
+  }
+
+  // Converts this `CpuList` to an `std::vector<int>` and returns the vector.
+  std::vector<int> ToIntVector() const {
+    std::vector<int> cpus;
+    const uint32_t size = Size();
+    cpus.reserve(size);
+
+    for (uint32_t i = 0; i < size; i++) {
+      cpus.push_back(GetNthCpu(i).id());
     }
     return cpus;
   }
@@ -426,6 +449,9 @@ class Topology {
 
   // The number of CPUs in the test topology.
   static constexpr uint32_t kNumTestCpus = 112;
+
+  // Export the topology into a raw format.
+  std::vector<Cpu::Raw> Export() const;
 
   CpuList EmptyCpuList() const { return CpuList(*this); }
 

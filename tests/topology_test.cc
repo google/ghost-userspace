@@ -814,6 +814,67 @@ TEST(TopologyTest, CustomIteratorBoundary) {
   EXPECT_THAT(index, Eq(cpus.size()));
 }
 
+// Tests that `ToVector()` returns a correct list of the topology CPUs.
+TEST(TopologyTest, CpuListToVector) {
+  const std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
+  UpdateCustomTopology(GetRawCustomTopology());
+
+  CpuList cpu_list = CustomTopology()->ToCpuList(cpu_ids);
+  std::vector<Cpu> compare = cpu_list.ToVector();
+  std::sort(compare.begin(), compare.end());
+
+  EXPECT_THAT(cpu_ids.size(), Eq(compare.size()));
+  for (int i = 0; i < cpu_ids.size(); i++) {
+    EXPECT_THAT(cpu_ids[i], Eq(compare[i].id()));
+  }
+}
+
+// Tests that `ToIntVector()` returns a correct list of the topology CPU IDs.
+TEST(TopologyTest, CpuListToIntVector) {
+  const std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
+  UpdateCustomTopology(GetRawCustomTopology());
+
+  CpuList cpu_list = CustomTopology()->ToCpuList(cpu_ids);
+  std::vector<int> compare = cpu_list.ToIntVector();
+  std::sort(compare.begin(), compare.end());
+
+  // std::vector overrides the `==` operator. Two std::vector's are equal if
+  // they are the same length and each element in one vector is equal to the
+  // element in the same index in the other vector.
+  EXPECT_THAT(cpu_ids, Eq(compare));
+}
+
+// Tests that when a `Topology` instance is constructed with a raw topology,
+// `Export()` returns the same raw topology.
+TEST(TopologyTest, ExportTopology) {
+  const std::vector<Cpu::Raw> raw_cpus = GetRawCustomTopology();
+
+  UpdateCustomTopology(raw_cpus);
+  std::vector<Cpu::Raw> compare = CustomTopology()->Export();
+  std::sort(compare.begin(), compare.end());
+
+  // std::vector overrides the `==` operator. Two std::vector's are equal if
+  // they are the same length and each element in one vector is equal to the
+  // element in the same index in the other vector.
+  EXPECT_THAT(raw_cpus, Eq(compare));
+}
+
+// Tests that `Export()` exports the test topology correctly.
+TEST(TopologyTest, ExportTestTopology) {
+  const std::vector<Cpu::Raw> raw_cpus = GetRawCustomTopology();
+
+  // The test topology and the custom topology from `GetRawCustomTopology()` are
+  // the same.
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  std::vector<Cpu::Raw> compare = TestTopology()->Export();
+  std::sort(compare.begin(), compare.end());
+
+  // std::vector overrides the `==` operator. Two std::vector's are equal if
+  // they are the same length and each element in one vector is equal to the
+  // element in the same index in the other vector.
+  EXPECT_THAT(raw_cpus, Eq(compare));
+}
+
 }  // namespace
 }  // namespace ghost
 

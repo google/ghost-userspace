@@ -466,6 +466,20 @@ CpuList Topology::ParseCpuStr(const std::string& str) const {
   return cpus;
 }
 
+std::vector<Cpu::Raw> Topology::Export() const {
+  std::vector<Cpu::Raw> to_export;
+
+  for (const Cpu& cpu : all_cpus()) {
+    to_export.push_back({.cpu = cpu.id(),
+                         .core = cpu.core(),
+                         .smt_idx = cpu.smt_idx(),
+                         .siblings = cpu.siblings().ToIntVector(),
+                         .l3_siblings = cpu.l3_siblings().ToIntVector(),
+                         .numa_node = cpu.numa_node()});
+  }
+  return to_export;
+}
+
 Topology* MachineTopology() {
   static Topology* topology = new Topology(Topology::InitHost{});
   return topology;
