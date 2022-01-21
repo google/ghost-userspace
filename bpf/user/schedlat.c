@@ -64,6 +64,8 @@ static void print_hists(int fd)
 		printf("\n%s:\n----------\n", titles[i]);
 		print_log2_hist(total, MAX_NR_HIST_SLOTS, "usec");
 	}
+
+	free(hist);
 }
 
 static volatile bool exiting;

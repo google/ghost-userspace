@@ -28,11 +28,16 @@ struct task_stat {
 
 /*
  * Power of 2 histogram, <=1 us, 2us, 4us, etc.  This struct must be at least
- * 8-byte aligned, since it is a value for a BPF map.
+ * 8-byte aligned, since it is a value for a BPF map.  The kernel will round up
+ * the size of any map value to 8 bytes internally.  If we have an array of
+ * these objects, the kernel will think each object is 8-byte aligned each.
+ * When we read the per-cpu map in schedlat.c, we get an array of struct hist.
+ * The compiler needs to agree with the kernel on the size of the objects, or
+ * you'll corrupt your stats.
  */
 struct hist {
 	uint32_t slots[MAX_NR_HIST_SLOTS];
-} __attribute__((aligned(64)));
+} __attribute__((aligned(8)));
 
 enum {
 	RUNNABLE_TO_LATCHED,
