@@ -144,7 +144,7 @@ class Enclave {
 
   // Runs l on every non-agent, ghost-task status word.
   virtual void ForEachTaskStatusWord(
-      std::function<void(struct ghost_status_word* sw, uint32_t region_id,
+      std::function<void(ghost_status_word* sw, uint32_t region_id,
                          uint32_t idx)>
           l) = 0;
 
@@ -379,7 +379,7 @@ class RunRequest {
 
  private:
   RunRequest() : cpu_(Cpu::UninitializedType::kUninitialized) {}
-  void Init(Enclave* enclave, Cpu cpu, struct ghost_txn* txn) {
+  void Init(Enclave* enclave, Cpu cpu, ghost_txn* txn) {
     enclave_ = enclave;
     cpu_ = cpu;
 
@@ -402,7 +402,7 @@ class RunRequest {
 
   Cpu cpu_;
   Enclave* enclave_ = nullptr;
-  struct ghost_txn* txn_ = nullptr;
+  ghost_txn* txn_ = nullptr;
   bool allow_txn_target_on_cpu_ = false;
 
   friend class Enclave;
@@ -449,7 +449,7 @@ class LocalEnclave final : public Enclave {
 
   // Runs l on every non-agent, ghost-task status word.
   void ForEachTaskStatusWord(
-      const std::function<void(struct ghost_status_word* sw, uint32_t region_id,
+      const std::function<void(ghost_status_word* sw, uint32_t region_id,
                                uint32_t idx)>
           l) final;
 
@@ -487,9 +487,7 @@ class LocalEnclave final : public Enclave {
     RunRequest req;
   } ABSL_CACHELINE_ALIGNED;
 
-  struct CpuRep* rep(const Cpu& cpu) {
-    return &cpus_[cpu.id()];
-  }
+  CpuRep* rep(const Cpu& cpu) { return &cpus_[cpu.id()]; }
 
   constexpr static int kMaxCpus = 512;
   CpuRep cpus_[kMaxCpus];

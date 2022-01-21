@@ -157,7 +157,7 @@ std::string ReadString(int fd) {
 }
 
 void LocalEnclave::ForEachTaskStatusWord(
-    const std::function<void(struct ghost_status_word* sw, uint32_t region_id,
+    const std::function<void(ghost_status_word* sw, uint32_t region_id,
                              uint32_t idx)>
         l) {
   // TODO: Need to support more than one SW region.
@@ -247,7 +247,7 @@ int LocalEnclave::GetCpuDataRegion(int dir_fd) {
 //
 // static
 void LocalEnclave::WaitForAgentOnlineValue(int dir_fd, int until) {
-  struct epoll_event ep_ev;
+  epoll_event ep_ev;
   int epfd;
   int fd = openat(dir_fd, "agent_online", O_RDONLY);
 
@@ -345,7 +345,7 @@ void LocalEnclave::CommonInit() {
   int data_fd = LocalEnclave::GetCpuDataRegion(dir_fd_);
   CHECK_GE(data_fd, 0);
   data_region_size_ = GetFileSize(data_fd);
-  data_region_ = static_cast<struct ghost_cpu_data*>(
+  data_region_ = static_cast<ghost_cpu_data*>(
       mmap(/*addr=*/nullptr, data_region_size_, PROT_READ | PROT_WRITE,
            MAP_SHARED, data_fd, /*offset=*/0));
   close(data_fd);
@@ -364,7 +364,7 @@ void LocalEnclave::BuildCpuReps() {
     }
     ghost_txn* txn = &data_region_[i].txn;
     Cpu cpu = topology_->cpu(txn->cpu);
-    struct CpuRep* rep = &cpus_[cpu.id()];
+    CpuRep* rep = &cpus_[cpu.id()];
     rep->req.Init(this, cpu, txn);
     rep->agent = nullptr;
   }

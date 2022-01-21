@@ -25,7 +25,7 @@
 namespace ghost {
 
 // static
-struct ghost_msg Message::kEmpty = {
+ghost_msg Message::kEmpty = {
     .type = 0,
     .length = 0,
     .seqnum = 0,
@@ -36,7 +36,7 @@ Channel::Channel(int elems, int node, CpuList cpulist)
   fd_ = Ghost::CreateQueue(elems_, node_, 0, map_size_);
   CHECK_GT(fd_, 0);
 
-  header_ = static_cast<struct ghost_queue_header*>(
+  header_ = static_cast<ghost_queue_header*>(
       mmap(nullptr, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0));
   CHECK_NE(header_, MAP_FAILED);
   elems_ = header_->nelems;
@@ -58,9 +58,9 @@ bool Channel::AssociateTask(Gtid gtid, int barrier, int* status) const {
 }
 
 void Channel::Consume(const Message& msg) {
-  struct ghost_ring* r = reinterpret_cast<struct ghost_ring*>(
+  ghost_ring* r = reinterpret_cast<ghost_ring*>(
       reinterpret_cast<char*>(header_) + header_->start);
-  const int slot_size = sizeof(struct ghost_msg);
+  const int slot_size = sizeof(ghost_msg);
 
   uint32_t tail = r->tail.load(std::memory_order_acquire);
 
@@ -72,7 +72,7 @@ void Channel::Consume(const Message& msg) {
 }
 
 Message Channel::Peek() {
-  struct ghost_ring* r = reinterpret_cast<struct ghost_ring*>(
+  ghost_ring* r = reinterpret_cast<ghost_ring*>(
       reinterpret_cast<char*>(header_) + header_->start);
   uint32_t tidx;
 

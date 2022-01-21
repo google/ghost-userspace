@@ -54,7 +54,7 @@ class StatusWordTable {
   ~StatusWordTable();
 
   int id() const { return header_->id; }
-  struct ghost_status_word* get(unsigned int index) {
+  ghost_status_word* get(unsigned int index) {
     CHECK_LT(index, header_->capacity);
     return &table_[index];
   }
@@ -64,11 +64,11 @@ class StatusWordTable {
 
   // Runs l on every non-agent, ghost-task status word.
   void ForEachTaskStatusWord(
-      const std::function<void(struct ghost_status_word* sw, uint32_t region_id,
+      const std::function<void(ghost_status_word* sw, uint32_t region_id,
                                uint32_t idx)>
           l) {
     for (int i = 0; i < header_->capacity; ++i) {
-      struct ghost_status_word* sw = get(i);
+      ghost_status_word* sw = get(i);
       if (!(sw->flags & GHOST_SW_F_INUSE)) {
         continue;
       }
@@ -82,8 +82,8 @@ class StatusWordTable {
  private:
   int fd_;
   size_t map_size_ = 0;
-  struct ghost_sw_region_header* header_ = nullptr;
-  struct ghost_status_word* table_ = nullptr;
+  ghost_sw_region_header* header_ = nullptr;
+  ghost_status_word* table_ = nullptr;
 };
 
 // TODO: Syscall definition needs fixing for any hope of 32-bit compat.
@@ -200,7 +200,7 @@ class Ghost {
 
   static int GetStatusWordInfo(const ghost_type type, const uint64_t arg,
                                ghost_sw_info* const info) {
-    struct ghost_ioc_sw_get_info data;
+    ghost_ioc_sw_get_info data;
     data.request.type = type;
     data.request.arg = arg;
     int err = ioctl(gbl_ctl_fd_, GHOST_IOC_SW_GET_INFO, &data);
@@ -343,7 +343,7 @@ class StatusWord {
   // Initializes to an empty status word.
   StatusWord() {}
   // Initializes to a known sw.  gtid is only used for debugging.
-  StatusWord(Gtid gtid, struct ghost_sw_info sw_info);
+  StatusWord(Gtid gtid, ghost_sw_info sw_info);
 
   // Takes ownership of the word in "move_from", move_from becomes empty.
   StatusWord(StatusWord&& move_from);
@@ -394,8 +394,8 @@ class StatusWord {
   explicit StatusWord(AgentSW);
 
   Gtid owner_;  // Debug only, remove at some point.
-  struct ghost_sw_info sw_info_;
-  struct ghost_status_word* sw_ = nullptr;
+  ghost_sw_info sw_info_;
+  ghost_status_word* sw_ = nullptr;
 
   uint32_t sw_barrier() const {
     std::atomic<uint32_t>* barrier =

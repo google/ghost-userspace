@@ -31,7 +31,7 @@ namespace ghost {
 class Message {
  public:
   Message() : msg_(&kEmpty) {}
-  explicit Message(const struct ghost_msg* msg) : msg_(msg) {}
+  explicit Message(const ghost_msg* msg) : msg_(msg) {}
 
   uint16_t type() const { return msg_->type; }
   uint16_t length() const { return msg_->length; }
@@ -66,8 +66,8 @@ class Message {
   std::string stringify() const;
 
  private:
-  const struct ghost_msg* msg_;
-  static struct ghost_msg kEmpty;
+  const ghost_msg* msg_;
+  static ghost_msg kEmpty;
 };
 
 class Channel {
@@ -103,7 +103,7 @@ class Channel {
  private:
   int elems_, node_, fd_;
   size_t map_size_;
-  struct ghost_queue_header* header_;
+  ghost_queue_header* header_;
 };
 
 inline Message Peek(Channel* f) { return f->Peek(); }

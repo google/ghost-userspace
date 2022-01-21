@@ -32,7 +32,7 @@ namespace ghost {
 
 // REQUIRES: All Task implementations should derive from Task.
 struct Task {
-  explicit Task(Gtid gtid, struct ghost_sw_info sw_info)
+  explicit Task(Gtid gtid, ghost_sw_info sw_info)
       : gtid(gtid), status_word(StatusWord(gtid, sw_info)) {}
   virtual ~Task();
 
@@ -116,7 +116,7 @@ class TaskAllocator {
   // indicating whether the Task* was a new allocation (i.e. it was not
   // already known to the allocator).
   virtual std::tuple<TaskType*, bool> GetTask(Gtid gtid,
-                                              struct ghost_sw_info sw_info) = 0;
+                                              ghost_sw_info sw_info) = 0;
 
   virtual void FreeTask(TaskType* task) = 0;
 
@@ -153,9 +153,9 @@ class BasicDispatchScheduler : public Scheduler {
     // the agent from missing a message.  For instance, switchto involves
     // changing the SW, but there is no corresponding message.  For this reason,
     // we rely on the enclave being "quiescent" (no client tasks).
-    enclave()->ForEachTaskStatusWord([this](struct ghost_status_word* sw,
+    enclave()->ForEachTaskStatusWord([this](ghost_status_word* sw,
                                             uint32_t region_id, uint32_t idx) {
-      struct ghost_sw_info swi = {.id = region_id, .index = idx};
+      ghost_sw_info swi = {.id = region_id, .index = idx};
       TaskType* task;
       uint32_t sw_barrier;
       uint32_t sw_flags;
@@ -278,20 +278,19 @@ class BasicDispatchScheduler : public Scheduler {
       }
 
       // Synthesize a message on the stack from the copied SW state.  All ghost
-      // messages must be aligned to the *size* of struct ghost_msg, not to the
+      // messages must be aligned to the *size* of ghost_msg, not to the
       // alignment of a ghost_msg.  This means the payloads will be aligned to
       // that value (8 currently)
       struct {
-        struct ghost_msg header;
-        struct ghost_msg_payload_task_new payload;
-      } synth __attribute__((aligned(sizeof(struct ghost_msg))));
+        ghost_msg header;
+        ghost_msg_payload_task_new payload;
+      } synth __attribute__((aligned(sizeof(ghost_msg))));
       // Make sure there's no magic padding between the structs.
       static_assert(sizeof(synth) ==
-                    sizeof(struct ghost_msg) +
-                        sizeof(struct ghost_msg_payload_task_new));
+                    sizeof(ghost_msg) + sizeof(ghost_msg_payload_task_new));
 
-      struct ghost_msg* gm = &synth.header;
-      struct ghost_msg_payload_task_new* tn = &synth.payload;
+      ghost_msg* gm = &synth.header;
+      ghost_msg_payload_task_new* tn = &synth.payload;
       gm->type = MSG_TASK_NEW;
       gm->length = sizeof(synth);
       gm->seqnum = sw_barrier;
@@ -356,7 +355,7 @@ class SingleThreadMallocTaskAllocator : public TaskAllocator<TaskType> {
  public:
   TaskType* GetTask(Gtid gtid) override;
   std::tuple<TaskType*, bool> GetTask(Gtid gtid,
-                                      struct ghost_sw_info sw_info) override;
+                                      ghost_sw_info sw_info) override;
   void FreeTask(TaskType* task) override {
     task_map_.erase(task->gtid.id());
     FreeTaskImpl(task);
@@ -371,7 +370,7 @@ class SingleThreadMallocTaskAllocator : public TaskAllocator<TaskType> {
 
  protected:
   // Can be overridden to replace only the allocator.
-  virtual TaskType* AllocTaskImpl(Gtid gtid, struct ghost_sw_info sw_info) {
+  virtual TaskType* AllocTaskImpl(Gtid gtid, ghost_sw_info sw_info) {
     return new TaskType(gtid, sw_info);
   }
   virtual void FreeTaskImpl(TaskType* task) { delete task; }
@@ -394,7 +393,7 @@ TaskType* SingleThreadMallocTaskAllocator<TaskType>::GetTask(Gtid gtid) {
 
 template <typename TaskType>
 std::tuple<TaskType*, bool> SingleThreadMallocTaskAllocator<TaskType>::GetTask(
-    Gtid gtid, struct ghost_sw_info sw_info) {
+    Gtid gtid, ghost_sw_info sw_info) {
   TaskType* t = SingleThreadMallocTaskAllocator<TaskType>::GetTask(gtid);
   if (t) return std::make_tuple(t, false);
 
@@ -416,7 +415,7 @@ class ThreadSafeMallocTaskAllocator
   }
 
   std::tuple<TaskType*, bool> GetTask(Gtid gtid,
-                                      struct ghost_sw_info sw_info) override {
+                                      ghost_sw_info sw_info) override {
     absl::MutexLock lock(&mu_);
     return Parent::GetTask(gtid, sw_info);
   }
