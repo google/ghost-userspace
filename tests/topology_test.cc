@@ -66,6 +66,14 @@ TEST(TopologyTest, TopologyNumCpus) {
               Eq(TestTopology()->num_cpus()));
 }
 
+// Tests that the topology contains all CPUs.
+TEST(TopologyTest, TopologyAllCpus) {
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  for (uint32_t i = 0; i < Topology::kNumTestCpus; i++) {
+    EXPECT_THAT(TestTopology()->cpu(i).id(), Eq(i));
+  }
+}
+
 // Tests that `ToCpuList` returns an empty list when there are no CPUs.
 TEST(TopologyTest, CpuListContentsEmpty) {
   UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
@@ -185,6 +193,7 @@ TEST(TopologyTest, CheckL3Siblings) {
   }
 }
 
+// Tests that the topology returns the highest NUMA node.
 TEST(TopologyTest, CheckHighestNodeIdx) {
   UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
   EXPECT_THAT(TestTopology()->highest_node_idx(), Eq(1));
@@ -504,6 +513,305 @@ TEST(TopologyTest, CpuSetToCpuList) {
 
   const cpu_set_t cpuset = Topology::ToCpuSet(list);
   EXPECT_EQ(list, TestTopology()->ToCpuList(cpuset));
+}
+
+// Returns the ID for the core that CPU `cpu` is on.
+int GetRawCore(int cpu) { return cpu % (Topology::kNumTestCpus / 2); }
+
+// Returns the NUMA node that CPU `cpu` is on.
+int GetRawNumaNode(int cpu) {
+  const int quadrant = cpu / (Topology::kNumTestCpus / 4);
+  switch (quadrant) {
+    case 0:
+    case 2:
+      return 0;
+    case 1:
+    case 3:
+      return 1;
+    default:
+      CHECK(false);
+      return -1;
+  }
+}
+
+// Returns the raw format of a topology that is identical to `TestTopology()`.
+//
+// Repeated from the comments for `UpdateTestTopology()` in lib/topology.h:
+// This topology has 112 CPUs, 2 hardware threads per physical core (so there
+// are 56 physical cores in total), and 2 NUMA nodes. CPU 0 is co-located with
+// CPU 56 on the same physical core, CPU 1 is co-located with CPU 57, ..., and
+// CPU 55 is co-located with CPU 111. This is how Linux configures CPUs. Lastly,
+// CPUs 0-27 and 56-83 are on NUMA node 0 and CPUs 28-55 and 84-111 are on NUMA
+// node 1.
+std::vector<Cpu::Raw> GetRawCustomTopology() {
+  std::vector<Cpu::Raw> raw_cpus;
+
+  for (int i = 0; i < Topology::kNumTestCpus; i++) {
+    Cpu::Raw raw_cpu;
+    raw_cpu.cpu = i;
+    raw_cpu.core = GetRawCore(/*cpu=*/i);
+    raw_cpu.smt_idx = i / (Topology::kNumTestCpus / 2);
+    for (int j = 0; j < Topology::kNumTestCpus; j++) {
+      // For CPU `j`, we want both `j` and the sibling(s) of `j` to be in the
+      // siblings list.
+      if (GetRawCore(/*cpu=*/j) == raw_cpu.core) {
+        raw_cpu.siblings.push_back(j);
+      }
+    }
+    raw_cpu.numa_node = GetRawNumaNode(/*cpu=*/i);
+
+    for (int j = 0; j < Topology::kNumTestCpus; j++) {
+      // For CPU `j`, we want both `j` and the sibling(s) of `j` to be in the
+      // siblings list.
+      if (GetRawNumaNode(/*cpu=*/j) == raw_cpu.numa_node) {
+        raw_cpu.l3_siblings.push_back(j);
+      }
+    }
+
+    raw_cpus.push_back(raw_cpu);
+  }
+  return raw_cpus;
+}
+
+// Tests that `num_cpus()` returns number of CPUs in the custom topology.
+TEST(TopologyTest, CustomTopologyNumCpus) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  EXPECT_THAT(CustomTopology()->all_cpus().Size(),
+              Eq(CustomTopology()->num_cpus()));
+}
+
+// Tests that the custom topology contains all CPUs.
+TEST(TopologyTest, CustomTopologyAllCpus) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  for (uint32_t i = 0; i < Topology::kNumTestCpus; i++) {
+    EXPECT_THAT(CustomTopology()->cpu(i).id(), Eq(i));
+  }
+}
+
+// Tests that `ToCpuList` returns an empty list when there are no CPUs.
+TEST(TopologyTest, CustomCpuListContentsEmpty) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  EXPECT_THAT(CustomTopology()->ToCpuList(std::vector<int>()).Empty(),
+              IsTrue());
+}
+
+// Tests that `ToCpuList` returns a correct list of the specified CPUs.
+TEST(TopologyTest, CustomCpuListContents) {
+  std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
+  UpdateCustomTopology(GetRawCustomTopology());
+  CpuList cpu_list = CustomTopology()->ToCpuList(cpu_ids);
+  absl::flat_hash_set<int> expected_contents(cpu_ids.begin(), cpu_ids.end());
+
+  for (const Cpu& cpu : cpu_list) {
+    EXPECT_THAT(expected_contents.erase(cpu.id()), Eq(1));
+  }
+  EXPECT_THAT(expected_contents.empty(), IsTrue());
+}
+
+// Tests that `ToCpuSet` returns an empty list when there are no CPUs.
+TEST(TopologyTest, CustomCpuSetContentEmpty) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  CpuList cpu_list = CustomTopology()->ToCpuList(std::vector<int>());
+  cpu_set_t cpu_set = Topology::ToCpuSet(cpu_list);
+  EXPECT_THAT(CPU_COUNT(&cpu_set), Eq(0));
+}
+
+// Tests that `ToCpuSet` returns a correct list of the specified CPUs.
+TEST(TopologyTest, CustomCpuSetContents) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
+  CpuList cpu_list = CustomTopology()->ToCpuList(cpu_ids);
+  cpu_set_t cpu_set = Topology::ToCpuSet(cpu_list);
+  absl::flat_hash_set<int> expected_contents(cpu_ids.begin(), cpu_ids.end());
+
+  for (int i = 0; i < CPU_SETSIZE; i++) {
+    if (CPU_ISSET(i, &cpu_set)) {
+      EXPECT_THAT(expected_contents.erase(i), Eq(1));
+    }
+  }
+  EXPECT_THAT(expected_contents.empty(), IsTrue());
+}
+
+// Tests that `all_cores()` returns all physical cores in the custom topology.
+TEST(TopologyTest, CustomCheckAllCores) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  std::vector<Cpu> expected;
+  for (int i = 0; i < CustomTopology()->num_cpus() / 2; i++) {
+    expected.push_back(CustomTopology()->cpu(i));
+  }
+  EXPECT_THAT(CustomTopology()->all_cores(),
+              Eq(CustomTopology()->ToCpuList(expected)));
+}
+
+// Tests that each CPU is associated with the correct physical core.
+TEST(TopologyTest, CustomCheckCores) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  for (int i = 0; i < CustomTopology()->num_cpus() / 2; i++) {
+    Cpu expected_core = CustomTopology()->cpu(i);
+
+    Cpu first_cpu = CustomTopology()->cpu(i);
+    EXPECT_THAT(CustomTopology()->Core(first_cpu), Eq(expected_core));
+
+    // CPU 0 is co-located with CPU 56, CPU 1 is co-located with CPU 57, ...,
+    // CPU 55 is co-located with CPU 111.
+    int sibling = i + CustomTopology()->num_cpus() / 2;
+    Cpu second_cpu = CustomTopology()->cpu(sibling);
+    EXPECT_THAT(CustomTopology()->Core(second_cpu), Eq(expected_core));
+  }
+}
+
+// Tests that each CPU returns the correct siblings. The CPU's siblings are all
+// CPUs co-located on its physical core (including itself).
+TEST(TopologyTest, CustomCheckSiblings) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  for (int i = 0; i < CustomTopology()->num_cpus() / 2; i++) {
+    // CPU 0 is co-located with CPU 56, CPU 1 is co-located with CPU 57, ...,
+    // CPU 55 is co-located with CPU 111.
+    int sibling = i + CustomTopology()->num_cpus() / 2;
+    CpuList expected =
+        CustomTopology()->ToCpuList(std::vector<int>{i, sibling});
+
+    // Check the siblings for CPU `i`.
+    CpuList siblings = CustomTopology()->cpu(i).siblings();
+    EXPECT_THAT(siblings, Eq(expected));
+
+    // Check the siblings for CPU `sibling`.
+    siblings = CustomTopology()->cpu(sibling).siblings();
+    EXPECT_THAT(siblings, Eq(expected));
+  }
+}
+
+// Tests that each CPU returns an expected list of L3 cache siblings.
+// e.g. On a 112 CPU system.
+// CPUs [0 - 27] share L3 with [56 - 83]
+// CPUs [28 - 55] share L3 with [84 - 111]
+TEST(TopologyTest, CustomCheckL3Siblings) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  int sibling_offset = CustomTopology()->num_cpus() / 2;
+  int l3_offset = sibling_offset / 2;
+
+  for (int i = 0; i < sibling_offset; i += l3_offset) {
+    CpuList expected = CustomTopology()->EmptyCpuList();
+    for (int j = i; j < (i + l3_offset); j++) {
+      expected.Set(j);
+      expected.Set(j + sibling_offset);
+    }
+
+    for (int j = i; j < (i + l3_offset); j++) {
+      // Check the L3 siblings for CPU `j`.
+      CpuList siblings = CustomTopology()->cpu(j).l3_siblings();
+      EXPECT_THAT(siblings, Eq(expected));
+
+      // Check the L3 siblings for sibling of CPU `j`.
+      siblings = CustomTopology()->cpu(j + sibling_offset).l3_siblings();
+      EXPECT_THAT(siblings, Eq(expected));
+    }
+  }
+}
+
+// Tests that the custom topology returns the highest NUMA node.
+TEST(TopologyTest, CustomCheckHighestNodeIdx) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  EXPECT_THAT(CustomTopology()->highest_node_idx(), Eq(1));
+}
+
+// Tests that each CPU is assigned the correct SMT index.
+TEST(TopologyTest, CustomCheckSmtIdx) {
+  UpdateCustomTopology(GetRawCustomTopology());
+
+  // We don't have any larger SMT toplogies.
+  EXPECT_THAT(CustomTopology()->smt_count(), Le(2));
+
+  for (int i = 0; i < CustomTopology()->num_cpus(); i++) {
+    Cpu cpu = CustomTopology()->cpu(i);
+    CpuList siblings = cpu.siblings();
+    bool found = false;
+    for (int j = 0; j < siblings.Size(); j++) {
+      Cpu sibling = siblings.GetNthCpu(j);
+      ASSERT_THAT(sibling.valid(), IsTrue());
+
+      // Siblings should be monotonically increasing.
+      if (j > 0) {
+        EXPECT_THAT(sibling.id(), Gt(siblings.GetNthCpu(j - 1).id()));
+      }
+
+      if (sibling.id() == cpu.id()) {
+        found = true;
+        EXPECT_THAT(cpu.smt_idx(), Eq(j));
+        const int expected_smt_idx =
+            (cpu.id() < CustomTopology()->num_cpus() / 2) ? 0 : 1;
+        EXPECT_THAT(cpu.smt_idx(), Eq(expected_smt_idx));
+      }
+    }
+    EXPECT_THAT(found, IsTrue());
+  }
+}
+
+// Tests that immediately dereferencing the iterator returned by `begin()` for
+// the custom topology's CPUs returns the first CPU.
+TEST(TopologyTest, CustomIteratorBegin) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  EXPECT_THAT(CustomTopology()->all_cpus().begin()->id(), Eq(0));
+}
+
+// Tests that immediately dereferencing the iterator returned by `end()` for the
+// custom topology's CPUs returns an invalid CPU.
+TEST(TopologyTest, CustomIteratorEnd) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  EXPECT_THAT(CustomTopology()->all_cpus().end()->valid(), IsFalse());
+}
+
+// Tests that the iterator iterates over the `CpuList` correctly with a for
+// loop.
+TEST(TopologyTest, CustomIterator) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  std::vector<int> cpus = {5, 20, 87, 94, 100};
+  CpuList list = CustomTopology()->ToCpuList(cpus);
+
+  int index = 0;
+  auto it = list.begin();
+  for (; it != list.end(); it++) {
+    EXPECT_THAT(it->id(), Eq(cpus[index++]));
+  }
+  EXPECT_THAT(it, Eq(list.end()));
+  // Since `it` == `list.end()`, `it` should point to an invalid CPU.
+  EXPECT_THAT(it->valid(), IsFalse());
+  // Check that the for loop only iterated once per CPU in `list`.
+  EXPECT_THAT(index, Eq(cpus.size()));
+}
+
+// Tests that the iterator iterates over the `CpuList` correctly with a
+// range-based for loop.
+TEST(TopologyTest, CustomIteratorRange) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  std::vector<int> cpus = {5, 20, 87, 94, 100};
+  CpuList list = CustomTopology()->ToCpuList(cpus);
+
+  int index = 0;
+  for (const Cpu& cpu : list) {
+    EXPECT_THAT(cpu.id(), Eq(cpus[index++]));
+  }
+  // Check that the range-based for loop only iterated once per CPU in `list`.
+  EXPECT_THAT(index, Eq(cpus.size()));
+}
+
+// Tests that the iterator works properly when the first and last CPUs are set
+// in the `CpuList` (i.e., tests the boundary cases).
+TEST(TopologyTest, CustomIteratorBoundary) {
+  UpdateCustomTopology(GetRawCustomTopology());
+  std::vector<int> cpus = {0, 20, 111};
+  CpuList list = CustomTopology()->ToCpuList(cpus);
+
+  int index = 0;
+  auto it = list.begin();
+  for (; it != list.end(); it++) {
+    EXPECT_THAT(it->id(), Eq(cpus[index++]));
+  }
+  EXPECT_THAT(it, Eq(list.end()));
+  // Since `it` == `list.end()`, `it` should point to an invalid CPU.
+  EXPECT_THAT(it->valid(), IsFalse());
+  // Check that the for loop only iterated once per CPU in `list`.
+  EXPECT_THAT(index, Eq(cpus.size()));
 }
 
 }  // namespace

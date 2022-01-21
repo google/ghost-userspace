@@ -51,6 +51,17 @@ class Topology;
 // ...
 class Cpu {
  public:
+  struct Raw {
+    int cpu;
+    int core;
+    int smt_idx;
+    std::vector<int> siblings;
+    std::vector<int> l3_siblings;
+    int numa_node;
+
+    bool operator<(const Raw& other) const { return cpu < other.cpu; }
+  };
+
   enum class UninitializedType { kUninitialized };
   explicit Cpu(UninitializedType) : rep_(nullptr) {}
 
@@ -410,6 +421,11 @@ class Topology {
   // These two functions use the private `Topology` constructor.
   friend Topology* MachineTopology();
   friend void UpdateTestTopology(const std::filesystem::path& test_directory);
+  friend void UpdateCustomTopology(const std::vector<Cpu::Raw>& cpus);
+  friend Topology* CustomTopology();
+
+  // The number of CPUs in the test topology.
+  static constexpr uint32_t kNumTestCpus = 112;
 
   CpuList EmptyCpuList() const { return CpuList(*this); }
 
@@ -520,9 +536,7 @@ class Topology {
   // constructor.
   struct InitHost {};
   struct InitTest {};
-
-  // The number of CPUs in the test topology.
-  static constexpr uint32_t kNumTestCpus = 112;
+  struct InitCustom {};
 
   // Constructs a Topology object representing the current machine.
   explicit Topology(InitHost);
@@ -531,6 +545,8 @@ class Topology {
   // `test_directory` is a path to scratch space in the file system that the
   // topology can use.
   Topology(InitTest, const std::filesystem::path& test_directory);
+
+  Topology(InitCustom, std::vector<Cpu::Raw> cpus);
 
   void CreateCpuListsForNumaNodes() {
     for (const Cpu& cpu : all_cpus()) {
@@ -544,6 +560,10 @@ class Topology {
   absl::flat_hash_map<int, CpuList> GetAllSiblings(
       const std::filesystem::path& path_prefix,
       const std::string path_suffix) const;
+
+  // Check that all siblings are consistent. In other words, if CPUs x and y are
+  // siblings, then their siblings lists should be identical.
+  void CheckSiblings() const;
 
   // Gets the largest NUMA node index. Note that this is different from the
   // number of NUMA nodes, if indexing skips some offline or unavailable NUMA
@@ -611,6 +631,14 @@ void UpdateTestTopology(const std::filesystem::path& test_directory);
 // owned by the `TestTopology` function. The pointer lives until the process
 // dies or `UpdateTestTopology()` is called again.
 Topology* TestTopology();
+
+// Creates a custom topology from `cpus`.
+void UpdateCustomTopology(const std::vector<Cpu::Raw>& cpus);
+
+// Returns the custom topology. The pointer is never null and is owned by the
+// `CustomTopology` function. The pointer lives until the process dies or
+// `UpdateCustomTopology()` is called again.
+Topology* CustomTopology();
 
 }  // namespace ghost
 
