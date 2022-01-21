@@ -201,7 +201,7 @@ struct AgentRpcResponse {
   // Most RPC functions will only need to return a value via this response_code.
   int64_t response_code = -1;
 
-  // This response buffer may be used to serialize arbitrary plan-old-data as
+  // This response buffer may be used to serialize arbitrary plain-old-data as
   // part of the RPC response.
   AgentRpcBuffer<> buffer;
 };
