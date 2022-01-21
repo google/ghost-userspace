@@ -23,6 +23,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <unordered_map>
 #include <utility>
 
@@ -78,35 +79,112 @@ void Notification::WaitForNotification() {
   Futex::Wait(&notified_, NotifiedState::kWaiter);
 }
 
+int64_t GetGtidFromFile(FILE *stream) {
+  int64_t gtid;
+  if (fscanf(stream, "%ld", &gtid) != 1) return -1;
+  return gtid;
+}
+
+int64_t gtid(int64_t pid) {
+  int64_t gtid = -1;
+  FILE *stream =
+      fopen(absl::StrCat("/proc/", pid, "/ghost/gtid").c_str(), "r");
+  if (stream) {
+    gtid = GetGtidFromFile(stream);
+    fclose(stream);
+  }
+  if (gtid < 0) {
+    gtid = pid << GHOST_TID_SEQNUM_BITS;
+  }
+  return gtid;
+}
+
+int64_t GetTgidFromFile(FILE *stream) {
+  int64_t tgid = -1;
+  char* line = NULL;
+  size_t len = 0;
+  while (getline(&line, &len, stream) != -1) {
+    std::istringstream iss(line);
+    std::string field;
+    iss >> field;
+    if (iss && field == "Tgid:") {
+      iss >> tgid;
+      break;
+    }
+  }
+
+  free(line);
+  return tgid;
+}
+
 pid_t Gtid::tgid() const {
-  int64_t tgid;
-  // This should ideally be in ":ghost" but that results in a
-  // dependency inversion because ":ghost" depends on ":base".
-  int rc = syscall(__NR_ghost, GHOST_GTID_LOOKUP, id(), GHOST_GTID_LOOKUP_TGID,
-                   /*flags=*/0, &tgid);
-  if (rc == -1) return -1;
+  int64_t pid = tid(), tgid = -1, gtid;
+  int statusfd = -1, gtidfd = -1;
+  FILE *status_stream = NULL, *gtid_stream = NULL;
+
+  int dirfd = open(absl::StrCat("/proc/", pid).c_str(), O_RDONLY);
+  if (dirfd < 0) {
+    goto done;
+  }
+
+  statusfd = openat(dirfd, "status", O_RDONLY);
+  if (statusfd < 0) {
+    goto done;
+  }
+
+  gtidfd = openat(dirfd, "ghost/gtid", O_RDONLY);
+  if (gtidfd < 0) {
+    goto done;
+  }
+
+  status_stream = fdopen(statusfd, "r");
+  if (!status_stream) {
+    goto done;
+  }
+  statusfd = -1;  // 'status_stream' now owns the underlying fd.
+
+  gtid_stream = fdopen(gtidfd, "r");
+  if (!gtid_stream) {
+    goto done;
+  }
+  gtidfd = -1;  // 'gtid_stream' now owns the underlying fd.
+
+  tgid = GetTgidFromFile(status_stream);
+  gtid = GetGtidFromFile(gtid_stream);
+
+  if (gtid != id()) {  // Check for pid recycling.
+    tgid = -1;
+  }
+
+done:
+  if (gtid_stream) {
+    CHECK_LT(gtidfd, 0);
+    fclose(gtid_stream);
+  }
+
+  if (status_stream) {
+    CHECK_LT(statusfd, 0);
+    fclose(status_stream);
+  }
+
+  if (gtidfd >= 0) {
+    close(gtidfd);
+  }
+
+  if (statusfd >= 0) {
+    close(statusfd);
+  }
+
+  if (dirfd >= 0) {
+    close(dirfd);
+  }
+
   return tgid;
 }
 
 pid_t Gtid::tid() const { return gtid_raw_ >> GHOST_TID_SEQNUM_BITS; }
 
-int64_t GetGtid() {
-  int64_t gtid;
-
-  std::string gtid_path = absl::StrCat("/proc/", GetTID(), "/ghost/gtid");
-
-  std::ifstream ifs(gtid_path);
-  if (ifs) {
-    ifs >> gtid;
-  } else {  // Fallback to syscall.
-    int ret = syscall(__NR_ghost, GHOST_BASE_GET_GTID, &gtid);
-    if (ABSL_PREDICT_FALSE(ret < 0)) {
-      gtid = (int64_t)GetTID() << GHOST_TID_SEQNUM_BITS;
-    }
-  }
-
-  return gtid;
-}
+int64_t GetGtid() { return gtid(GetTID()); }
 
 ABSL_CONST_INIT static absl::base_internal::SpinLock gtid_name_map_lock(
     absl::kConstInit, absl::base_internal::SCHEDULE_KERNEL_ONLY);
