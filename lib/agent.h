@@ -156,6 +156,21 @@ struct AgentRpcBuffer {
     std::copy_n(serialized, size, std::begin(data));
   }
 
+  template <class T>
+  void SerializeVector(const std::vector<T> vt) {
+    static_assert(std::is_trivially_copyable<T>::value,
+                  "Template type needs to be trivially copyable.");
+    static_assert(!std::is_pointer<T>::value,
+                  "Template type must not be a pointer.");
+    // Template type cannot be larger than the buffer.
+    CHECK_LE(sizeof(T) * vt.size(), BufferBytes);
+
+    for (size_t i = 0; i < vt.size(); i++) {
+      const std::byte* serialized = reinterpret_cast<const std::byte*>(&vt[i]);
+      std::copy_n(serialized, sizeof(T), std::begin(data) + (sizeof(T) * i));
+    }
+  }
+
   // See comment above for `Serialize<T>(const T& t, size_t size)`. This
   // function does the same thing but assumes that the size of `T` is
   // `sizeof(T)`. In some cases, such as array pointers, this is not true. In
@@ -169,11 +184,12 @@ struct AgentRpcBuffer {
   }
 
   // Converts the raw bytes in the internal data array to the given type.
-  // See disclaimer attached to the comment for this struct. `size` is the size
-  // of the type T. We have `size` as a parameter rather than use `sizeof(T)`
-  // since `sizeof(T)` does not produce the correct size for array pointers.
+  // See disclaimer attached to the comment for this struct. The deserialized
+  // output is written to `t`. `size` is the size of the type T. We have `size`
+  // as a parameter rather than use `sizeof(T)` since `sizeof(T)` does not
+  // produce the correct size for array pointers.
   template <class T>
-  T Deserialize(size_t size) const {
+  void Deserialize(T& t, size_t size) const {
     static_assert(std::is_trivially_copyable<T>::value,
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,
@@ -181,11 +197,29 @@ struct AgentRpcBuffer {
     // Template type cannot be larger than the buffer.
     CHECK_LE(size, BufferBytes);
 
-    T t;
     std::byte* deserialized = reinterpret_cast<std::byte*>(&t);
     std::copy_n(std::begin(data), size, deserialized);
 
     return t;
+  }
+
+  template <class T>
+  std::vector<T> DeserializeVector(size_t num_elements) {
+    static_assert(std::is_trivially_copyable<T>::value,
+                  "Template type needs to be trivially copyable.");
+    static_assert(!std::is_pointer<T>::value,
+                  "Template type must not be a pointer.");
+    // Template type cannot be larger than the buffer.
+    CHECK_LE(sizeof(T) * num_elements, BufferBytes);
+
+    // Note that this construct `num_elements` instance of `T` using the default
+    // constructor for `T`.
+    std::vector<T> vt(num_elements);
+    for (size_t i = 0; i < num_elements; i++) {
+      std::byte* deserialized = reinterpret_cast<std::byte*>(&vt[i]);
+      std::copy_n(std::begin(data) + (sizeof(T) * i), sizeof(T), deserialized);
+    }
+    return vt;
   }
 
   // See comment above for `Deserialize<T>(size_t size)`. This function does the
@@ -197,7 +231,9 @@ struct AgentRpcBuffer {
   T Deserialize() const {
     static_assert(sizeof(T) <= BufferBytes,
                   "Template type cannot be larger than the buffer.");
-    return Deserialize<T>(sizeof(T));
+    T t;
+    Deserialize<T>(t, sizeof(T));
+    return t;
   }
 
   // This is a region where arbitrary bytes of data can be written (ie. when the

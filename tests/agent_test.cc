@@ -222,11 +222,37 @@ TEST(AgentTest, RpcSerializationSimpleSize) {
   };
   AgentRpcResponse response;
   response.buffer.Serialize<MyStruct>(s, sizeof(s));
-  MyStruct deserialized = response.buffer.Deserialize<MyStruct>(sizeof(s));
+
+  MyStruct deserialized;
+  memset(&deserialized, 0, sizeof(deserialized));
+  response.buffer.Deserialize<MyStruct>(deserialized, sizeof(s));
 
   EXPECT_EQ(s.x, deserialized.x);
   EXPECT_EQ(s.y, deserialized.y);
   EXPECT_EQ(s.z, deserialized.z);
+}
+
+// Basic test of vector serialization/deserialization.
+TEST(AgentTest, RpcSerializationSimpleVector) {
+  struct MyStruct {
+    int x, y, z;
+  };
+
+  static constexpr int kNumIterations = 10;
+  std::vector<MyStruct> to_serialize;
+  for (int i = 0; i < kNumIterations; i++) {
+    to_serialize.push_back({.x = i, .y = i + 2, .z = INT_MIN + i});
+  }
+  AgentRpcResponse response;
+  response.buffer.SerializeVector<MyStruct>(to_serialize);
+
+  std::vector<MyStruct> deserialized =
+      response.buffer.DeserializeVector<MyStruct>(kNumIterations);
+  for (int i = 0; i < kNumIterations; i++) {
+    EXPECT_EQ(to_serialize[i].x, deserialized[i].x);
+    EXPECT_EQ(to_serialize[i].y, deserialized[i].y);
+    EXPECT_EQ(to_serialize[i].z, deserialized[i].z);
+  }
 }
 
 // Tests the serialization mechanism over the RPC interface.
