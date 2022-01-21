@@ -147,7 +147,26 @@ void FifoScheduler::TaskRunnable(FifoTask* task, const Message& msg) {
   }
 }
 
-void FifoScheduler::TaskDeparted(FifoTask* task, const Message& msg) {}
+void FifoScheduler::TaskDeparted(FifoTask* task, const Message& msg) {
+  const ghost_msg_payload_task_departed* payload =
+      static_cast<const ghost_msg_payload_task_departed*>(msg.payload());
+
+  if (task->oncpu() || payload->from_switchto) {
+    TaskOffCpu(task, /*blocked=*/false, payload->from_switchto);
+  } else if (task->runnable()) {
+    CpuState* cs = cpu_state_of(task);
+    CHECK(cs->run_queue.Erase(task));
+  } else {
+    CHECK(task->blocked());
+  }
+
+  if (payload->from_switchto) {
+    Cpu cpu = topology()->cpu(payload->cpu);
+    enclave()->GetAgent(cpu)->Ping();
+  }
+
+  allocator()->FreeTask(task);
+}
 
 void FifoScheduler::TaskDead(FifoTask* task, const Message& msg) {
   CHECK(task->blocked());
