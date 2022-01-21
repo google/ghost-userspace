@@ -208,6 +208,27 @@ TEST(AgentTest, RpcSerializationSimple) {
   EXPECT_EQ(s.z, deserialized.z);
 }
 
+// Basic test of serialization/deserialization, doing these operations in-place
+// rather than via the RPC interface. This test uses the `Serialize<T>()` and
+// `Deserialize<T>()` functions with the `size_t size` parameter.
+TEST(AgentTest, RpcSerializationSimpleSize) {
+  struct MyStruct {
+    int x, y, z;
+  };
+  const MyStruct s = {
+      .x = 3,
+      .y = 5,
+      .z = INT_MIN,
+  };
+  AgentRpcResponse response;
+  response.buffer.Serialize<MyStruct>(s, sizeof(s));
+  MyStruct deserialized = response.buffer.Deserialize<MyStruct>(sizeof(s));
+
+  EXPECT_EQ(s.x, deserialized.x);
+  EXPECT_EQ(s.y, deserialized.y);
+  EXPECT_EQ(s.z, deserialized.z);
+}
+
 // Tests the serialization mechanism over the RPC interface.
 TEST(AgentTest, RpcSerialization) {
   auto ap = AgentProcess<FullSimpleAgent<>, AgentConfig>(

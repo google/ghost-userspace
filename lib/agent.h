@@ -139,37 +139,65 @@ struct AgentRpcBuffer {
   // Converts the input to raw bytes and stores them in the internal data array.
   // Note that T shouldn't contain any pointers, since these pointers will not
   // have meaning for the process on the other side of the shared memory region.
-  // See disclaimer attached to the comment for this struct.
+  // See disclaimer attached to the comment for this struct. `size` is the size
+  // of the type T. We have `size` as a parameter rather than use `sizeof(T)`
+  // since `sizeof(T)` does not produce the correct size for array pointers.
   template <class T>
-  void Serialize(const T& t) {
+  void Serialize(const T& t, size_t size) {
     static_assert(std::is_trivially_copyable<T>::value,
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,
                   "Template type must not be a pointer.");
-    static_assert(sizeof(T) <= BufferBytes,
-                  "Template type cannot be larger than the buffer.");
+    // Template type cannot be larger than the buffer.
+    CHECK_LE(size, BufferBytes);
 
     const std::byte* serialized =
         reinterpret_cast<const std::byte*>(&t);
-    std::copy_n(serialized, sizeof(T), std::begin(data));
+    std::copy_n(serialized, size, std::begin(data));
+  }
+
+  // See comment above for `Serialize<T>(const T& t, size_t size)`. This
+  // function does the same thing but assumes that the size of `T` is
+  // `sizeof(T)`. In some cases, such as array pointers, this is not true. In
+  // those cases, call `Serialize<T>(const T& t, size_t size)` above and pass
+  // the size to the `size` parameter.
+  template <class T>
+  void Serialize(const T& t) {
+    static_assert(sizeof(T) <= BufferBytes,
+                  "Template type cannot be larger than the buffer.");
+    Serialize(t, sizeof(T));
   }
 
   // Converts the raw bytes in the internal data array to the given type.
-  // See disclaimer attached to the comment for this struct.
+  // See disclaimer attached to the comment for this struct. `size` is the size
+  // of the type T. We have `size` as a parameter rather than use `sizeof(T)`
+  // since `sizeof(T)` does not produce the correct size for array pointers.
   template <class T>
-  T Deserialize() const {
+  T Deserialize(size_t size) const {
     static_assert(std::is_trivially_copyable<T>::value,
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,
                   "Template type must not be a pointer.");
-    static_assert(sizeof(T) <= BufferBytes,
-                  "Template type cannot be larger than the buffer.");
+    // Template type cannot be larger than the buffer.
+    CHECK_LE(size, BufferBytes);
 
     T t;
     std::byte* deserialized = reinterpret_cast<std::byte*>(&t);
-    std::copy_n(std::begin(data), sizeof(T), deserialized);
+    std::copy_n(std::begin(data), size, deserialized);
 
     return t;
+  }
+
+  // See comment above for `Deserialize<T>(size_t size)`. This function does the
+  // same thing but assumes that the size of `T` is `sizeof(T)`. In some cases,
+  // such as array pointers, this is not true. In those cases, call
+  // `Deserialize<T>(size_t size)` above and pass the size to the `size`
+  // parameter.
+  template <class T>
+  T Deserialize() const {
+    static_assert(sizeof(T) <= BufferBytes,
+                  "Template type cannot be larger than the buffer.");
+    return Deserialize<T>(sizeof(T));
   }
 
   // This is a region where arbitrary bytes of data can be written (ie. when the
