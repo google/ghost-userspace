@@ -204,7 +204,7 @@ struct AgentRpcBuffer {
   }
 
   template <class T>
-  std::vector<T> DeserializeVector(size_t num_elements) {
+  std::vector<T> DeserializeVector(size_t num_elements) const {
     static_assert(std::is_trivially_copyable<T>::value,
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,
