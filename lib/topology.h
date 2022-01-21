@@ -409,7 +409,7 @@ class Topology {
  public:
   // These two functions use the private `Topology` constructor.
   friend Topology* MachineTopology();
-  friend Topology* TestTopology(const std::filesystem::path& test_directory);
+  friend void UpdateTestTopology(const std::filesystem::path& test_directory);
 
   CpuList EmptyCpuList() const { return CpuList(*this); }
 
@@ -530,7 +530,7 @@ class Topology {
   // below for the `TestTopology` function for a description of the topology.
   // `test_directory` is a path to scratch space in the file system that the
   // topology can use.
-  explicit Topology(InitTest, const std::filesystem::path& test_directory);
+  Topology(InitTest, const std::filesystem::path& test_directory);
 
   void CreateCpuListsForNumaNodes() {
     for (const Cpu& cpu : all_cpus()) {
@@ -595,18 +595,22 @@ class Topology {
 // process dies.
 Topology* MachineTopology();
 
-// Returns a topology used by the topology tests. This topology has 112 CPUs,
-// 2 hardware threads per physical core (so there are 56 physical cores in
-// total), and 2 NUMA nodes. CPU 0 is co-located with CPU 56 on the same
-// physical core, CPU 1 is co-located with CPU 57, ..., and CPU 55 is
-// co-located with CPU 111. This is how Linux configures CPUs. Lastly, CPUs
-// 0-27 and 56-83 are on NUMA node 0 and CPUs 28-55 and 84-111 are on NUMA
-// node 1.
+// Creates a topology used by the topology tests and replaces the current test
+// topology if one exists. This topology has 112 CPUs, 2 hardware threads per
+// physical core (so there are 56 physical cores in total), and 2 NUMA nodes.
+// CPU 0 is co-located with CPU 56 on the same physical core, CPU 1 is
+// co-located with CPU 57, ..., and CPU 55 is co-located with CPU 111. This is
+// how Linux configures CPUs. Lastly, CPUs 0-27 and 56-83 are on NUMA node 0 and
+// CPUs 28-55 and 84-111 are on NUMA node 1.
 //
 // `test_directory` is a path to scratch space in the file system that the
-// topology can use. The pointer is never null and is owned by the
-// `TestTopology` function. The pointer lives until the process dies.
-Topology* TestTopology(const std::filesystem::path& test_directory);
+// topology can use.
+void UpdateTestTopology(const std::filesystem::path& test_directory);
+
+// Returns the test topology described above. The pointer is never null and is
+// owned by the `TestTopology` function. The pointer lives until the process
+// dies or `UpdateTestTopology()` is called again.
+Topology* TestTopology();
 
 }  // namespace ghost
 

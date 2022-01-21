@@ -61,23 +61,22 @@ TEST(TopologyTest, CpuNumaNode) {
 TEST(TopologyTest, TopologyNumCpus) {
   EXPECT_THAT(MachineTopology()->all_cpus().Size(),
               Eq(MachineTopology()->num_cpus()));
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  EXPECT_THAT(test_topology->all_cpus().Size(), Eq(test_topology->num_cpus()));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  EXPECT_THAT(TestTopology()->all_cpus().Size(),
+              Eq(TestTopology()->num_cpus()));
 }
 
 // Tests that `ToCpuList` returns an empty list when there are no CPUs.
 TEST(TopologyTest, CpuListContentsEmpty) {
-  EXPECT_THAT(TestTopology(absl::GetFlag(FLAGS_test_tmpdir))
-                  ->ToCpuList(std::vector<int>())
-                  .Empty(),
-              IsTrue());
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  EXPECT_THAT(TestTopology()->ToCpuList(std::vector<int>()).Empty(), IsTrue());
 }
 
 // Tests that `ToCpuList` returns a correct list of the specified CPUs.
 TEST(TopologyTest, CpuListContents) {
   std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
-  CpuList cpu_list =
-      TestTopology(absl::GetFlag(FLAGS_test_tmpdir))->ToCpuList(cpu_ids);
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  CpuList cpu_list = TestTopology()->ToCpuList(cpu_ids);
   absl::flat_hash_set<int> expected_contents(cpu_ids.begin(), cpu_ids.end());
 
   for (const Cpu& cpu : cpu_list) {
@@ -88,17 +87,17 @@ TEST(TopologyTest, CpuListContents) {
 
 // Tests that `ToCpuSet` returns an empty list when there are no CPUs.
 TEST(TopologyTest, CpuSetContentEmpty) {
-  CpuList cpu_list = TestTopology(absl::GetFlag(FLAGS_test_tmpdir))
-                         ->ToCpuList(std::vector<int>());
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  CpuList cpu_list = TestTopology()->ToCpuList(std::vector<int>());
   cpu_set_t cpu_set = Topology::ToCpuSet(cpu_list);
   EXPECT_THAT(CPU_COUNT(&cpu_set), Eq(0));
 }
 
 // Tests that `ToCpuSet` returns a correct list of the specified CPUs.
 TEST(TopologyTest, CpuSetContents) {
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
   std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
-  CpuList cpu_list =
-      TestTopology(absl::GetFlag(FLAGS_test_tmpdir))->ToCpuList(cpu_ids);
+  CpuList cpu_list = TestTopology()->ToCpuList(cpu_ids);
   cpu_set_t cpu_set = Topology::ToCpuSet(cpu_list);
   absl::flat_hash_set<int> expected_contents(cpu_ids.begin(), cpu_ids.end());
 
@@ -112,48 +111,48 @@ TEST(TopologyTest, CpuSetContents) {
 
 // Tests that `all_cores()` returns all physical cores in the topology.
 TEST(TopologyTest, CheckAllCores) {
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
   std::vector<Cpu> expected;
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  for (int i = 0; i < test_topology->num_cpus() / 2; i++) {
-    expected.push_back(test_topology->cpu(i));
+  for (int i = 0; i < TestTopology()->num_cpus() / 2; i++) {
+    expected.push_back(TestTopology()->cpu(i));
   }
-  EXPECT_THAT(test_topology->all_cores(),
-              Eq(test_topology->ToCpuList(expected)));
+  EXPECT_THAT(TestTopology()->all_cores(),
+              Eq(TestTopology()->ToCpuList(expected)));
 }
 
 // Tests that each CPU is associated with the correct physical core.
 TEST(TopologyTest, CheckCores) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  for (int i = 0; i < test_topology->num_cpus() / 2; i++) {
-    Cpu expected_core = test_topology->cpu(i);
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  for (int i = 0; i < TestTopology()->num_cpus() / 2; i++) {
+    Cpu expected_core = TestTopology()->cpu(i);
 
-    Cpu first_cpu = test_topology->cpu(i);
-    EXPECT_THAT(test_topology->Core(first_cpu), Eq(expected_core));
+    Cpu first_cpu = TestTopology()->cpu(i);
+    EXPECT_THAT(TestTopology()->Core(first_cpu), Eq(expected_core));
 
     // CPU 0 is co-located with CPU 56, CPU 1 is co-located with CPU 57, ...,
     // CPU 55 is co-located with CPU 111.
-    int sibling = i + test_topology->num_cpus() / 2;
-    Cpu second_cpu = test_topology->cpu(sibling);
-    EXPECT_THAT(test_topology->Core(second_cpu), Eq(expected_core));
+    int sibling = i + TestTopology()->num_cpus() / 2;
+    Cpu second_cpu = TestTopology()->cpu(sibling);
+    EXPECT_THAT(TestTopology()->Core(second_cpu), Eq(expected_core));
   }
 }
 
 // Tests that each CPU returns the correct siblings. The CPU's siblings are all
 // CPUs co-located on its physical core (including itself).
 TEST(TopologyTest, CheckSiblings) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  for (int i = 0; i < test_topology->num_cpus() / 2; i++) {
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  for (int i = 0; i < TestTopology()->num_cpus() / 2; i++) {
     // CPU 0 is co-located with CPU 56, CPU 1 is co-located with CPU 57, ...,
     // CPU 55 is co-located with CPU 111.
-    int sibling = i + test_topology->num_cpus() / 2;
-    CpuList expected = test_topology->ToCpuList(std::vector<int>{i, sibling});
+    int sibling = i + TestTopology()->num_cpus() / 2;
+    CpuList expected = TestTopology()->ToCpuList(std::vector<int>{i, sibling});
 
     // Check the siblings for CPU `i`.
-    CpuList siblings = test_topology->cpu(i).siblings();
+    CpuList siblings = TestTopology()->cpu(i).siblings();
     EXPECT_THAT(siblings, Eq(expected));
 
     // Check the siblings for CPU `sibling`.
-    siblings = test_topology->cpu(sibling).siblings();
+    siblings = TestTopology()->cpu(sibling).siblings();
     EXPECT_THAT(siblings, Eq(expected));
   }
 }
@@ -163,12 +162,12 @@ TEST(TopologyTest, CheckSiblings) {
 // CPUs [0 - 27] share L3 with [56 - 83]
 // CPUs [28 - 55] share L3 with [84 - 111]
 TEST(TopologyTest, CheckL3Siblings) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  int sibling_offset = test_topology->num_cpus() / 2;
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  int sibling_offset = TestTopology()->num_cpus() / 2;
   int l3_offset = sibling_offset / 2;
 
   for (int i = 0; i < sibling_offset; i += l3_offset) {
-    CpuList expected = test_topology->EmptyCpuList();
+    CpuList expected = TestTopology()->EmptyCpuList();
     for (int j = i; j < (i + l3_offset); j++) {
       expected.Set(j);
       expected.Set(j + sibling_offset);
@@ -176,30 +175,30 @@ TEST(TopologyTest, CheckL3Siblings) {
 
     for (int j = i; j < (i + l3_offset); j++) {
       // Check the L3 siblings for CPU `j`.
-      CpuList siblings = test_topology->cpu(j).l3_siblings();
+      CpuList siblings = TestTopology()->cpu(j).l3_siblings();
       EXPECT_THAT(siblings, Eq(expected));
 
       // Check the L3 siblings for sibling of CPU `j`.
-      siblings = test_topology->cpu(j + sibling_offset).l3_siblings();
+      siblings = TestTopology()->cpu(j + sibling_offset).l3_siblings();
       EXPECT_THAT(siblings, Eq(expected));
     }
   }
 }
 
 TEST(TopologyTest, CheckHighestNodeIdx) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  EXPECT_THAT(test_topology->highest_node_idx(), Eq(1));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  EXPECT_THAT(TestTopology()->highest_node_idx(), Eq(1));
 }
 
 // Tests that each CPU is assigned the correct SMT index.
 TEST(TopologyTest, CheckSmtIdx) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
 
   // We don't have any larger SMT toplogies.
-  EXPECT_THAT(test_topology->smt_count(), Le(2));
+  EXPECT_THAT(TestTopology()->smt_count(), Le(2));
 
-  for (int i = 0; i < test_topology->num_cpus(); i++) {
-    Cpu cpu = test_topology->cpu(i);
+  for (int i = 0; i < TestTopology()->num_cpus(); i++) {
+    Cpu cpu = TestTopology()->cpu(i);
     CpuList siblings = cpu.siblings();
     bool found = false;
     for (int j = 0; j < siblings.Size(); j++) {
@@ -215,7 +214,7 @@ TEST(TopologyTest, CheckSmtIdx) {
         found = true;
         EXPECT_THAT(cpu.smt_idx(), Eq(j));
         const int expected_smt_idx =
-            (cpu.id() < test_topology->num_cpus() / 2) ? 0 : 1;
+            (cpu.id() < TestTopology()->num_cpus() / 2) ? 0 : 1;
         EXPECT_THAT(cpu.smt_idx(), Eq(expected_smt_idx));
       }
     }
@@ -225,8 +224,8 @@ TEST(TopologyTest, CheckSmtIdx) {
 
 // Tests the basic `Set`, `IsSet`, and `Clear` functionality of `CpuList`.
 TEST(TopologyTest, BitmapSet) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  CpuList list = test_topology->EmptyCpuList();
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  CpuList list = TestTopology()->EmptyCpuList();
 
   std::vector<int> cpus = {5, 20, 87, 94, 100};
   for (int cpu : cpus) {
@@ -253,16 +252,16 @@ TEST(TopologyTest, BitmapSet) {
 // Tests the basic `Set`, `IsSet`, and `Clear` functionality of `CpuList` using
 // CPUs instead of ints.
 TEST(TopologyTest, BitmapSetCpu) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  CpuList list = test_topology->EmptyCpuList();
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  CpuList list = TestTopology()->EmptyCpuList();
 
-  std::vector<Cpu> cpus = {test_topology->cpu(5), test_topology->cpu(20),
-                           test_topology->cpu(87), test_topology->cpu(94),
-                           test_topology->cpu(100)};
+  std::vector<Cpu> cpus = {TestTopology()->cpu(5), TestTopology()->cpu(20),
+                           TestTopology()->cpu(87), TestTopology()->cpu(94),
+                           TestTopology()->cpu(100)};
   for (const Cpu& cpu : cpus) {
     list.Set(cpu);
   }
-  for (const Cpu& cpu : test_topology->all_cpus()) {
+  for (const Cpu& cpu : TestTopology()->all_cpus()) {
     bool exists = (std::find(cpus.begin(), cpus.end(), cpu) != cpus.end());
     EXPECT_THAT(list.IsSet(cpu), Eq(exists));
   }
@@ -283,25 +282,25 @@ TEST(TopologyTest, BitmapSetCpu) {
 // Tests that the `CpuList::Intersection` method calculates the
 // correct intersection of two `CpuList`s.
 TEST(TopologyTest, Intersection) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
   CpuList list0 =
-      test_topology->ToCpuList(std::vector<int>{5, 20, 87, 94, 100});
-  CpuList list1 = test_topology->ToCpuList(
+      TestTopology()->ToCpuList(std::vector<int>{5, 20, 87, 94, 100});
+  CpuList list1 = TestTopology()->ToCpuList(
       std::vector<int>{5, 10, 60, 80, 87, 90, 101, 110});
 
   list0.Intersection(list1);
-  EXPECT_THAT(list0, Eq(test_topology->ToCpuList(std::vector<int>{5, 87})));
+  EXPECT_THAT(list0, Eq(TestTopology()->ToCpuList(std::vector<int>{5, 87})));
 }
 
 // Tests that the `CpuList::Union` method calculates the correct union
 // of two `CpuList`s. Also tests the related `+` and `+=` operators.
 TEST(TopologyTest, Union) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
   const CpuList list0 =
-      test_topology->ToCpuList(std::vector<int>{5, 20, 87, 94, 100});
-  const CpuList list1 = test_topology->ToCpuList(
+      TestTopology()->ToCpuList(std::vector<int>{5, 20, 87, 94, 100});
+  const CpuList list1 = TestTopology()->ToCpuList(
       std::vector<int>{5, 10, 60, 80, 87, 90, 101, 110});
-  const CpuList result = test_topology->ToCpuList(
+  const CpuList result = TestTopology()->ToCpuList(
       std::vector<int>{5, 10, 20, 60, 80, 87, 90, 94, 100, 101, 110});
 
   CpuList scratch = list0;
@@ -319,13 +318,13 @@ TEST(TopologyTest, Union) {
 // Tests that the `CpuList::Subtract` method calculates the correct subtraction
 // of two `CpuList`s. Also tests the related `-` and `-=` operators.
 TEST(TopologyTest, Subtract) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
   const CpuList list0 =
-      test_topology->ToCpuList(std::vector<int>{1, 3, 5, 20, 87, 94, 100});
+      TestTopology()->ToCpuList(std::vector<int>{1, 3, 5, 20, 87, 94, 100});
   const CpuList list1 =
-      test_topology->ToCpuList(std::vector<int>{0, 5, 10, 60, 94});
-  const CpuList result = test_topology
-                             ->ToCpuList(std::vector<int>{1, 3, 20, 87, 100});
+      TestTopology()->ToCpuList(std::vector<int>{0, 5, 10, 60, 94});
+  const CpuList result =
+      TestTopology()->ToCpuList(std::vector<int>{1, 3, 20, 87, 100});
 
   CpuList scratch = list0;
   scratch.Subtract(list1);
@@ -342,23 +341,23 @@ TEST(TopologyTest, Subtract) {
 // Tests that immediately dereferencing the iterator returned by `begin()` for
 // the topology's CPUs returns the first CPU.
 TEST(TopologyTest, IteratorBegin) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  EXPECT_THAT(test_topology->all_cpus().begin()->id(), Eq(0));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  EXPECT_THAT(TestTopology()->all_cpus().begin()->id(), Eq(0));
 }
 
 // Tests that immediately dereferencing the iterator returned by `end()` for the
 // topology's CPUs returns an invalid CPU.
 TEST(TopologyTest, IteratorEnd) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  EXPECT_THAT(test_topology->all_cpus().end()->valid(), IsFalse());
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  EXPECT_THAT(TestTopology()->all_cpus().end()->valid(), IsFalse());
 }
 
 // Tests that the iterator iterates over the `CpuList` correctly with a for
 // loop.
 TEST(TopologyTest, Iterator) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
   std::vector<int> cpus = {5, 20, 87, 94, 100};
-  CpuList list = test_topology->ToCpuList(cpus);
+  CpuList list = TestTopology()->ToCpuList(cpus);
 
   int index = 0;
   auto it = list.begin();
@@ -375,9 +374,9 @@ TEST(TopologyTest, Iterator) {
 // Tests that the iterator iterates over the `CpuList` correctly with a
 // range-based for loop.
 TEST(TopologyTest, IteratorRange) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
   std::vector<int> cpus = {5, 20, 87, 94, 100};
-  CpuList list = test_topology->ToCpuList(cpus);
+  CpuList list = TestTopology()->ToCpuList(cpus);
 
   int index = 0;
   for (const Cpu& cpu : list) {
@@ -390,9 +389,9 @@ TEST(TopologyTest, IteratorRange) {
 // Tests that the iterator works properly when the first and last CPUs are set
 // in the `CpuList` (i.e., tests the boundary cases).
 TEST(TopologyTest, IteratorBoundary) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
   std::vector<int> cpus = {0, 20, 111};
-  CpuList list = test_topology->ToCpuList(cpus);
+  CpuList list = TestTopology()->ToCpuList(cpus);
 
   int index = 0;
   auto it = list.begin();
@@ -435,76 +434,76 @@ static void TestList(Topology* t, const std::vector<int> cpus,
 }
 
 TEST(TopologyTest, CpuMaskStr) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
 
-  TestList(test_topology, {1, 2, 3, 4, 5, 20, 87, 94, 100},
+  TestList(TestTopology(), {1, 2, 3, 4, 5, 20, 87, 94, 100},
            "10,40800000,00000000,0010003e");
-  TestList(test_topology, {0, 1, 2, 3, 16}, "1000f");
-  TestList(test_topology, {4, 5, 6, 7, 31, 129},
+  TestList(TestTopology(), {0, 1, 2, 3, 16}, "1000f");
+  TestList(TestTopology(), {4, 5, 6, 7, 31, 129},
            "2,00000000,00000000,00000000,800000f0");
-  TestList(test_topology,
+  TestList(TestTopology(),
            {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16,
             17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32},
            "1,ffffffff");
-  TestList(test_topology, {0, 5, 10, 15, 16, 21, 26, 31}, "84218421");
-  TestList(test_topology, {0, 5, 10, 15, 16, 21, 26, 31, 32}, "1,84218421");
+  TestList(TestTopology(), {0, 5, 10, 15, 16, 21, 26, 31}, "84218421");
+  TestList(TestTopology(), {0, 5, 10, 15, 16, 21, 26, 31, 32}, "1,84218421");
 }
 
 TEST(TopologyTest, ParseCpuStr) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
 
   // tuple[0] is the string to parse. tuple[1] is the expected CpuList.
   std::vector<std::tuple<std::string, CpuList>> test_cases;
 
-  test_cases.emplace_back("", test_topology->EmptyCpuList());
-  test_cases.emplace_back("2", test_topology->ToCpuList(std::vector<int>{2}));
+  test_cases.emplace_back("", TestTopology()->EmptyCpuList());
+  test_cases.emplace_back("2", TestTopology()->ToCpuList(std::vector<int>{2}));
   test_cases.emplace_back(
-      "3,5,6,7", test_topology->ToCpuList(std::vector<int>{3, 5, 6, 7}));
+      "3,5,6,7", TestTopology()->ToCpuList(std::vector<int>{3, 5, 6, 7}));
   test_cases.emplace_back(
-      "2-8", test_topology->ToCpuList(std::vector<int>{2, 3, 4, 5, 6, 7, 8}));
+      "2-8", TestTopology()->ToCpuList(std::vector<int>{2, 3, 4, 5, 6, 7, 8}));
   test_cases.emplace_back(
       "2-8,11-12",
-      test_topology->ToCpuList(std::vector<int>{2, 3, 4, 5, 6, 7, 8, 11, 12}));
+      TestTopology()->ToCpuList(std::vector<int>{2, 3, 4, 5, 6, 7, 8, 11, 12}));
   test_cases.emplace_back("0-3,6,10-12,14",
-                          test_topology->ToCpuList(
+                          TestTopology()->ToCpuList(
                               std::vector<int>{0, 1, 2, 3, 6, 10, 11, 12, 14}));
   test_cases.emplace_back("2,3,2",
-                          test_topology->ToCpuList(std::vector<int>{2, 3}));
+                          TestTopology()->ToCpuList(std::vector<int>{2, 3}));
   test_cases.emplace_back(
-      "0-5,3,4", test_topology->ToCpuList(std::vector<int>{0, 1, 2, 3, 4, 5}));
-  test_cases.emplace_back("0-5,3-7", test_topology->ToCpuList(std::vector<int>{
+      "0-5,3,4", TestTopology()->ToCpuList(std::vector<int>{0, 1, 2, 3, 4, 5}));
+  test_cases.emplace_back("0-5,3-7", TestTopology()->ToCpuList(std::vector<int>{
                                          0, 1, 2, 3, 4, 5, 6, 7}));
 
   for (const auto& test_case : test_cases) {
     auto& [str, expected_list] = test_case;
 
-    CpuList parsed = test_topology->ParseCpuStr(str);
+    CpuList parsed = TestTopology()->ParseCpuStr(str);
     EXPECT_EQ(parsed, expected_list);
   }
 }
 
 TEST(TopologyTest, CpuInNodeTest) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  CpuList cpus_on_node0 = test_topology->CpusOnNode(0);
-  auto cpus_on_node1 = test_topology->CpusOnNode(1);
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  CpuList cpus_on_node0 = TestTopology()->CpusOnNode(0);
+  auto cpus_on_node1 = TestTopology()->CpusOnNode(1);
   cpus_on_node0.Intersection(cpus_on_node1);
   EXPECT_EQ(cpus_on_node0.Size(), 0);
-  cpus_on_node0 = test_topology->CpusOnNode(0);
+  cpus_on_node0 = TestTopology()->CpusOnNode(0);
   cpus_on_node0.Union(cpus_on_node1);
-  EXPECT_EQ(cpus_on_node0.Size(), test_topology->all_cpus().Size());
+  EXPECT_EQ(cpus_on_node0.Size(), TestTopology()->all_cpus().Size());
 }
 
 // Test conversion of cpu_set_t to CpuList.
 TEST(TopologyTest, CpuSetToCpuList) {
-  Topology* test_topology = TestTopology(absl::GetFlag(FLAGS_test_tmpdir));
-  CpuList list = test_topology->EmptyCpuList();
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  CpuList list = TestTopology()->EmptyCpuList();
   int stride = 1;
-  for (int i = 0; i < test_topology->num_cpus(); i += stride++) {
+  for (int i = 0; i < TestTopology()->num_cpus(); i += stride++) {
     list.Set(i);
   }
 
   const cpu_set_t cpuset = Topology::ToCpuSet(list);
-  EXPECT_EQ(list, test_topology->ToCpuList(cpuset));
+  EXPECT_EQ(list, TestTopology()->ToCpuList(cpuset));
 }
 
 }  // namespace

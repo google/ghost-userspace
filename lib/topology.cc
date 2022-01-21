@@ -392,10 +392,23 @@ Topology* MachineTopology() {
   return topology;
 }
 
-Topology* TestTopology(const std::filesystem::path& test_directory) {
-  static Topology* topology =
-      new Topology(Topology::InitTest{}, test_directory);
-  return topology;
+namespace {
+
+Topology* test_topology = nullptr;
+
+}  // namespace
+
+void UpdateTestTopology(const std::filesystem::path& test_directory) {
+  if (test_topology) {
+    delete test_topology;
+  }
+  test_topology = new Topology(Topology::InitTest{}, test_directory);
+}
+
+Topology* TestTopology() {
+  // Make sure `UpdateTestTopology()` was already called.
+  CHECK_NE(test_topology, nullptr);
+  return test_topology;
 }
 
 }  // namespace ghost
