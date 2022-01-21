@@ -187,7 +187,7 @@ cc_test(
     copts = compiler_flags,
     deps = [
         ":agent",
-        ":fifo_scheduler",
+        ":fifo_per_cpu_scheduler",
         "@com_google_absl//absl/random",
         "@com_google_googletest//:gtest_main",
     ],
@@ -329,27 +329,27 @@ cc_test(
 )
 
 cc_binary(
-    name = "fifo_agent",
+    name = "fifo_per_cpu_agent",
     srcs = [
-        "schedulers/fifo/fifo_agent.cc",
+        "schedulers/fifo/per_cpu/fifo_agent.cc",
     ],
     copts = compiler_flags,
     deps = [
         ":agent",
-        ":fifo_scheduler",
+        ":fifo_per_cpu_scheduler",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
     ],
 )
 
 cc_library(
-    name = "fifo_scheduler",
+    name = "fifo_per_cpu_scheduler",
     srcs = [
-        "schedulers/fifo/fifo_scheduler.cc",
-        "schedulers/fifo/fifo_scheduler.h",
+        "schedulers/fifo/per_cpu/fifo_scheduler.cc",
+        "schedulers/fifo/per_cpu/fifo_scheduler.h",
     ],
     hdrs = [
-        "schedulers/fifo/fifo_scheduler.h",
+        "schedulers/fifo/per_cpu/fifo_scheduler.h",
     ],
     copts = compiler_flags,
     deps = [

@@ -19,7 +19,7 @@
 #include "absl/random/random.h"
 #include "lib/agent.h"
 #include "lib/scheduler.h"
-#include "schedulers/fifo/fifo_scheduler.h"
+#include "schedulers/fifo/per_cpu/fifo_scheduler.h"
 
 namespace ghost {
 namespace {

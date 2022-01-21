@@ -20,7 +20,7 @@
 #include "absl/flags/parse.h"
 #include "lib/agent.h"
 #include "lib/enclave.h"
-#include "schedulers/fifo/fifo_scheduler.h"
+#include "schedulers/fifo/per_cpu/fifo_scheduler.h"
 
 ABSL_FLAG(int32_t, firstcpu, 1, "First cpu to start scheduling from.");
 ABSL_FLAG(int32_t, ncpus, 5, "Schedule on <ncpus> starting from <firstcpu>");

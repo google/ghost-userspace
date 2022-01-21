@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "schedulers/fifo/fifo_scheduler.h"
+#include "schedulers/fifo/per_cpu/fifo_scheduler.h"
 
 namespace ghost {
 
