@@ -65,6 +65,8 @@ class Message {
   absl::string_view describe_type() const;
   std::string stringify() const;
 
+  const ghost_msg* msg() const { return msg_; }
+
  private:
   const ghost_msg* msg_;
   static ghost_msg kEmpty;
