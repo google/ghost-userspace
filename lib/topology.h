@@ -605,7 +605,7 @@ class Topology {
   // The backing store for all CPUs in this topology.
   std::vector<Cpu::CpuRep> cpus_;
 
-  int highest_node_idx_;
+  int highest_node_idx_ = -1;
 
   CpuList cpus_on_node_[2] = {EmptyCpuList(), EmptyCpuList()};
 };

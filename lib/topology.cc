@@ -414,7 +414,6 @@ Topology::Topology(InitCustom, std::vector<Cpu::Raw> raw_cpus)
     rep->core = raw_cpu.core;
     rep->smt_idx = raw_cpu.smt_idx;
     rep->numa_node = raw_cpu.numa_node;
-    // TODO: Is this the right way to set `highest_node_idx_`?
     highest_node_idx_ = std::max(rep->numa_node, highest_node_idx_);
 
     rep->siblings = std::make_unique<CpuList>(*this);
