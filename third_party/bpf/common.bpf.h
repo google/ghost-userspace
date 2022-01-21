@@ -39,6 +39,20 @@ static long (*bpf_ghost_run_gtid)(__s64 gtid, __u32 task_barrier, __s32 run_flag
 #define TASK_RUNNING 0
 #define TASK_DEAD 0x0080
 
+static inline u64 min(u64 x, u64 y)
+{
+  if (x < y)
+    return x;
+  return y;
+}
+
+static inline u64 max(u64 x, u64 y)
+{
+  if (x > y)
+    return x;
+  return y;
+}
+
 static inline u64 bpf_ktime_get_us() {
   return bpf_ktime_get_ns() / 1000;
 }

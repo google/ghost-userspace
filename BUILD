@@ -503,6 +503,27 @@ cc_binary(
 )
 
 bpf_skeleton(
+    name = "schedfair_bpf_skel",
+    bpf_object = "//third_party/bpf:schedfair_bpf",
+    skel_hdr = "bpf/user/schedfair_bpf.skel.h",
+)
+
+cc_binary(
+    name = "schedfair",
+    srcs = [
+        "bpf/user/schedfair.c",
+        "bpf/user/schedfair_bpf.skel.h",
+        "//third_party:iovisor_bcc/trace_helpers.h",
+        "//third_party/bpf:schedfair.h",
+    ],
+    copts = compiler_flags,
+    linkopts = bpf_linkopts,
+    deps = [
+        "@linux//:libbpf",
+    ],
+)
+
+bpf_skeleton(
     name = "schedghostidle_bpf_skel",
     bpf_object = "//third_party/bpf:schedghostidle_bpf",
     skel_hdr = "bpf/user/schedghostidle_bpf.skel.h",
