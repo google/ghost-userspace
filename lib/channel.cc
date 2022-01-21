@@ -138,8 +138,10 @@ std::string Message::stringify() const {
     return result;
   }
 
-  Gtid msg_gtid = gtid();
-  absl::StrAppend(&result, " ", msg_gtid.describe());
+  if (is_task_msg()) {
+    Gtid msg_gtid = gtid();
+    absl::StrAppend(&result, " ", msg_gtid.describe());
+  }
 
   switch (type()) {
     case MSG_NOP:
