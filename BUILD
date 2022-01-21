@@ -462,6 +462,27 @@ bpf_skeleton(
 )
 
 bpf_skeleton(
+    name = "klockstat_bpf_skel",
+    bpf_object = "//third_party/bpf:klockstat_bpf",
+    skel_hdr = "bpf/user/klockstat_bpf.skel.h",
+)
+
+cc_binary(
+    name = "klockstat",
+    srcs = [
+        "bpf/user/klockstat.c",
+        "bpf/user/klockstat_bpf.skel.h",
+        "//third_party:iovisor_bcc/trace_helpers.h",
+        "//third_party/bpf:klockstat.h",
+    ],
+    copts = compiler_flags,
+    linkopts = bpf_linkopts,
+    deps = [
+        "@linux//:libbpf",
+    ],
+)
+
+bpf_skeleton(
     name = "schedclasstop_bpf_skel",
     bpf_object = "//third_party/bpf:schedclasstop_bpf",
     skel_hdr = "bpf/user/schedclasstop_bpf.skel.h",

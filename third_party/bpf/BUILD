@@ -15,6 +15,7 @@ exports_files([
     "common.bpf.h",
     "edf.h",
     "ghost.h",
+    "klockstat.h",
     "schedlat.h",
     "schedrun.h",
 ])
@@ -38,6 +39,17 @@ bpf_program(
         "//:kernel/vmlinux_ghost_5_11.h",
     ],
     bpf_object = "edf_bpf.o",
+)
+
+bpf_program(
+    name = "klockstat_bpf",
+    src = "klockstat.bpf.c",
+    hdrs = [
+        "common.bpf.h",
+        "klockstat.h",
+        "//:kernel/vmlinux_ghost_5_11.h",
+    ],
+    bpf_object = "klockstat_bpf.o",
 )
 
 bpf_program(
