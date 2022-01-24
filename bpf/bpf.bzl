@@ -15,7 +15,7 @@ def bpf_program(name, src, hdrs, bpf_object, **kwargs):
         srcs = ["@linux//:libbpf"] + [src] + hdrs,
         outs = [bpf_object],
         cmd = (
-            "clang -g -O2 -target bpf -D__TARGET_ARCH_x86 " +
+            "clang-12 -g -O2 -target bpf -D__TARGET_ARCH_x86 " +
             # The `.` directory is the project root, so we pass it with the `-I`
             # flag so that #includes work in the source files.
             #
