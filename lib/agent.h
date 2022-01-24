@@ -199,8 +199,6 @@ struct AgentRpcBuffer {
 
     std::byte* deserialized = reinterpret_cast<std::byte*>(&t);
     std::copy_n(std::begin(data), size, deserialized);
-
-    return t;
   }
 
   template <class T>
