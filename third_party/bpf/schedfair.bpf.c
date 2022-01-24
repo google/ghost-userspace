@@ -138,12 +138,12 @@
 #define WRITE_ONCE(x, val) ((*(volatile typeof(x) *)&(x)) = val)
 
 /* Set by userspace before loading. */
-const volatile u32 nr_milli_cpus;
-u64 accum_fair_share;	/* a.k.a. F(last_update_time), weight=1. */
+const volatile uint32_t nr_milli_cpus;
+uint64_t accum_fair_share;	/* a.k.a. F(last_update_time), weight=1. */
 
-u64 last_update_time;
-u64 current_load;	/* wl(last_update_time) */
-s64 delta_load;		/* change in wl since last update */
+uint64_t last_update_time;
+uint64_t current_load;	/* wl(last_update_time) */
+int64_t delta_load;		/* change in wl since last update */
 
 /* 2-D matrix, indexed by 40 user_prio * 20 'percentile' bins. */
 struct {
@@ -216,7 +216,7 @@ out:
 		current_load = 0;
 }
 
-	static u64 in_progress = false;
+	static uint64_t in_progress = false;
 
 /*
  * When we change wl (by adding/subbing delta_load, aka "posting" a change),
