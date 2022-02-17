@@ -46,11 +46,11 @@ class ThreadWait {
   enum class WaitType {
     // Wait by spinning. Threads will return from 'WaitUntilRunnable' more
     // quickly when marked runnable but will burn up their CPU while waiting.
-    kWaitSpin,
+    kSpin,
     // Wait by sleeping on a futex. Threads will not burn up their CPU while
     // waiting but will return from 'WaitUntilRunnable' more slowly when marked
     // runnable.
-    kWaitFutex,
+    kFutex,
   };
 
   ThreadWait(uint32_t num_threads, WaitType wait_type);
@@ -71,10 +71,10 @@ class ThreadWait {
 inline std::ostream& operator<<(std::ostream& os,
                                 ThreadWait::WaitType wait_type) {
   switch (wait_type) {
-    case ThreadWait::WaitType::kWaitSpin:
+    case ThreadWait::WaitType::kSpin:
       os << "Spin";
       break;
-    case ThreadWait::WaitType::kWaitFutex:
+    case ThreadWait::WaitType::kFutex:
       os << "Futex";
       break;
       // We will get a compile error if a new member is added to the

@@ -89,7 +89,8 @@ Orchestrator::Options GetOptions() {
   options.cfs_dispatcher_cpu = 2;
   options.num_workers = 2;
   options.worker_cpus = {3, 4};
-  options.cfs_wait_type = ThreadWait::WaitType::kWaitSpin;
+  options.cfs_wait_type = ThreadWait::WaitType::kSpin;
+  options.ghost_wait_type = Orchestrator::GhostWaitType::kFutex;
   options.get_duration = kGetRequestDuration;
   options.range_duration = kRangeQueryDuration;
   options.get_exponential_mean = absl::ZeroDuration();

@@ -28,7 +28,7 @@ void ThreadWait::MarkRunnable(uint32_t sid) {
   CHECK_LT(sid, num_threads_);
 
   runnability_[sid]->store(1, std::memory_order_release);
-  if (wait_type_ == WaitType::kWaitFutex) {
+  if (wait_type_ == WaitType::kFutex) {
     ghost::Futex::Wake(runnability_[sid].get(), 1);
   }
 }
@@ -43,12 +43,12 @@ void ThreadWait::WaitUntilRunnable(uint32_t sid) const {
   CHECK_LT(sid, num_threads_);
 
   const std::unique_ptr<std::atomic<int>>& r = runnability_[sid];
-  if (wait_type_ == WaitType::kWaitSpin) {
+  if (wait_type_ == WaitType::kSpin) {
     while (r->load(std::memory_order_acquire) == 0) {
       asm volatile("pause");
     }
   } else {
-    CHECK_EQ(wait_type_, WaitType::kWaitFutex);
+    CHECK_EQ(wait_type_, WaitType::kFutex);
 
     ghost::Futex::Wait(r.get(), 0);
   }

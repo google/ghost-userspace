@@ -50,8 +50,12 @@ std::ostream& operator<<(std::ostream& os,
   }
 
   flags["cfs_wait_type"] =
-      options.cfs_wait_type == ghost_test::ThreadWait::WaitType::kWaitSpin
+      options.cfs_wait_type == ghost_test::ThreadWait::WaitType::kSpin
           ? "spin"
+          : "futex";
+  flags["ghost_wait_type"] =
+      options.ghost_wait_type == Orchestrator::GhostWaitType::kPrioTable
+          ? "prio_table"
           : "futex";
   flags["get_duration"] = absl::FormatDuration(options.get_duration);
   flags["range_duration"] = absl::FormatDuration(options.range_duration);

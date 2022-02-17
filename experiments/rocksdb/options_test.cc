@@ -41,7 +41,8 @@ Orchestrator::Options GetOptions() {
   options.cfs_dispatcher_cpu = 2;
   options.num_workers = 2;
   options.worker_cpus = {3, 4};
-  options.cfs_wait_type = ThreadWait::WaitType::kWaitSpin;
+  options.cfs_wait_type = ThreadWait::WaitType::kSpin;
+  options.ghost_wait_type = Orchestrator::GhostWaitType::kFutex;
   options.get_duration = absl::Microseconds(10);
   options.range_duration = absl::Milliseconds(5);
   options.get_exponential_mean = absl::ZeroDuration();
@@ -65,6 +66,7 @@ experiment_duration: 15s
 get_duration: 10us
 get_exponential_mean: 0
 ghost_qos: 2
+ghost_wait_type: futex
 load_generator_cpu: 1
 num_workers: 2
 print_distribution: false

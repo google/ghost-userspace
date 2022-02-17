@@ -65,6 +65,10 @@ ABSL_FLAG(std::string, cfs_wait_type, "spin",
           "For CFS experiments, the way that worker threads wait until they "
           "are assigned more work by the dispatcher (\"spin\" or \"futex\", "
           "default: \"spin\").");
+ABSL_FLAG(std::string, ghost_wait_type, "prio_table",
+          "For ghOSt experiments, the way that worker threads interact with "
+          "ghOSt and wait until they are assigned more work by the dispatcher "
+          "(\"prio_table\" or \"futex\", default: \"prio_table\")");
 ABSL_FLAG(
     absl::Duration, get_duration, absl::Microseconds(10),
     "The duration of Get requests. This includes both accessing the RocksDB "
@@ -125,8 +129,15 @@ ghost_test::Orchestrator::Options GetOptions() {
   std::string cfs_wait_type = absl::GetFlag(FLAGS_cfs_wait_type);
   CHECK(cfs_wait_type == "spin" || cfs_wait_type == "futex");
   options.cfs_wait_type = (cfs_wait_type == "spin")
-                              ? ghost_test::ThreadWait::WaitType::kWaitSpin
-                              : ghost_test::ThreadWait::WaitType::kWaitFutex;
+                              ? ghost_test::ThreadWait::WaitType::kSpin
+                              : ghost_test::ThreadWait::WaitType::kFutex;
+
+  std::string ghost_wait_type = absl::GetFlag(FLAGS_ghost_wait_type);
+  CHECK(ghost_wait_type == "prio_table" || ghost_wait_type == "futex");
+  options.ghost_wait_type =
+      (ghost_wait_type == "prio_table")
+          ? ghost_test::Orchestrator::GhostWaitType::kPrioTable
+          : ghost_test::Orchestrator::GhostWaitType::kFutex;
 
   options.get_duration = absl::GetFlag(FLAGS_get_duration);
   CHECK_GE(options.get_duration, absl::ZeroDuration());
