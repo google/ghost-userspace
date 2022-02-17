@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "experiments/shared/ghost.h"
+#include "experiments/shared/prio_table_helper.h"
 
 namespace ghost_test {
 
-void Ghost::GetWorkClass(uint32_t wcid, ghost::work_class& wc) const {
+void PrioTableHelper::GetWorkClass(uint32_t wcid, ghost::work_class& wc) const {
   CheckWorkClassInRange(wcid);
 
   wc = *table_.work_class(wcid);
 }
 
-void Ghost::SetWorkClass(uint32_t wcid, const ghost::work_class& wc) {
+void PrioTableHelper::SetWorkClass(uint32_t wcid, const ghost::work_class& wc) {
   CHECK_EQ(wcid, wc.id);
   CheckWorkClassInRange(wcid);
 
   *table_.work_class(wcid) = wc;
 }
 
-void Ghost::CopySchedItem(ghost::sched_item& dst,
-                          const ghost::sched_item& src) const {
+void PrioTableHelper::CopySchedItem(ghost::sched_item& dst,
+                                    const ghost::sched_item& src) const {
   dst.sid = src.sid;
   dst.wcid = src.wcid;
   dst.gpid = src.gpid;
@@ -38,13 +38,13 @@ void Ghost::CopySchedItem(ghost::sched_item& dst,
   dst.deadline = src.deadline;
 }
 
-void Ghost::GetSchedItem(uint32_t sid, ghost::sched_item& si) const {
+void PrioTableHelper::GetSchedItem(uint32_t sid, ghost::sched_item& si) const {
   CheckSchedItemInRange(sid);
 
   CopySchedItem(si, *table_.sched_item(sid));
 }
 
-void Ghost::SetSchedItem(uint32_t sid, const ghost::sched_item& si) {
+void PrioTableHelper::SetSchedItem(uint32_t sid, const ghost::sched_item& si) {
   CHECK_EQ(sid, si.sid);
   CheckSchedItemInRange(si.sid);
   CheckWorkClassInRange(si.wcid);
@@ -56,13 +56,14 @@ void Ghost::SetSchedItem(uint32_t sid, const ghost::sched_item& si) {
   MarkUpdatedTableIndex(curr->sid);
 }
 
-Ghost::Ghost(uint32_t num_sched_items, uint32_t num_work_classes)
+PrioTableHelper::PrioTableHelper(uint32_t num_sched_items,
+                                 uint32_t num_work_classes)
     : table_(num_sched_items, num_work_classes,
              ghost::PrioTable::StreamCapacity::kStreamCapacity83) {
   CHECK(num_sched_items == 0 || num_work_classes >= 1);
 }
 
-void Ghost::MarkRunnability(uint32_t sid, bool runnable) {
+void PrioTableHelper::MarkRunnability(uint32_t sid, bool runnable) {
   CheckSchedItemInRange(sid);
 
   ghost::sched_item* si = table_.sched_item(sid);
@@ -76,13 +77,15 @@ void Ghost::MarkRunnability(uint32_t sid, bool runnable) {
   MarkUpdatedTableIndex(si->sid);
 }
 
-void Ghost::MarkRunnable(uint32_t sid) {
+void PrioTableHelper::MarkRunnable(uint32_t sid) {
   MarkRunnability(sid, /*runnable=*/true);
 }
 
-void Ghost::MarkIdle(uint32_t sid) { MarkRunnability(sid, /*runnable=*/false); }
+void PrioTableHelper::MarkIdle(uint32_t sid) {
+  MarkRunnability(sid, /*runnable=*/false);
+}
 
-void Ghost::WaitUntilRunnable(uint32_t sid) const {
+void PrioTableHelper::WaitUntilRunnable(uint32_t sid) const {
   CheckSchedItemInRange(sid);
 
   ghost::sched_item* si = table_.sched_item(sid);

@@ -20,7 +20,7 @@
 #include "experiments/rocksdb/latency.h"
 #include "experiments/rocksdb/orchestrator.h"
 #include "experiments/rocksdb/request.h"
-#include "experiments/shared/ghost.h"
+#include "experiments/shared/prio_table_helper.h"
 
 namespace ghost_test {
 
@@ -80,7 +80,7 @@ class GhostOrchestrator final : public Orchestrator {
   static constexpr uint32_t kWorkClassIdentifier = 0;
 
   // Manages communication with ghOSt via the shared PrioTable.
-  Ghost ghost_;
+  PrioTableHelper prio_table_helper_;
 
   // 'threads_ready_' is notified once all threads have been spawned and the
   // ghOSt PrioTable has been initialized with the work class and all worker

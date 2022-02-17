@@ -591,12 +591,12 @@ cc_binary(
 cc_library(
     name = "experiments_shared",
     srcs = [
-        "experiments/shared/ghost.cc",
+        "experiments/shared/prio_table_helper.cc",
         "experiments/shared/thread_pool.cc",
         "experiments/shared/thread_wait.cc",
     ],
     hdrs = [
-        "experiments/shared/ghost.h",
+        "experiments/shared/prio_table_helper.h",
         "experiments/shared/thread_pool.h",
         "experiments/shared/thread_wait.h",
     ],

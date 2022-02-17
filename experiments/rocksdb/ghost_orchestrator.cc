@@ -45,7 +45,7 @@ void GhostOrchestrator::InitGhost() {
   CHECK_EQ(gtids.size(), total_threads());
 
   ghost::work_class wc;
-  ghost_.GetWorkClass(kWorkClassIdentifier, wc);
+  prio_table_helper_.GetWorkClass(kWorkClassIdentifier, wc);
   wc.id = kWorkClassIdentifier;
   wc.flags = WORK_CLASS_ONESHOT;
   wc.qos = options().ghost_qos;
@@ -55,19 +55,19 @@ void GhostOrchestrator::InitGhost() {
   // 'period' is irrelevant because all threads scheduled by ghOSt are
   // one-shots.
   wc.period = 0;
-  ghost_.SetWorkClass(kWorkClassIdentifier, wc);
+  prio_table_helper_.SetWorkClass(kWorkClassIdentifier, wc);
 
   // Start at index 1 because the first thread is the load generator (SID 0),
   // which is scheduled by CFS (Linux Completely Fair Scheduler).
   for (size_t i = 1; i < gtids.size(); ++i) {
     ghost::sched_item si;
-    ghost_.GetSchedItem(/*sid=*/i, si);
+    prio_table_helper_.GetSchedItem(/*sid=*/i, si);
     si.sid = i;
     si.wcid = kWorkClassIdentifier;
     si.gpid = gtids[i].id();
     si.flags = 0;
     si.deadline = 0;
-    ghost_.SetSchedItem(/*sid=*/i, si);
+    prio_table_helper_.SetSchedItem(/*sid=*/i, si);
   }
 }
 
@@ -79,8 +79,8 @@ GhostOrchestrator::GhostOrchestrator(Orchestrator::Options opts)
       // than ghOSt. While the sched with SID 0 is unused, workers are able to
       // access their own sched item by passing their SID directly rather than
       // having to subtract 1 from their SID.
-      ghost_(/*num_sched_items=*/total_threads(),
-             /*num_work_classes=*/1) {
+      prio_table_helper_(/*num_sched_items=*/total_threads(),
+                         /*num_work_classes=*/1) {
   CHECK_EQ(options().worker_cpus.size(), 0);
 
   InitThreadPool();
@@ -98,7 +98,7 @@ void GhostOrchestrator::Terminate() {
 
   // The load generator should exit first. If any worker were to exit before the
   // load generator, the load generator would trigger
-  // `CHECK(ghost_.IsIdle(worker_sid))`.
+  // `CHECK(prio_table_helper_.IsIdle(worker_sid))`.
   thread_pool().MarkExit(0);
   while (thread_pool().NumExited() < 1) {
   }
@@ -111,7 +111,7 @@ void GhostOrchestrator::Terminate() {
     for (size_t i = 0; i < options().num_workers; ++i) {
       // We start at SID 1 (the first worker) since the load generator (SID 0)
       // is not scheduled by ghOSt and is always runnable.
-      ghost_.MarkRunnable(i + 1);
+      prio_table_helper_.MarkRunnable(i + 1);
     }
   }
   thread_pool().Join();
@@ -158,7 +158,7 @@ void GhostOrchestrator::LoadGenerator(uint32_t sid) {
         worker_work()[worker_sid]->num_requests.load(std::memory_order_relaxed),
         0);
 
-    if (!ghost_.IsIdle(worker_sid)) {
+    if (!prio_table_helper_.IsIdle(worker_sid)) {
       // This worker has finished its work but has not yet marked itself idle in
       // ghOSt. It is about to do so, so we cannot assign more work to it in the
       // meantime. If we did assign more work to the worker and then mark the
@@ -194,14 +194,15 @@ void GhostOrchestrator::LoadGenerator(uint32_t sid) {
       worker_work()[worker_sid]->num_requests.store(
           worker_work()[worker_sid]->requests.size(),
           std::memory_order_release);
-      CHECK(ghost_.IsIdle(worker_sid));
+      CHECK(prio_table_helper_.IsIdle(worker_sid));
 
       ghost::sched_item si;
-      ghost_.GetSchedItem(worker_sid, si);
-      si.deadline = Ghost::ToRawDeadline(ghost::MonotonicNow() + deadline);
+      prio_table_helper_.GetSchedItem(worker_sid, si);
+      si.deadline =
+          PrioTableHelper::ToRawDeadline(ghost::MonotonicNow() + deadline);
       si.flags |= SCHED_ITEM_RUNNABLE;
       // All other flags were set in 'InitGhost' and do not need to be changed.
-      ghost_.SetSchedItem(worker_sid, si);
+      prio_table_helper_.SetSchedItem(worker_sid, si);
     } else {
       // There is no work waiting in the ingress queue.
       break;
@@ -237,16 +238,17 @@ void GhostOrchestrator::Worker(uint32_t sid) {
     requests()[sid].push_back(request);
   }
 
-  // Set 'num_requests' to 0 before calling 'ghost_.MarkIdle' since the worker
-  // could be descheduled by ghOSt at any time after calling 'ghost_.MarkIdle'
-  // (or even before returning from 'ghost_.MarkIdle'!). The load generator
-  // checks to make sure that a worker with 'num_requests' set to 0 has also
-  // marked itself idle in ghOSt before assigning more work to it and marking it
-  // runnable again. See the comments above in 'LoadGenerator' for more details
-  // about the race condition this prevents.
+  // Set 'num_requests' to 0 before calling 'prio_table_helper_.MarkIdle' since
+  // the worker could be descheduled by ghOSt at any time after calling
+  // 'prio_table_helper_.MarkIdle' (or even before returning from
+  // 'prio_table_helper_.MarkIdle'!). The load generator checks to make sure
+  // that a worker with 'num_requests' set to 0 has also marked itself idle in
+  // ghOSt before assigning more work to it and marking it runnable again. See
+  // the comments above in 'LoadGenerator' for more details about the race
+  // condition this prevents.
   work->num_requests.store(0, std::memory_order_release);
-  ghost_.MarkIdle(sid);
-  ghost_.WaitUntilRunnable(sid);
+  prio_table_helper_.MarkIdle(sid);
+  prio_table_helper_.WaitUntilRunnable(sid);
 }
 
 }  // namespace ghost_test

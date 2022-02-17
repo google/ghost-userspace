@@ -18,7 +18,7 @@
 #define GHOST_EXPERIMENTS_ANTAGONIST_GHOST_ORCHESTRATOR_H_
 
 #include "experiments/antagonist/orchestrator.h"
-#include "experiments/shared/ghost.h"
+#include "experiments/shared/prio_table_helper.h"
 
 namespace ghost_test {
 
@@ -48,7 +48,7 @@ class GhostOrchestrator : public Orchestrator {
   void Worker(uint32_t sid) final;
 
   // Manages communication with ghOSt via the shared PrioTable.
-  Ghost ghost_;
+  PrioTableHelper prio_table_helper_;
 };
 
 }  // namespace ghost_test

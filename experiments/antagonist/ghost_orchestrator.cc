@@ -42,7 +42,7 @@ void GhostOrchestrator::InitGhost() {
   CHECK_EQ(gtids.size(), options().num_threads);
 
   ghost::work_class wc;
-  ghost_.GetWorkClass(kWorkClassIdentifier, wc);
+  prio_table_helper_.GetWorkClass(kWorkClassIdentifier, wc);
   wc.id = kWorkClassIdentifier;
   wc.flags = WORK_CLASS_ONESHOT;
   wc.qos = options().ghost_qos;
@@ -53,24 +53,24 @@ void GhostOrchestrator::InitGhost() {
   // 'period' is irrelevant because all threads scheduled by ghOSt are
   // one-shots.
   wc.period = 0;
-  ghost_.SetWorkClass(kWorkClassIdentifier, wc);
+  prio_table_helper_.SetWorkClass(kWorkClassIdentifier, wc);
 
   for (size_t i = 0; i < gtids.size(); ++i) {
     ghost::sched_item si;
-    ghost_.GetSchedItem(/*sid=*/i, si);
+    prio_table_helper_.GetSchedItem(/*sid=*/i, si);
     si.sid = i;
     si.wcid = kWorkClassIdentifier;
     si.gpid = gtids[i].id();
     si.flags = SCHED_ITEM_RUNNABLE;
     si.deadline = 0;
-    ghost_.SetSchedItem(/*sid=*/i, si);
+    prio_table_helper_.SetSchedItem(/*sid=*/i, si);
   }
 }
 
 GhostOrchestrator::GhostOrchestrator(Orchestrator::Options opts)
     : Orchestrator(std::move(opts)),
-      ghost_(/*num_sched_items=*/options().num_threads,
-             /*num_work_classes=*/1) {
+      prio_table_helper_(/*num_sched_items=*/options().num_threads,
+                         /*num_work_classes=*/1) {
   CHECK_ZERO(options().cpus.size());
 
   InitThreadPool();

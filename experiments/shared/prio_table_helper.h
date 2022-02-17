@@ -14,37 +14,37 @@
  * limitations under the License.
  */
 
-#ifndef GHOST_EXPERIMENTS_SHARED_GHOST_H_
-#define GHOST_EXPERIMENTS_SHARED_GHOST_H_
+#ifndef GHOST_EXPERIMENTS_SHARED_PRIO_TABLE_HELPER_H_
+#define GHOST_EXPERIMENTS_SHARED_PRIO_TABLE_HELPER_H_
 
 #include "shared/prio_table.h"
 
 namespace ghost_test {
 
-// Helper class for applications scheduled by ghOSt. This class manages the
-// PrioTable and facilitates accesses to the PrioTable, including sched item
-// accesses and work class accesses.
+// Helper class for applications scheduled by ghOSt that use a PrioTable. This
+// class manages the PrioTable and facilitates accesses to the PrioTable,
+// including sched item accesses and work class accesses.
 //
 // Example:
-// Ghost ghost_;
+// PrioTableHelper helper_;
 // (Initialize with the number of sched items and the number of work classes.)
 // ...
 // ghost::sched_item si;
 // (Fill in the sched item.)
-// ghost_.SetSchedItem(/*sid=*/2, si);
+// helper_.SetSchedItem(/*sid=*/2, si);
 // ...
 // ghost::work_class wc;
 // (Fill in the work class.)
-// ghost_.SetWorkClass(/*wcid=*/1, wc);
+// helper_.SetWorkClass(/*wcid=*/1, wc);
 // ...
-// Main thread: ghost_.MarkIdle(/*sid=*/3);
-// Thread with SID 3: ghost_.IsIdle(/*sid=*/3);
+// Main thread: helper_.MarkIdle(/*sid=*/3);
+// Thread with SID 3: helper_.IsIdle(/*sid=*/3);
 // (Returns true.)
-// ghost_.WaitUntilRunnable(/*sid=*/3);
+// helper_.WaitUntilRunnable(/*sid=*/3);
 // (Thread with SID 3 is descheduled by ghOSt.)
-// Thread with SID 1: ghost_.MarkRunnable(/*sid=*/3);
+// Thread with SID 1: helper_.MarkRunnable(/*sid=*/3);
 // (ghOSt eventually schedules the thread with SID 3.)
-class Ghost {
+class PrioTableHelper {
  public:
   // Constructs the class. 'num_sched_items' is the number of sched items in the
   // PrioTable (i.e., the number of threads scheduled by ghOSt).
@@ -52,7 +52,7 @@ class Ghost {
   // items are placed into work classes and then attributes are set on each work
   // class, which in turn are applied to the sched items in each work class. You
   // need at least one work class if you have at least one sched item.
-  Ghost(uint32_t num_sched_items, uint32_t num_work_classes);
+  PrioTableHelper(uint32_t num_sched_items, uint32_t num_work_classes);
 
   // PrioTable methods. 'sid' refers to the identifier for a sched item ('sid' =
   // sched item identifier). 'wcid' refers to the identifier for a work class
@@ -160,4 +160,4 @@ class Ghost {
 
 }  // namespace ghost_test
 
-#endif  // GHOST_EXPERIMENTS_SHARED_GHOST_H_
+#endif  // GHOST_EXPERIMENTS_SHARED_PRIO_TABLE_HELPER_H_
