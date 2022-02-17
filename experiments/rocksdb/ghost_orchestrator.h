@@ -64,8 +64,23 @@ class GhostOrchestrator final : public Orchestrator {
   // Initializes the thread pool.
   void InitThreadPool();
 
-  // Initializes the ghOSt PrioTable.
-  void InitGhost();
+  // Initializes the ghOSt PrioTable. Note that this should only be called when
+  // the ghOSt wait type is `Orchestrator::GhostWaitType::kPrioTable`.
+  void InitPrioTable();
+
+  // Returns true if RocksDB workers wait on a PrioTable.
+  bool UsesPrioTable() const {
+    return options().ghost_wait_type == Orchestrator::GhostWaitType::kPrioTable;
+  }
+  // Returns true if RocksDB workers wait on futexes.
+  bool UsesFutex() const {
+    return options().ghost_wait_type == Orchestrator::GhostWaitType::kFutex;
+  }
+
+  // Used by `GetIdleWorkerSIDs()`. Returns true if the idle worker with SID
+  // `worker_sid` should be skipped this round. Returns false if the worker
+  // should not be skipped.
+  bool SkipIdleWorker(uint32_t worker_sid);
 
   // The load generator calls this method to populate 'idle_sids_' with a list
   // of the SIDs of idle workers. Note that this method clears 'idle_sids_'
@@ -79,8 +94,16 @@ class GhostOrchestrator final : public Orchestrator {
   // put all worker sched items in the same work class.
   static constexpr uint32_t kWorkClassIdentifier = 0;
 
-  // Manages communication with ghOSt via the shared PrioTable.
-  PrioTableHelper prio_table_helper_;
+  // Allows runnable threads to run and keeps idle threads sleeping on a futex
+  // until they are marked runnable again. Note this is only used when the ghOSt
+  // wait type is `Orchestrator::GhostWaitType::kFutex`. Otherwise, the pointer
+  // is null.
+  std::unique_ptr<ThreadWait> thread_wait_;
+
+  // Manages communication with ghOSt via the shared PrioTable. Note this is
+  // only used when the ghOSt wait type is
+  // `Orchestrator::GhostWaitType::kPrioTable`. Otherwise, the pointer is null.
+  std::unique_ptr<PrioTableHelper> prio_table_helper_;
 
   // 'threads_ready_' is notified once all threads have been spawned and the
   // ghOSt PrioTable has been initialized with the work class and all worker

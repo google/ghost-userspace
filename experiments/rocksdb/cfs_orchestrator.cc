@@ -46,7 +46,7 @@ CfsOrchestrator::CfsOrchestrator(Orchestrator::Options opts)
     // Add 2 to account for the load generator thread and the dispatcher
     // thread.
     : Orchestrator(opts, opts.num_workers + 2),
-      thread_wait_(total_threads(), options().cfs_wait_type),
+      thread_wait_(/*num_threads=*/total_threads(), options().cfs_wait_type),
       threads_ready_(total_threads()) {
   CHECK_EQ(options().num_workers, options().worker_cpus.size());
 
