@@ -90,6 +90,18 @@ class CfsWaitType(str, enum.Enum):
   FUTEX = "futex"
 
 
+@enum.unique
+class GhostWaitType(str, enum.Enum):
+  """The way that ghOSt workers wait until they are assigned more work.
+
+  PRIO_TABLE has the workers communicate with ghOSt via the PrioTable. The ghOSt
+  scheduler unschedules workers that mark themselves as idle.
+  FUTEX has the workers sleep on a futex.
+  """
+  PRIO_TABLE = "prio_table"
+  FUTEX = "futex"
+
+
 @dataclass
 class Paths:
   """The paths to each of the binaries.
@@ -193,6 +205,7 @@ class RocksDBOptions:
   num_workers: int = _NUM_ROCKSDB_WORKERS
   worker_cpus: List[int] = field(default_factory=GetDefaultRocksDBWorkerCpus)
   cfs_wait_type: CfsWaitType = CfsWaitType.SPIN
+  ghost_wait_type: GhostWaitType = GhostWaitType.PRIO_TABLE
   get_duration: str = "10us"
   range_duration: str = "5000us"
   get_exponential_mean: str = "0us"
