@@ -23,7 +23,7 @@
 #include "experiments/antagonist/cfs_orchestrator.h"
 #include "experiments/antagonist/ghost_orchestrator.h"
 #include "experiments/antagonist/orchestrator.h"
-#include "experiments/shared/cfs.h"
+#include "experiments/shared/thread_wait.h"
 
 ABSL_FLAG(std::string, print_format, "pretty",
           "Results print format (\"pretty\" or \"csv\", default: \"pretty\")");

@@ -46,7 +46,7 @@ CfsOrchestrator::CfsOrchestrator(Orchestrator::Options opts)
     // Add 2 to account for the load generator thread and the dispatcher
     // thread.
     : Orchestrator(opts, opts.num_workers + 2),
-      cfs_(total_threads(), options().cfs_wait_type),
+      thread_wait_(total_threads(), options().cfs_wait_type),
       threads_ready_(total_threads()) {
   CHECK_EQ(options().num_workers, options().worker_cpus.size());
 
@@ -80,7 +80,7 @@ void CfsOrchestrator::Terminate() {
     for (size_t i = 0; i < options().num_workers; ++i) {
       // We add 2 since the load generator (SID 0) and the dispatcher (SID 1)
       // are always runnable.
-      cfs_.MarkRunnable(i + 2);
+      thread_wait_.MarkRunnable(i + 2);
     }
   }
   thread_pool().Join();
@@ -218,7 +218,7 @@ void CfsOrchestrator::Dispatcher(uint32_t sid) {
       worker_work()[worker_sid]->num_requests.store(
           worker_work()[worker_sid]->requests.size(),
           std::memory_order_release);
-      cfs_.MarkRunnable(worker_sid);
+      thread_wait_.MarkRunnable(worker_sid);
     } else {
       // There is no work waiting in the ingress queue.
       break;
@@ -239,7 +239,7 @@ void CfsOrchestrator::Worker(uint32_t sid) {
     printf("Worker (SID %u, TID: %ld, affined to CPU %u)\n", sid,
            syscall(SYS_gettid), options().worker_cpus[sid - 2]);
     // Wait until the dispatcher assigns work to this worker.
-    cfs_.MarkIdle(sid);
+    thread_wait_.MarkIdle(sid);
     // Do this after 'MarkIdle'. If the worker did it before calling 'MarkIdle',
     // the dispatcher could assign work to this worker and then mark it
     // runnable. Then the worker could mark itself idle and go spin/sleep on
@@ -247,7 +247,7 @@ void CfsOrchestrator::Worker(uint32_t sid) {
     // the experiment. Remember that 'MarkIdle' does not make the worker
     // spin/sleep -- only 'WaitUntilRunnable' does.
     threads_ready_.Block();
-    cfs_.WaitUntilRunnable(sid);
+    thread_wait_.WaitUntilRunnable(sid);
 
     // Return here since it is possible the worker was never assigned a request
     // and is being woken up because the application is exiting.
@@ -272,11 +272,11 @@ void CfsOrchestrator::Worker(uint32_t sid) {
     requests()[sid].push_back(request);
   }
 
-  cfs_.MarkIdle(sid);
-  // Set 'num_requests' to 0 after calling 'cfs_.MarkIdle' to avoid the same
-  // race mentioned above when the worker is initializing.
+  thread_wait_.MarkIdle(sid);
+  // Set 'num_requests' to 0 after calling 'thread_wait_.MarkIdle' to avoid the
+  // same race mentioned above when the worker is initializing.
   work->num_requests.store(0, std::memory_order_release);
-  cfs_.WaitUntilRunnable(sid);
+  thread_wait_.WaitUntilRunnable(sid);
 }
 
 }  // namespace ghost_test

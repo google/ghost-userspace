@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef GHOST_EXPERIMENTS_SHARED_CFS_H_
-#define GHOST_EXPERIMENTS_SHARED_CFS_H_
+#ifndef GHOST_EXPERIMENTS_SHARED_THREAD_WAIT_H_
+#define GHOST_EXPERIMENTS_SHARED_THREAD_WAIT_H_
 
 #include <stdint.h>
 
@@ -23,23 +23,23 @@
 
 namespace ghost_test {
 
-// Support class for test apps that run experiments with threads scheduled by
-// the Linux Completely Fair Scheduler (CFS). This class allows threads to be
-// marked as idle/runnable and lets them wait if they are idle until they are
-// marked runnable again either by spinning or sleeping on a futex.
+// Support class for test apps that run experiments with threads that need to
+// wait. This class allows threads to be marked as idle/runnable and lets them
+// wait if they are idle until they are marked runnable again either by spinning
+// or sleeping on a futex.
 //
 // Example:
-// CompletelyFairScheduler cfs_;
+// ThreadWait thread_wait_;
 // (Initialize with the number of threads you are using and the wait type.)
 // ...
-// Main Thread: cfs_.MarkIdle(/*sid=*/2);
+// Main Thread: thread_wait_.MarkIdle(/*sid=*/2);
 // ...
-// Thread 2: cfs_.WaitUntilRunnable(/*sid=*/2);
+// Thread 2: thread_wait_.WaitUntilRunnable(/*sid=*/2);
 // (Thread 2 now waits.)
 // ...
-// Thread 1: cfs_.MarkRunnable(/*sid=*/2);
+// Thread 1: thread_wait_.MarkRunnable(/*sid=*/2);
 // (Thread 2 now returns from 'WaitUntilRunnable()' and does other work.)
-class CompletelyFairScheduler {
+class ThreadWait {
  public:
   // When 'WaitUntilRunnable' is called, there are different ways to wait. Each
   // way affects performance differently.
@@ -53,7 +53,7 @@ class CompletelyFairScheduler {
     kWaitFutex,
   };
 
-  CompletelyFairScheduler(uint32_t num_threads, WaitType wait_type);
+  ThreadWait(uint32_t num_threads, WaitType wait_type);
 
   // Marks 'sid' as runnable.
   void MarkRunnable(uint32_t sid);
@@ -69,21 +69,20 @@ class CompletelyFairScheduler {
 };
 
 inline std::ostream& operator<<(std::ostream& os,
-                                CompletelyFairScheduler::WaitType wait_type) {
+                                ThreadWait::WaitType wait_type) {
   switch (wait_type) {
-    case CompletelyFairScheduler::WaitType::kWaitSpin:
+    case ThreadWait::WaitType::kWaitSpin:
       os << "Spin";
       break;
-    case CompletelyFairScheduler::WaitType::kWaitFutex:
+    case ThreadWait::WaitType::kWaitFutex:
       os << "Futex";
       break;
       // We will get a compile error if a new member is added to the
-      // 'CompletelyFairScheduler::WaitType' enum and a corresponding case is
-      // not added here.
+      // 'ThreadWait::WaitType' enum and a corresponding case is not added here.
   }
   return os;
 }
 
 }  // namespace ghost_test
 
-#endif  // GHOST_EXPERIMENTS_SHARED_CFS_H_
+#endif  // GHOST_EXPERIMENTS_SHARED_THREAD_WAIT_H_

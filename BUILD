@@ -591,14 +591,14 @@ cc_binary(
 cc_library(
     name = "experiments_shared",
     srcs = [
-        "experiments/shared/cfs.cc",
         "experiments/shared/ghost.cc",
         "experiments/shared/thread_pool.cc",
+        "experiments/shared/thread_wait.cc",
     ],
     hdrs = [
-        "experiments/shared/cfs.h",
         "experiments/shared/ghost.h",
         "experiments/shared/thread_pool.h",
+        "experiments/shared/thread_wait.h",
     ],
     copts = compiler_flags,
     deps = [

@@ -21,7 +21,7 @@
 #include "experiments/rocksdb/latency.h"
 #include "experiments/rocksdb/orchestrator.h"
 #include "experiments/rocksdb/request.h"
-#include "experiments/shared/cfs.h"
+#include "experiments/shared/thread_wait.h"
 
 namespace ghost_test {
 
@@ -72,7 +72,7 @@ class CfsOrchestrator final : public Orchestrator {
 
   // Allows runnable threads to run and keeps idle threads either spinning or
   // sleeping on a futex until they are marked runnable again.
-  CompletelyFairScheduler cfs_;
+  ThreadWait thread_wait_;
 
   // Each thread (the load generator, the dispatcher, and the workers)
   // decrements this once they have initialized themselves. This barrier is used

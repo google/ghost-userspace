@@ -124,10 +124,9 @@ ghost_test::Orchestrator::Options GetOptions() {
 
   std::string cfs_wait_type = absl::GetFlag(FLAGS_cfs_wait_type);
   CHECK(cfs_wait_type == "spin" || cfs_wait_type == "futex");
-  options.cfs_wait_type =
-      (cfs_wait_type == "spin")
-          ? ghost_test::CompletelyFairScheduler::WaitType::kWaitSpin
-          : ghost_test::CompletelyFairScheduler::WaitType::kWaitFutex;
+  options.cfs_wait_type = (cfs_wait_type == "spin")
+                              ? ghost_test::ThreadWait::WaitType::kWaitSpin
+                              : ghost_test::ThreadWait::WaitType::kWaitFutex;
 
   options.get_duration = absl::GetFlag(FLAGS_get_duration);
   CHECK_GE(options.get_duration, absl::ZeroDuration());

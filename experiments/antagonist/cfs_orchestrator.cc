@@ -15,7 +15,6 @@
 #include "experiments/antagonist/cfs_orchestrator.h"
 
 #include "absl/functional/bind_front.h"
-#include "experiments/shared/cfs.h"
 
 namespace ghost_test {
 

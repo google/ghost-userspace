@@ -23,8 +23,8 @@
 #include "experiments/rocksdb/ingress.h"
 #include "experiments/rocksdb/latency.h"
 #include "experiments/rocksdb/request.h"
-#include "experiments/shared/cfs.h"
 #include "experiments/shared/thread_pool.h"
+#include "experiments/shared/thread_wait.h"
 
 namespace ghost_test {
 
@@ -90,7 +90,7 @@ class Orchestrator {
     // experiments. The workers can either spin while waiting for more work
     // ('kWaitSpin') or they can sleep on a futex while waiting for more work
     // ('kWaitFutex').
-    CompletelyFairScheduler::WaitType cfs_wait_type;
+    ThreadWait::WaitType cfs_wait_type;
 
     // The total amount of time spent processing a Get request in RocksDB and
     // doing synthetic work.
