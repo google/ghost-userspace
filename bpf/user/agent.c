@@ -15,6 +15,7 @@
  */
 
 #include "bpf/user/agent.h"
+#include "kernel/ghost_uapi.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -30,6 +31,8 @@
 #include "bpf/user/ghost_bpf.skel.h"
 #include "bpf/user/schedghostidle_bpf.skel.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
+
+#define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
 
 // The ghost_bpf object and its cpu_data mmap is our set of
 // "scheduler-independent" BPF programs.  Right now, we have a generic one that
@@ -74,6 +77,11 @@ int bpf_map__munmap(struct bpf_map *map, void *addr)
 void bpf_program__set_types(struct bpf_program *prog, int prog_type,
 			    int expected_attach_type)
 {
+	BUILD_BUG_ON(BPF_GHOST_MAX_ATTACH_TYPE > 0xFFFF);
+	BUILD_BUG_ON(GHOST_VERSION > 0xFFFF);
+
+	expected_attach_type |= GHOST_VERSION << 16;
+
 	bpf_program__set_type(prog, prog_type);
 	bpf_program__set_expected_attach_type(prog, expected_attach_type);
 }
@@ -91,7 +99,8 @@ static int insert_prog(int ctl_fd, struct bpf_program *prog)
 	int eat = bpf_program__get_expected_attach_type(prog);
 	int ret;
 
-	switch (eat) {
+	// Mask the ABI value encoded in the upper 16 bits.
+	switch (eat & 0xFFFF) {
 	case BPF_GHOST_SCHED_SKIP_TICK:
 	case BPF_GHOST_SCHED_PNT:
 	case BPF_GHOST_MSG_SEND:
