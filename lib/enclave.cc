@@ -22,6 +22,7 @@
 #include <regex>  // NOLINT: no RE2; ghost limits itself to absl
 
 #include "absl/base/attributes.h"
+#include "absl/strings/numbers.h"
 #include "bpf/user/agent.h"
 #include "kernel/ghost_uapi.h"
 #include "lib/agent.h"
@@ -307,6 +308,20 @@ int LocalEnclave::GetNrTasks(int dir_fd) {
 }
 
 // static
+int LocalEnclave::GetAbiVersion(int dir_fd) {
+  int fd = openat(dir_fd, "abi_version", O_RDONLY);
+  CHECK_GE(fd, 0);
+
+  int version;
+  if (!absl::SimpleAtoi(ReadString(fd), &version)) {
+    version = 0;  // invalid abi version.
+  }
+
+  close(fd);
+  return version;
+}
+
+// static
 void LocalEnclave::DestroyEnclave(int ctl_fd) {
   constexpr const char kCommand[] = "destroy";
   ssize_t msg_sz = sizeof(kCommand) - 1;  // No need for the \0
@@ -341,6 +356,8 @@ void LocalEnclave::CommonInit() {
   // fully moved away from default enclaves.
   CHECK_EQ(Ghost::GetGlobalEnclaveCtlFd(), -1);
   Ghost::SetGlobalEnclaveCtlFd(ctl_fd_);
+
+  CHECK_EQ(GetAbiVersion(), GHOST_VERSION);
 
   int data_fd = LocalEnclave::GetCpuDataRegion(dir_fd_);
   CHECK_GE(data_fd, 0);

@@ -437,6 +437,7 @@ class LocalEnclave final : public Enclave {
   void DetachAgent(Agent* agent) final;
 
   int GetNrTasks() { return LocalEnclave::GetNrTasks(dir_fd_); }
+  int GetAbiVersion() { return LocalEnclave::GetAbiVersion(dir_fd_); }
 
   void SetRunnableTimeout(absl::Duration d) final {
     WriteEnclaveTunable(dir_fd_, "runnable_timeout",
@@ -471,6 +472,7 @@ class LocalEnclave final : public Enclave {
   // (either 0 or 1) at some point in time.
   static void WaitForAgentOnlineValue(int dir_fd, int until);
   static int GetNrTasks(int dir_fd);
+  static int GetAbiVersion(int dir_fd);
   static void DestroyEnclave(int ctl_fd);
   static void DestroyAllEnclaves();
 
