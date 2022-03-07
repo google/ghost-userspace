@@ -148,9 +148,9 @@ void Ghost::MountGhostfs() {
   }
 }
 
-// Returns the version of ghOSt running in the kernel.
+// Returns the ghOSt abi versions supported by the kernel.
 // static
-int Ghost::GetVersion(uint64_t& version) {
+int Ghost::GetSupportedVersions(std::vector<uint32_t>& versions) {
   if (!GhostIsMountedAt(Ghost::kGhostfsMount)) {
     MountGhostfs();
   }
@@ -158,12 +158,17 @@ int Ghost::GetVersion(uint64_t& version) {
   if (!ver.is_open()) {
     return -1;
   }
+
   std::string line;
-  if (std::getline(ver, line) && absl::SimpleAtoi(line, &version)) {
-    return 0;
-  } else {
-    return -1;
+  while (std::getline(ver, line)) {
+    uint32_t v;
+    if (absl::SimpleAtoi(line, &v)) {
+      versions.push_back(v);
+    } else {
+      return -1;
+    }
   }
+  return 0;
 }
 
 // static

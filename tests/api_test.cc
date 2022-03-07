@@ -1001,13 +1001,12 @@ class CoreScheduler {
 // This test ensures the version check functionality works properly.
 // 'Ghost::GetVersion' should return a version that matches 'GHOST_VERSION'.
 TEST(ApiTest, CheckVersion) {
-  uint64_t kernel_abi_version;
-  ASSERT_THAT(Ghost::GetVersion(kernel_abi_version), Eq(0));
-  ASSERT_THAT(kernel_abi_version, testing::Eq(GHOST_VERSION));
-  // Use 'GHOST_VERSION + 1' rather than a specific number, such as 0, so that
-  // this test doesn't fail if the number we choose happens to be the current
-  // kernel ABI version.
-  ASSERT_THAT(kernel_abi_version, testing::Ne(GHOST_VERSION + 1));
+  std::vector<uint32_t> kernel_abi_versions;
+  ASSERT_THAT(Ghost::GetSupportedVersions(kernel_abi_versions), Eq(0));
+
+  auto iter = std::find(kernel_abi_versions.begin(), kernel_abi_versions.end(),
+                        GHOST_VERSION);
+  ASSERT_THAT(iter, testing::Ne(kernel_abi_versions.end()));
 }
 
 // Bare-bones agent implementation that can schedule exactly one task.

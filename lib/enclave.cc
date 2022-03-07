@@ -178,7 +178,7 @@ int LocalEnclave::MakeNextEnclave() {
   int id = 1;
 
   while (true) {
-    std::string cmd = absl::StrCat("create ", id);
+    std::string cmd = absl::StrCat("create ", id, " ", GHOST_VERSION);
     if (write(top_ctl, cmd.c_str(), cmd.length()) == cmd.length()) {
       break;
     }

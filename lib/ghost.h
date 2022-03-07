@@ -255,20 +255,22 @@ class Ghost {
 
   static bool GhostIsMountedAt(const char* path);
   static void MountGhostfs();
-  // Returns the version of ghOSt running in the kernel.
-  static int GetVersion(uint64_t& version);
+  // Returns the ghOSt abi versions supported by the kernel.
+  static int GetSupportedVersions(std::vector<uint32_t>& versions);
 
   // Checks that the userspace ABI version matches the kernel ABI version.
   // This method performs a 'CHECK_EQ' so that the process dies if the versions
   // do not match. This is useful since this method runs on startup when
   // 'kVersionCheck' is initialized in the agent.
   static bool CheckVersion() {
-    uint64_t kernel_abi_version;
-    CHECK_EQ(GetVersion(kernel_abi_version), 0);
+    std::vector<uint32_t> versions;
+    CHECK_EQ(GetSupportedVersions(versions), 0);
+
     // The version of ghOSt running in the kernel must match the version of
     // ghOSt that this userspace binary was built for.
-    CHECK_EQ(kernel_abi_version, GHOST_VERSION);
-    return kernel_abi_version == GHOST_VERSION;
+    auto iter = std::find(versions.begin(), versions.end(), GHOST_VERSION);
+    CHECK(iter != versions.end());
+    return iter != versions.end();
   }
 
   static void SetGlobalEnclaveCtlFd(int fd) { gbl_ctl_fd_ = fd; }
