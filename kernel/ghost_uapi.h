@@ -59,12 +59,6 @@ enum ghost_type {
 	GHOST_TASK,
 };
 
-enum {
-	GHOST_SCHED_TASK_PRIO,
-	GHOST_SCHED_AGENT_PRIO,
-	GHOST_SCHED_MAX_PRIO,
-};
-
 /*
  * Collateral for GHOST_CONFIG_QUEUE_WAKEUP op:
  * - kernel supports up to 'GHOST_MAX_WINFO' wakeup targets for a queue.

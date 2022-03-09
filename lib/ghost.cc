@@ -252,6 +252,11 @@ struct sched_attr {
 };
 #define SCHED_FLAG_RESET_ON_FORK 0x01
 
+// Magic values encoded in 'sched_attr.sched_priority' to indicate whether
+// a task is a normal ghost task or an agent.
+#define GHOST_SCHED_TASK_PRIO   0
+#define GHOST_SCHED_AGENT_PRIO  1
+
 int SchedTaskEnterGhost(pid_t pid, int ctl_fd) {
   sched_attr attr = {
       .size = sizeof(sched_attr),
