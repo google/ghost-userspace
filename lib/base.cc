@@ -79,6 +79,30 @@ void Notification::WaitForNotification() {
   Futex::Wait(&notified_, NotifiedState::kWaiter);
 }
 
+// 64-bit gtids referring to normal tasks always have a positive value:
+// (0 | XX bits of actual pid_t | YY bit non-zero seqnum)
+// We calculate XX based on the maximum value that a pid may have and
+// then derive (YY = 63 - XX).
+int ghost_tid_seqnum_bits() {
+  int pid_max_max;
+  std::ifstream ifs("/proc/sys/kernel/pid_max_max");
+  if (!ifs) {
+    // We must be running on a kernel that predates 'kernel.pid_max_max'
+    // in which case we assume that PID_MAX_LIMIT is 4194304.
+    pid_max_max = 4194304;
+  } else {
+    ifs >> pid_max_max;
+  }
+
+  // Paranoia since __builtin_clz() is undefined for the zero value.
+  CHECK_GE(pid_max_max, 2);
+  const int xx = 32 - __builtin_clz(pid_max_max - 1);
+  const int yy = 63 - xx;
+  return yy;
+}
+
+const int GHOST_TID_SEQNUM_BITS = ghost_tid_seqnum_bits();
+
 int64_t GetGtidFromFile(FILE *stream) {
   int64_t gtid;
   if (fscanf(stream, "%ld", &gtid) != 1) return -1;

@@ -35,7 +35,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	58
+#define GHOST_VERSION	59
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -571,16 +571,6 @@ struct ghost_cpu_data {
 enum {
 	GHOST_GTID_LOOKUP_TGID,		/* return group_leader pid */
 };
-
-/*
- * ghost tids referring to normal tasks always have a positive value:
- * (0 | 22 bits of actual pid_t | 41 bit non-zero seqnum)
- *
- * The embedded 'pid' following linux terminology is actually referring
- * to the thread id (i.e. what would be returned by syscall(__NR_gettid)).
- */
-#define GHOST_TID_SEQNUM_BITS	41
-#define GHOST_TID_PID_BITS	22
 
 // clang-format on
 // NOLINTEND
