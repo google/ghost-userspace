@@ -27,12 +27,15 @@
 namespace ghost {
 namespace {
 
-// Tests that the `Run` ghOSt syscall succeeds when the `CAP_SYS_NICE`
+// Tests that the `Run` ghOSt ioctl succeeds when the `CAP_SYS_NICE`
 // capability is set. We do not want to invoke the scheduler, so we pass
-// nonsense values to make the syscall fail. We know that we have the ability to
-// use the syscall if we fail with error `EINVAL` rather than error `EPERM`.
+// nonsense values to make the ioctl fail. We know that we have the ability to
+// use the ioctl if we fail with error `EINVAL` rather than error `EPERM`.
 TEST(CapabilitiesTest, RunNice) {
   AssertNiceCapabilitySet();
+
+  Topology* topology = MachineTopology();
+  LocalEnclave enclave(AgentConfig(topology, topology->EmptyCpuList()));
 
   EXPECT_THAT(Ghost::Run(Gtid::Current(), /*agent_barrier=*/0,
                          /*task_barrier=*/0, /*cpu=*/-1, /*flags=*/0),
@@ -114,13 +117,16 @@ TEST(CapabilitiesTest, AgentNice) {
   agent.Terminate();
 }
 
-// Drops the `CAP_SYS_NICE` capability and tests that the `Run` ghOSt syscall
+// Drops the `CAP_SYS_NICE` capability and tests that the `Run` ghOSt ioctl
 // fails. We do not want to invoke the scheduler, so we pass nonsense values to
 // make the syscall fail. We know that we do not have the ability to use the
-// syscall if we fail with error `EPERM` rather than error `EINVAL`.
+// ioctl if we fail with error `EPERM` rather than error `EINVAL`.
 TEST(CapabilitiesTest, RunNoNice) {
   GhostThread thread(GhostThread::KernelScheduler::kCfs, []() {
     DropNiceCapability();
+
+    Topology* topology = MachineTopology();
+    LocalEnclave enclave(AgentConfig(topology, topology->EmptyCpuList()));
 
     EXPECT_THAT(Ghost::Run(Gtid::Current(), /*agent_barrier=*/0,
                            /*task_barrier=*/0, /*cpu=*/-1, /*flags=*/0),

@@ -93,8 +93,15 @@ class Ghost {
 
   static int Run(const Gtid gtid, const uint32_t agent_barrier,
                  const uint32_t task_barrier, const int cpu, const int flags) {
-    return syscall(__NR_ghost_run, gtid.id(), agent_barrier, task_barrier, cpu,
-                   flags);
+    ghost_ioc_run data = {
+      .gtid = gtid.id(),
+      .agent_barrier = agent_barrier,
+      .task_barrier = task_barrier,
+      .run_cpu = cpu,
+      .run_flags = flags,
+    };
+    return ioctl(gbl_ctl_fd_, GHOST_IOC_RUN, &data);
+
   }
 
   static int SyncCommit(cpu_set_t* const cpuset) {

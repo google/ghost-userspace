@@ -35,7 +35,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	59
+#define GHOST_VERSION	60
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -153,6 +153,14 @@ struct ghost_ioc_timerfd_settime {
 	struct timerfd_ghost timerfd_ghost;
 };
 
+struct ghost_ioc_run {
+	int64_t gtid;
+	uint32_t agent_barrier;
+	uint32_t task_barrier;
+	int run_cpu;
+	int run_flags;
+};
+
 #define GHOST_IOC_NULL			_IO('g', 0)
 #define GHOST_IOC_SW_GET_INFO		_IOWR('g', 1, struct ghost_ioc_sw_get_info)
 #define GHOST_IOC_SW_FREE		_IOW('g', 2, struct ghost_sw_info)
@@ -164,6 +172,7 @@ struct ghost_ioc_timerfd_settime {
 #define GHOST_IOC_COMMIT_TXN		_IOW('g', 8, struct ghost_ioc_commit_txn)
 #define GHOST_IOC_SYNC_GROUP_TXN	_IOW('g', 9, struct ghost_ioc_commit_txn)
 #define GHOST_IOC_TIMERFD_SETTIME	_IOWR('g', 10, struct ghost_ioc_timerfd_settime)
+#define GHOST_IOC_RUN			_IOW('g', 11, struct ghost_ioc_run)
 
 /*
  * Status word region APIs.
@@ -403,9 +412,6 @@ struct ghost_ring {
  * Define ghOSt syscall numbers here until they can be discovered via
  * <unistd.h>.
  */
-#ifndef __NR_ghost_run
-#define __NR_ghost_run	450
-#endif
 #ifndef __NR_ghost
 #define __NR_ghost	451
 #endif
