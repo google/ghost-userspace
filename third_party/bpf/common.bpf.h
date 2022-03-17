@@ -14,7 +14,7 @@
 
 #include "libbpf/bpf_core_read.h"
 
-// TODO(jhumphri): Remove the NULL macro definition below once the open source
+// TODO: Remove the NULL macro definition below once the open source
 // ghOSt kernel has it in libbpf/bpf_helpers.h (5.13 and newer, see
 // https://github.com/torvalds/linux/commit/9ae2c26e43248b722e79fe867be38062c9dd1e5f).
 #ifndef NULL
