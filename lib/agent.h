@@ -35,8 +35,6 @@
 
 namespace ghost {
 
-class Agent;
-
 // Encapsulation for the per-cpu agent threads.
 // Implementations should override "AgentThread()".
 class Agent {
@@ -157,7 +155,7 @@ struct AgentRpcBuffer {
   }
 
   template <class T>
-  void SerializeVector(const std::vector<T> vt) {
+  void SerializeVector(const std::vector<T>& vt) {
     static_assert(std::is_trivially_copyable<T>::value,
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,

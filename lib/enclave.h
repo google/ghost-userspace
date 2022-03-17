@@ -491,8 +491,7 @@ class LocalEnclave final : public Enclave {
 
   CpuRep* rep(const Cpu& cpu) { return &cpus_[cpu.id()]; }
 
-  constexpr static int kMaxCpus = 512;
-  CpuRep cpus_[kMaxCpus];
+  CpuRep cpus_[MAX_CPUS];
   ghost_cpu_data* data_region_ = nullptr;
   size_t data_region_size_ = 0;
   bool destroy_when_destructed_;

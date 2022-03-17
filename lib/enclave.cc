@@ -349,8 +349,6 @@ void LocalEnclave::DestroyAllEnclaves() {
 }
 
 void LocalEnclave::CommonInit() {
-  CHECK_LE(topology_->num_cpus(), kMaxCpus);
-
   // Bug out if we already have a non-default global enclave.  We shouldn't have
   // more than one enclave per process at a time, at least not until we have
   // fully moved away from default enclaves.
