@@ -35,7 +35,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	60
+#define GHOST_VERSION	61
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -407,14 +407,6 @@ struct ghost_ring {
 };
 
 #define GHOST_MAX_QUEUE_ELEMS	65536	/* arbitrary */
-
-/*
- * Define ghOSt syscall numbers here until they can be discovered via
- * <unistd.h>.
- */
-#ifndef __NR_ghost
-#define __NR_ghost	451
-#endif
 
 /*
  * 'ops' supported by gsys_ghost().

@@ -118,10 +118,7 @@ int64_t gtid(int64_t pid) {
     fclose(stream);
   }
   if (gtid < 0) {  // Fallback to syscall.
-    int ret = syscall(__NR_ghost, GHOST_BASE_GET_GTID, &gtid);
-    if (ABSL_PREDICT_FALSE(ret < 0)) {
-      gtid = pid << GHOST_TID_SEQNUM_BITS;
-    }
+    gtid = pid << GHOST_TID_SEQNUM_BITS;
   }
   return gtid;
 }
@@ -204,14 +201,6 @@ done:
 
   if (dirfd >= 0) {
     close(dirfd);
-  }
-
-  if (tgid < 0) {  // Fallback to syscall.
-    // This should ideally be in ":ghost" but that results in a
-    // dependency inversion because ":ghost" depends on ":base".
-    int rc = syscall(__NR_ghost, GHOST_GTID_LOOKUP, id(),
-                     GHOST_GTID_LOOKUP_TGID, /*flags=*/0, &tgid);
-    if (rc == -1) return -1;
   }
 
   return tgid;
