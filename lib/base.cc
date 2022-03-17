@@ -84,24 +84,26 @@ void Notification::WaitForNotification() {
 // We calculate XX based on the maximum value that a pid may have and
 // then derive (YY = 63 - XX).
 int ghost_tid_seqnum_bits() {
-  int pid_max_max;
-  std::ifstream ifs("/proc/sys/kernel/pid_max_max");
-  if (!ifs) {
-    // We must be running on a kernel that predates 'kernel.pid_max_max'
-    // in which case we assume that PID_MAX_LIMIT is 4194304.
-    pid_max_max = 4194304;
-  } else {
-    ifs >> pid_max_max;
-  }
+  static const int num_bits = [] {
+    int pid_max_max;
+    std::ifstream ifs("/proc/sys/kernel/pid_max_max");
+    if (!ifs) {
+      // We must be running on a kernel that predates 'kernel.pid_max_max'
+      // in which case we assume that PID_MAX_LIMIT is 4194304.
+      pid_max_max = 4194304;
+    } else {
+      ifs >> pid_max_max;
+    }
 
-  // Paranoia since __builtin_clz() is undefined for the zero value.
-  CHECK_GE(pid_max_max, 2);
-  const int xx = 32 - __builtin_clz(pid_max_max - 1);
-  const int yy = 63 - xx;
-  return yy;
+    // Paranoia since __builtin_clz() is undefined for the zero value.
+    CHECK_GE(pid_max_max, 2);
+    const int xx = 32 - __builtin_clz(pid_max_max - 1);
+    const int yy = 63 - xx;
+    return yy;
+  }();
+
+  return num_bits;
 }
-
-const int GHOST_TID_SEQNUM_BITS = ghost_tid_seqnum_bits();
 
 int64_t GetGtidFromFile(FILE *stream) {
   int64_t gtid;
@@ -118,7 +120,7 @@ int64_t gtid(int64_t pid) {
     fclose(stream);
   }
   if (gtid < 0) {  // Fallback to syscall.
-    gtid = pid << GHOST_TID_SEQNUM_BITS;
+    gtid = pid << ghost_tid_seqnum_bits();
   }
   return gtid;
 }
@@ -206,7 +208,7 @@ done:
   return tgid;
 }
 
-pid_t Gtid::tid() const { return gtid_raw_ >> GHOST_TID_SEQNUM_BITS; }
+pid_t Gtid::tid() const { return gtid_raw_ >> ghost_tid_seqnum_bits(); }
 
 int64_t GetGtid() { return gtid(GetTID()); }
 
