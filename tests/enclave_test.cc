@@ -18,6 +18,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "schedulers/fifo/centralized/fifo_scheduler.h"
 
 namespace ghost {
 namespace {
@@ -396,6 +397,49 @@ TEST_F(EnclaveTest, GetNrTasks) {
       AgentConfig(topology, topology->all_cpus()));
 
   EXPECT_EQ(enclave->GetNrTasks(), 0);
+}
+
+// Tests killing an enclave from ghostfs while an agent is running.  This broke
+// in a couple ways: once with a kernfs "active protection" refcount, and again
+// when the kernel ABI selection checked pcpu->enclave after it was cleared.
+TEST_F(EnclaveTest, KillActiveEnclave) {
+  // Anecdotally, this test works best if there are a few agent tasks blocked in
+  // the kernel.  Sometimes a couple of the agent tasks exited when the bug was
+  // present.
+  if (MachineTopology()->num_cpus() < 4) {
+    GTEST_SKIP() << "must have at least 4 cpus";
+    return;
+  }
+
+  int ctl_fd = LocalEnclave::MakeNextEnclave();
+  ASSERT_GE(ctl_fd, 0);
+  int enclave_fd = LocalEnclave::GetEnclaveDirectory(ctl_fd);
+  ASSERT_GE(enclave_fd, 0);
+  int cpulist_fd = openat(enclave_fd, "cpulist", O_RDWR);
+  ASSERT_GE(cpulist_fd, 0);
+  std::string cpus = "0-3";
+  ASSERT_EQ(write(cpulist_fd, cpus.c_str(), cpus.length()), cpus.length());
+  EXPECT_EQ(close(cpulist_fd), 0);
+
+  FifoConfig config;
+  config.topology_ = MachineTopology();
+  config.global_cpu_ = config.topology_->cpu(0);
+  config.enclave_fd_ = enclave_fd;
+
+  auto ap = new AgentProcess<FullFifoAgent<LocalEnclave>, FifoConfig>(config);
+  EXPECT_EQ(close(enclave_fd), 0);
+
+  ap->AddExitHandler([](pid_t child, int status) {
+    // When we manually destroy the enclave, the AP will be SIGKILLed.  By
+    // handling it (returning true) we prevent the AP parent (us) from exiting.
+    return true;
+  });
+
+  // Destroys the enclave via ghostfs.  This is not a graceful shutdown.
+  LocalEnclave::DestroyEnclave(ctl_fd);
+  EXPECT_EQ(close(ctl_fd), 0);
+
+  delete ap;
 }
 
 }  // namespace

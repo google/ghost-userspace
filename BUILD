@@ -324,6 +324,7 @@ cc_test(
     copts = compiler_flags,
     deps = [
         ":agent",
+        ":fifo_centralized_scheduler",
         "@com_google_googletest//:gtest_main",
     ],
 )
