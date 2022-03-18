@@ -205,6 +205,7 @@ cc_library(
         "kernel/ghost_uapi.h",
         "lib/base.h",
         "lib/logging.h",
+        "//third_party:util/util.h",
     ],
     copts = compiler_flags,
     deps = [

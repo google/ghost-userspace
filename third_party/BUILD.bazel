@@ -7,4 +7,5 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "iovisor_bcc/bits.bpf.h",
     "iovisor_bcc/trace_helpers.h",
+    "util/util.h",
 ])
