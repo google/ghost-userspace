@@ -998,6 +998,9 @@ class CoreScheduler {
   std::array<CpuState, MAX_CPUS> cpu_states_ ABSL_GUARDED_BY(mu_);
 };
 
+#ifdef notyet // b/214648944
+#endif  // b/214648944
+
 // This test ensures the version check functionality works properly.
 // 'Ghost::GetVersion' should return a version that matches 'GHOST_VERSION'.
 TEST(ApiTest, CheckVersion) {
