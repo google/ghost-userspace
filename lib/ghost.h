@@ -45,13 +45,7 @@ static inline void set_verbose(int32_t v) { absl::SetFlag(&FLAGS_verbose, v); }
 
 class StatusWordTable {
  public:
-  // Create or attach to a preexisting status word region in the enclave.
-  // `enclave_fd` is the fd for the enclave directory, e.g.
-  // /sys/fs/ghost/enclave_1/.  `id` is a user-provided identifier for the
-  // status word region.  `numa_node` is the NUMA node from which the kernel
-  // should allocate the memory for the staus word region.
-  StatusWordTable(int enclave_fd, int id, int numa_node);
-  ~StatusWordTable();
+  virtual ~StatusWordTable() {}
 
   int id() const { return header_->id; }
   ghost_status_word* get(unsigned int index) {
@@ -87,6 +81,17 @@ class StatusWordTable {
   size_t map_size_ = 0;
   ghost_sw_region_header* header_ = nullptr;
   ghost_status_word* table_ = nullptr;
+};
+
+class LocalStatusWordTable : public StatusWordTable {
+ public:
+  // Create or attach to a preexisting status word region in the enclave.
+  // `enclave_fd` is the fd for the enclave directory, e.g.
+  // /sys/fs/ghost/enclave_1/.  `id` is a user-provided identifier for the
+  // status word region.  `numa_node` is the NUMA node from which the kernel
+  // should allocate the memory for the status word region.
+  LocalStatusWordTable(int enclave_fd, int id, int numa_node);
+  ~LocalStatusWordTable() final;
 };
 
 // TODO: Syscall definition needs fixing for any hope of 32-bit compat.

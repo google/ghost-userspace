@@ -43,7 +43,8 @@ ABSL_FLAG(int32_t, verbose, 0, "Verbosity level");
 
 namespace ghost {
 
-StatusWordTable::StatusWordTable(int enclave_fd, int id, int numa_node) {
+LocalStatusWordTable::LocalStatusWordTable(int enclave_fd, int id,
+                                           int numa_node) {
   int ctl = openat(enclave_fd, "ctl", O_RDWR);
   CHECK_GE(ctl, 0);
   std::string cmd = absl::StrCat("create sw_region ", id, " ", numa_node);
@@ -67,14 +68,9 @@ StatusWordTable::StatusWordTable(int enclave_fd, int id, int numa_node) {
   CHECK_NE(table_, nullptr);
 }
 
-StatusWordTable::~StatusWordTable() {
+LocalStatusWordTable::~LocalStatusWordTable() {
   CHECK_EQ(munmap(header_, map_size_), 0);
-
-  // `fd_` is not initialized in all cases, such as when an empty status word
-  // table is constructed.
-  if (fd_ != -1) {
-    CHECK_EQ(close(fd_), 0);
-  }
+  CHECK_EQ(close(fd_), 0);
 }
 
 static ghost_status_word* status_word_from_info(ghost_sw_info* sw_info) {
