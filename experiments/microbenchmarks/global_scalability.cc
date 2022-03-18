@@ -224,6 +224,7 @@ std::vector<int> MakeCpuVectorSparse(int nr_cpus, int max_cpus,
 
 ABSL_FLAG(int32_t, global_cpu, 1, "Primary cpu to run the global agent");
 ABSL_FLAG(int32_t, max_cpus, -1, "Max cpus, including agent and cpu0");
+ABSL_FLAG(int32_t, min_cpus, -1, "Min cpus, including agent and cpu0");
 ABSL_FLAG(int32_t, total_loops, 5000000, "Number of loops total");
 ABSL_FLAG(int32_t, threads_per_cpu, 5, "Number of threads per cpu (unpinned)");
 ABSL_FLAG(bool, skip_cpu0, true, "Do not run agents or tasks on cpu0");
@@ -260,6 +261,23 @@ int main(int argc, char* argv[]) {
             skip_cpu0 ? "set" : "unset");
     exit(1);
   }
+  int min_cpus = absl::GetFlag(FLAGS_min_cpus);
+  if (min_cpus == -1) {
+    // num_cpus includes cpu0, which we might be skipping.  We're going to run
+    // the test for all possible numbers of cpus for which the test can run,
+    // i.e. from min_cpus to num_cpus.  The minimum number of cpus depends on
+    // whether or not we are skipping cpu0.  cpu0 counts for 1 cpu
+    // (conditionally).  We need two cpus regardless of cpu0: one cpu for the
+    // agent, and another cpu to run the ghost tasks.
+    min_cpus = skip_cpu0 ? 3 : 2;
+  }
+  if (min_cpus > num_cpus) {
+    fprintf(stderr,
+            "min_cpus %d is greater than num_cpus %d. (max %d, skip0 %s)\n",
+            min_cpus, num_cpus, absl::GetFlag(FLAGS_max_cpus),
+            skip_cpu0 ? "set" : "unset");
+    exit(1);
+  }
 
   if (pos_args.size() < 2) {
     fprintf(stderr, "Need a scheduler type\n");
@@ -286,13 +304,6 @@ int main(int argc, char* argv[]) {
   fprintf(outfile, "\n");
   fprintf(outfile, "nr_task_cpus,scheds_per_sec,loops_per_thread\n");
 
-  // num_cpus includes cpu0, which we might be skipping.  We're going to run the
-  // test for all possible numbers of cpus for which the test can run, i.e. from
-  // min_cpus to num_cpus.  The minimum number of cpus depends on whether or not
-  // we are skipping cpu0.  cpu0 counts for 1 cpu (conditionally).  We need two
-  // cpus regardless of cpu0: one cpu for the agent, and another cpu to run the
-  // ghost tasks.
-  int min_cpus = skip_cpu0 ? 3 : 2;
   for (int i = min_cpus; i <= num_cpus; ++i) {
     int nr_task_cpus = i - (skip_cpu0 ? 2 : 1);
     int nr_threads = nr_threads_per_cpu * nr_task_cpus;
