@@ -279,7 +279,18 @@ class Ghost {
     // The version of ghOSt running in the kernel must match the version of
     // ghOSt that this userspace binary was built for.
     auto iter = std::find(versions.begin(), versions.end(), GHOST_VERSION);
-    CHECK(iter != versions.end());
+    if (iter == versions.end()) {
+      std::cerr << "Fatal error!" << std::endl;
+      std::cerr << "Ghost version " << GHOST_VERSION << " not supported"
+                << std::endl;
+      std::cerr << "Kernel supports versions: ";
+      for (auto const& i : versions) {
+        std::cerr << i << ' ';
+      }
+      std::cerr << std::endl;
+      exit(1);
+    }
+
     return iter != versions.end();
   }
 
