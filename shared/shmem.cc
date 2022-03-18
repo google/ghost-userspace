@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <string>
 
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 
 #ifndef F_LINUX_SPECIFIC_BASE
@@ -194,7 +195,7 @@ int GhostShmem::OpenGhostShmemFd(const char* suffix, pid_t pid) {
   for (auto& f : fs::directory_iterator(path)) {
     CHECK(fs::is_symlink(f));
     std::string p = fs::read_symlink(f);
-    if (p.rfind(needle, 0) == 0) {
+    if (absl::StartsWith(p, needle)) {
       std::string path = fs::path(f);
       int fd = open(path.c_str(), O_RDWR | O_CLOEXEC);
       CHECK_GE(fd, 0);
