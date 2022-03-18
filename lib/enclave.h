@@ -274,6 +274,15 @@ struct RunRequestOptions {
 //     implemented by an Enclave.
 class RunRequest {
  public:
+  RunRequest() : cpu_(Cpu::UninitializedType::kUninitialized) {}
+  void Init(Enclave* enclave, Cpu cpu, ghost_txn* txn) {
+    enclave_ = enclave;
+    cpu_ = cpu;
+
+    CHECK_EQ(txn->cpu, cpu.id());
+    txn_ = txn;
+  }
+
   // Opens a transaction for later commit (sync or async depending on the
   // value of `commit_flags`).
   //
@@ -377,16 +386,9 @@ class RunRequest {
 
   uint64_t cpu_seqnum() const { return txn_->cpu_seqnum; }
 
+  ghost_txn* txn() { return txn_; }
+
  private:
-  RunRequest() : cpu_(Cpu::UninitializedType::kUninitialized) {}
-  void Init(Enclave* enclave, Cpu cpu, ghost_txn* txn) {
-    enclave_ = enclave;
-    cpu_ = cpu;
-
-    CHECK_EQ(txn->cpu, cpu.id());
-    txn_ = txn;
-  }
-
   // These are helper functions for the state-checking functions above. These
   // are useful because the caller may only want to call `state()` once since
   // that function does an atomic read and its value may change between
@@ -404,9 +406,6 @@ class RunRequest {
   Enclave* enclave_ = nullptr;
   ghost_txn* txn_ = nullptr;
   bool allow_txn_target_on_cpu_ = false;
-
-  friend class Enclave;
-  friend class LocalEnclave;
 };
 
 // An Enclave supporting execution on the local physical host.

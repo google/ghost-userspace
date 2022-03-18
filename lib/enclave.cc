@@ -542,7 +542,7 @@ bool LocalEnclave::CommitRunRequest(RunRequest* req) {
 
 void LocalEnclave::SubmitRunRequest(RunRequest* req) {
   GHOST_DPRINT(2, stderr, "COMMIT(%d): %s %d", req->cpu().id(),
-               Gtid(req->txn_->gtid).describe(), req->txn_->task_barrier);
+               req->target().describe(), req->target_barrier());
 
   if (req->open()) {
     CHECK_EQ(Ghost::Commit(req->cpu().id()), 0);
