@@ -37,7 +37,6 @@ cc_library(
         "lib/agent.cc",
         "lib/channel.cc",
         "lib/enclave.cc",
-        "lib/scheduler.cc",
         "lib/topology.cc",
     ],
     hdrs = [

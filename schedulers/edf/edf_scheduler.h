@@ -32,7 +32,7 @@ namespace ghost {
 
 class Orchestrator;
 
-struct EdfTask : public Task {
+struct EdfTask : public Task<> {
   enum class RunState {
     kBlocked = 0,
     kQueued = 1,
@@ -41,8 +41,8 @@ struct EdfTask : public Task {
     kPaused = 4,
   };
 
-  explicit EdfTask(Gtid edf_task_gtid, struct ghost_sw_info sw_info)
-      : Task(edf_task_gtid, sw_info) {}
+  explicit EdfTask(Gtid edf_task_gtid, ghost_sw_info sw_info)
+      : Task<>(edf_task_gtid, sw_info) {}
   ~EdfTask() override {}
 
   inline bool paused() const { return run_state == RunState::kPaused; }

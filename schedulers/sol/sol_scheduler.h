@@ -27,7 +27,7 @@
 namespace ghost {
 
 // Store information about a scheduled task.
-struct SolTask : public Task {
+struct SolTask : public Task<> {
   enum class RunState {
     kBlocked,
     kQueued,
@@ -37,8 +37,8 @@ struct SolTask : public Task {
     kPending,
   };
 
-  explicit SolTask(Gtid sol_task_gtid, struct ghost_sw_info sw_info)
-      : Task(sol_task_gtid, sw_info) {}
+  explicit SolTask(Gtid sol_task_gtid, ghost_sw_info sw_info)
+      : Task<>(sol_task_gtid, sw_info) {}
   ~SolTask() override {}
 
   bool blocked() const { return run_state == RunState::kBlocked; }

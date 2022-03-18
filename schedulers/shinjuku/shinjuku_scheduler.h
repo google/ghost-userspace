@@ -31,7 +31,7 @@
 namespace ghost {
 
 // Store information about a scheduled task.
-struct ShinjukuTask : public Task {
+struct ShinjukuTask : public Task<> {
   enum class RunState {
     kBlocked,
     kQueued,
@@ -54,7 +54,7 @@ struct ShinjukuTask : public Task {
   };
 
   explicit ShinjukuTask(Gtid shinjuku_task_gtid, struct ghost_sw_info sw_info)
-      : Task(shinjuku_task_gtid, sw_info) {}
+      : Task<>(shinjuku_task_gtid, sw_info) {}
   ~ShinjukuTask() override {}
 
   bool paused() const { return run_state == RunState::kPaused; }

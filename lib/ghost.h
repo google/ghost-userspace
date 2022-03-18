@@ -381,12 +381,12 @@ class StatusWord {
   StatusWord& operator=(StatusWord&&);
 
   // REQUIRES: *this must be empty.
-  ~StatusWord();
+  virtual ~StatusWord();
 
   // Signals to ghOSt that the status-word associated with *this is no longer
   // being used and may be potentially freed.  Resets *this to empty().
   // REQUIRES: *this must not be empty().
-  void Free();
+  virtual void Free();
 
   bool empty() { return sw_ == nullptr; }
 
@@ -420,7 +420,7 @@ class StatusWord {
   StatusWord(const StatusWord&) = delete;
   StatusWord& operator=(const StatusWord&) = delete;
 
- private:
+ protected:
   struct AgentSW {};
   explicit StatusWord(AgentSW);
 

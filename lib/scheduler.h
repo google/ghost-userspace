@@ -31,10 +31,12 @@
 namespace ghost {
 
 // REQUIRES: All Task implementations should derive from Task.
+template <class StatusWordType = StatusWord>
 struct Task {
-  explicit Task(Gtid gtid, ghost_sw_info sw_info)
-      : gtid(gtid), status_word(StatusWord(gtid, sw_info)) {}
-  virtual ~Task();
+  Task(Gtid gtid, ghost_sw_info sw_info)
+      : gtid(gtid), status_word(StatusWordType(gtid, sw_info)) {}
+
+  virtual ~Task() { status_word.Free(); }
 
   // Provides a light-weight assertion that all events have been processed
   // in-order and no messages were dropped.
@@ -45,7 +47,7 @@ struct Task {
   }
 
   Gtid gtid;
-  StatusWord status_word;
+  StatusWordType status_word;
   uint32_t seqnum = -1;
 };
 
@@ -129,7 +131,7 @@ class TaskAllocator {
 // scheduling-class method.
 template <typename TaskType>
 class BasicDispatchScheduler : public Scheduler {
-  static_assert(std::is_base_of_v<Task, TaskType>);
+  static_assert(is_base_of_template_v<Task, TaskType>);
 
  public:
   // REQUIRES: <allocator> must be thread-safe if being used by concurrent
@@ -350,7 +352,7 @@ class BasicDispatchScheduler : public Scheduler {
 // use with global-scheduling models.
 template <typename TaskType>
 class SingleThreadMallocTaskAllocator : public TaskAllocator<TaskType> {
-  static_assert(std::is_base_of_v<Task, TaskType>);
+  static_assert(is_base_of_template_v<Task, TaskType>);
 
  public:
   TaskType* GetTask(Gtid gtid) override;

@@ -27,7 +27,7 @@
 namespace ghost {
 
 // Store information about a scheduled task.
-struct FifoTask : public Task {
+struct FifoTask : public Task<> {
   enum class RunState {
     kBlocked,
     kQueued,
@@ -37,7 +37,7 @@ struct FifoTask : public Task {
   };
 
   FifoTask(Gtid fifo_task_gtid, ghost_sw_info sw_info)
-      : Task(fifo_task_gtid, sw_info) {}
+      : Task<>(fifo_task_gtid, sw_info) {}
   ~FifoTask() override {}
 
   bool blocked() const { return run_state == RunState::kBlocked; }

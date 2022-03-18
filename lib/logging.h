@@ -20,6 +20,7 @@
 #include <iostream>
 
 #include "absl/strings/str_format.h"
+#include "third_party/util/util.h"
 
 #if defined(GHOST_LOGGING)
 

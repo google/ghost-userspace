@@ -69,7 +69,7 @@ class DeadAgent : public Agent {
     ASSERT_THAT(channel_, NotNull());
 
     bool done = false;  // set to true below when MSG_TASK_DEAD is received.
-    std::unique_ptr<Task> task(nullptr);  // initialized in TASK_NEW handler.
+    std::unique_ptr<Task<>> task(nullptr);  // initialized in TASK_NEW handler.
     while (true) {
       while (true) {
         Message msg = Peek(channel_);
@@ -86,8 +86,8 @@ class DeadAgent : public Agent {
             const ghost_msg_payload_task_new* payload =
                 static_cast<const ghost_msg_payload_task_new*>(msg.payload());
             ASSERT_THAT(task, IsNull());
-            task =
-                absl::make_unique<Task>(Gtid(payload->gtid), payload->sw_info);
+            task = absl::make_unique<Task<>>(Gtid(payload->gtid),
+                                             payload->sw_info);
             task->seqnum = msg.seqnum();
             break;
           }
@@ -762,9 +762,9 @@ TEST(IdleTest, NeedCpuNotIdle) {
   Ghost::CloseGlobalEnclaveCtlFd();
 }
 
-struct CoreSchedTask : public Task {
-  explicit CoreSchedTask(Gtid task_gtid, struct ghost_sw_info sw_info)
-      : Task(task_gtid, sw_info) {}
+struct CoreSchedTask : public Task<> {
+  explicit CoreSchedTask(Gtid task_gtid, ghost_sw_info sw_info)
+      : Task<>(task_gtid, sw_info) {}
   ~CoreSchedTask() override {}
 
   enum class RunState {
@@ -801,7 +801,7 @@ class CoreScheduler {
   }
 
   // Admit a new task into the scheduler.
-  void TaskNew(uint64_t gtid, bool runnable, struct ghost_sw_info sw_info,
+  void TaskNew(uint64_t gtid, bool runnable, ghost_sw_info sw_info,
                uint32_t seqnum) {
     absl::MutexLock lock(&mu_);
 
@@ -1043,7 +1043,7 @@ class TimeAgent : public Agent {
     SignalReady();
     WaitForEnclaveReady();
 
-    std::unique_ptr<Task> task(nullptr);
+    std::unique_ptr<Task<>> task(nullptr);
     bool runnable = false;
     while (true) {
       while (true) {
@@ -1065,8 +1065,8 @@ class TimeAgent : public Agent {
                 static_cast<const ghost_msg_payload_task_new*>(msg.payload());
 
             ASSERT_THAT(task, IsNull());
-            task =
-                absl::make_unique<Task>(Gtid(payload->gtid), payload->sw_info);
+            task = absl::make_unique<Task<>>(Gtid(payload->gtid),
+                                             payload->sw_info);
             task->seqnum = msg.seqnum();
             runnable = payload->runnable;
             break;
@@ -1251,7 +1251,7 @@ class SchedAffinityAgent : public Agent {
 
     bool oncpu = false;
     bool runnable = false;
-    std::unique_ptr<Task> task(nullptr);  // initialized in TASK_NEW handler.
+    std::unique_ptr<Task<>> task(nullptr);  // initialized in TASK_NEW handler.
 
     CpuList task_cpulist = *enclave()->cpus();
     task_cpulist.Clear(cpu());  // don't schedule on spinning agent's cpu.
@@ -1281,8 +1281,8 @@ class SchedAffinityAgent : public Agent {
             ASSERT_THAT(task, IsNull());
             ASSERT_FALSE(oncpu);
             ASSERT_FALSE(runnable);
-            task =
-                absl::make_unique<Task>(Gtid(payload->gtid), payload->sw_info);
+            task = absl::make_unique<Task<>>(Gtid(payload->gtid),
+                                             payload->sw_info);
             task->seqnum = msg.seqnum();
             runnable = payload->runnable;
             break;

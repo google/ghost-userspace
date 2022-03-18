@@ -35,7 +35,7 @@ using ::testing::NotNull;
 class TestAgent : public Agent {
  public:
   TestAgent(Enclave* enclave, Cpu cpu, Channel* default_channel,
-            Channel* task_channel, std::function<void(Task*)> callback)
+            Channel* task_channel, std::function<void(Task<>*)> callback)
       : Agent(enclave, cpu),
         default_channel_(default_channel),
         task_channel_(task_channel),
@@ -53,7 +53,7 @@ class TestAgent : public Agent {
     SignalReady();
     WaitForEnclaveReady();
 
-    std::unique_ptr<Task> task(nullptr);
+    std::unique_ptr<Task<>> task(nullptr);
     bool runnable = false;
     while (true) {
       while (true) {
@@ -76,8 +76,8 @@ class TestAgent : public Agent {
                 static_cast<const ghost_msg_payload_task_new*>(msg.payload());
 
             ASSERT_THAT(task, IsNull());
-            task =
-                absl::make_unique<Task>(Gtid(payload->gtid), payload->sw_info);
+            task = absl::make_unique<Task<>>(Gtid(payload->gtid),
+                                             payload->sw_info);
             task->seqnum = msg.seqnum();
             runnable = payload->runnable;
 
@@ -144,7 +144,7 @@ class TestAgent : public Agent {
 
   Channel* default_channel_;
   Channel* task_channel_;
-  std::function<void(Task*)> task_new_callback_;
+  std::function<void(Task<>*)> task_new_callback_;
 
   Notification idle_;
   bool first_idle_ = true;
@@ -164,7 +164,7 @@ TEST(ChannelTest, Wakeup) {
   const int numa_node = 0;
   Channel chan0(GHOST_MAX_QUEUE_ELEMS, numa_node,
                 topology->ToCpuList({agent_cpu}));
-  TestAgent agent(enclave.get(), agent_cpu, &chan0, &chan0, [](Task*) {});
+  TestAgent agent(enclave.get(), agent_cpu, &chan0, &chan0, [](Task<>*) {});
   agent.Start();
   enclave->Ready();
 
@@ -201,7 +201,7 @@ TEST(ChannelTest, Associate) {
   // The new task is associated with the default channel (chan0).
   // We change the association to chan1 in the task_new callback.
   TestAgent agent(enclave.get(), agent_cpu, &chan0, &chan1,
-                  [&chan1](Task* task) {
+                  [&chan1](Task<>* task) {
                     ASSERT_TRUE(chan1.AssociateTask(task->gtid, task->seqnum));
                   });
   agent.Start();
