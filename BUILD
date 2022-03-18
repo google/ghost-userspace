@@ -14,6 +14,9 @@ package(default_visibility = ["//:__pkg__"])
 # by Google. We need to license it under GPLv2 though so that the eBPF code
 # can use kernel functionality restricted to code licensed under GPLv2.
 #
+# MIT: Just covers third_party/util/util.h. This code was not written by Google,
+# but was modified by Google.
+#
 # Apache 2: All other code is covered by Apache 2. This includes the library
 # code in lib/, the experiments, all code in bpf/user/, etc.
 licenses(["notice"])
