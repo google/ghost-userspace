@@ -157,10 +157,10 @@ class FifoAgent : public Agent {
   FifoScheduler* scheduler_;
 };
 
-template <class ENCLAVE>
-class FullFifoAgent : public FullAgent<ENCLAVE> {
+template <class EnclaveType>
+class FullFifoAgent : public FullAgent<EnclaveType> {
  public:
-  explicit FullFifoAgent(AgentConfig config) : FullAgent<ENCLAVE>(config) {
+  explicit FullFifoAgent(AgentConfig config) : FullAgent<EnclaveType>(config) {
     scheduler_ =
         MultiThreadedFifoScheduler(&this->enclave_, *this->enclave_.cpus());
     this->StartAgentTasks();

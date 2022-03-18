@@ -348,11 +348,11 @@ class ShinjukuConfig : public AgentConfig {
 
 // An global agent scheduler.  It runs a single-threaded Shinjuku scheduler on
 // the global_cpu.
-template <class ENCLAVE>
-class FullShinjukuAgent : public FullAgent<ENCLAVE> {
+template <class EnclaveType>
+class FullShinjukuAgent : public FullAgent<EnclaveType> {
  public:
   explicit FullShinjukuAgent(ShinjukuConfig config)
-      : FullAgent<ENCLAVE>(config) {
+      : FullAgent<EnclaveType>(config) {
     global_scheduler_ = SingleThreadShinjukuScheduler(
         &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id(),
         config.preemption_time_slice_);

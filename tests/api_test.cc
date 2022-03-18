@@ -145,11 +145,11 @@ class DeadAgent : public Agent {
   Channel* channel_;
 };
 
-template <class ENCLAVE = LocalEnclave>
-class FullDeadAgent final : public FullAgent<ENCLAVE> {
+template <class EnclaveType = LocalEnclave>
+class FullDeadAgent final : public FullAgent<EnclaveType> {
  public:
   explicit FullDeadAgent(const AgentConfig& config)
-      : FullAgent<ENCLAVE>(config),
+      : FullAgent<EnclaveType>(config),
         sched_cpu_(config.cpus_.Front()),
         satellite_cpu_(config.cpus_.Back()),
         channel_(GHOST_MAX_QUEUE_ELEMS, sched_cpu_.numa_node(),
@@ -496,10 +496,10 @@ class TestAgent : public Agent {
   T* scheduler_;
 };
 
-template <class ENCLAVE>
-class SyncGroupAgent final : public FullAgent<ENCLAVE> {
+template <class EnclaveType>
+class SyncGroupAgent final : public FullAgent<EnclaveType> {
  public:
-  explicit SyncGroupAgent(AgentConfig config) : FullAgent<ENCLAVE>(config) {
+  explicit SyncGroupAgent(AgentConfig config) : FullAgent<EnclaveType>(config) {
     auto allocator =
         std::make_shared<ThreadSafeMallocTaskAllocator<FifoTask>>();
     scheduler_ = absl::make_unique<SyncGroupScheduler>(
@@ -641,11 +641,11 @@ class IdlingAgent : public Agent {
 
 constexpr int kNeedCpuNotIdle = 1;
 
-template <class ENCLAVE>
-class FullIdlingAgent final : public FullAgent<ENCLAVE> {
+template <class EnclaveType>
+class FullIdlingAgent final : public FullAgent<EnclaveType> {
  public:
   explicit FullIdlingAgent(const AgentConfig& config)
-      : FullAgent<ENCLAVE>(config), channel_(GHOST_MAX_QUEUE_ELEMS, 0) {
+      : FullAgent<EnclaveType>(config), channel_(GHOST_MAX_QUEUE_ELEMS, 0) {
     channel_.SetEnclaveDefault();
     // Start an instance of IdlingAgent on each cpu.
     this->StartAgentTasks();
@@ -1385,11 +1385,11 @@ class SchedAffinityAgent : public Agent {
   Channel* channel_;
 };
 
-template <class ENCLAVE = LocalEnclave>
-class FullSchedAffinityAgent final : public FullAgent<ENCLAVE> {
+template <class EnclaveType = LocalEnclave>
+class FullSchedAffinityAgent final : public FullAgent<EnclaveType> {
  public:
   explicit FullSchedAffinityAgent(const AgentConfig& config)
-      : FullAgent<ENCLAVE>(config),
+      : FullAgent<EnclaveType>(config),
         sched_cpu_(config.cpus_.Front()),
         channel_(GHOST_MAX_QUEUE_ELEMS, sched_cpu_.numa_node()) {
     channel_.SetEnclaveDefault();
@@ -1706,12 +1706,12 @@ class DepartedRaceAgent : public Agent {
                       // non-nullptr for the global spinning agent.
 };
 
-template <class ENCLAVE = LocalEnclave>
-class FullDepartedRaceAgent final : public FullAgent<ENCLAVE> {
+template <class EnclaveType = LocalEnclave>
+class FullDepartedRaceAgent final : public FullAgent<EnclaveType> {
  public:
   explicit FullDepartedRaceAgent(const AgentConfig& config)
-      : FullAgent<ENCLAVE>(config),
-        sched_cpu_(config.cpus_.Front()),   // arbitrary.
+      : FullAgent<EnclaveType>(config),
+        sched_cpu_(config.cpus_.Front()),  // arbitrary.
         channel_(GHOST_MAX_QUEUE_ELEMS, sched_cpu_.numa_node()) {
     channel_.SetEnclaveDefault();
     // Start an instance of DepartedRaceAgent on each cpu.

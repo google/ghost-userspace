@@ -262,10 +262,11 @@ class GlobalSatAgent : public Agent {
 
 // A global agent scheduler.  It runs a single-threaded EDF scheduler on the
 // global_cpu.
-template <class ENCLAVE>
-class GlobalEdfAgent : public FullAgent<ENCLAVE> {
+template <class EnclaveType>
+class GlobalEdfAgent : public FullAgent<EnclaveType> {
  public:
-  explicit GlobalEdfAgent(GlobalConfig config) : FullAgent<ENCLAVE>(config) {
+  explicit GlobalEdfAgent(GlobalConfig config)
+      : FullAgent<EnclaveType>(config) {
     global_scheduler_ = SingleThreadEdfScheduler(
         &this->enclave_, *this->enclave_.cpus(), config);
     this->StartAgentTasks();

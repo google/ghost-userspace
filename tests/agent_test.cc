@@ -85,8 +85,8 @@ constexpr int kPingAgents = 2;
 constexpr int kRpcSerialize = 3;
 constexpr int kRpcDeserializeArgs = 4;
 
-template <size_t MAX_NOTIFICATIONS = 1, class ENCLAVE = LocalEnclave>
-class FullSimpleAgent : public FullAgent<ENCLAVE> {
+template <size_t MAX_NOTIFICATIONS = 1, class EnclaveType = LocalEnclave>
+class FullSimpleAgent : public FullAgent<EnclaveType> {
 #define AGENT_AS(agent) \
   agent_down_cast<SimpleAgent<MAX_NOTIFICATIONS>*>((agent).get())
 
@@ -112,7 +112,7 @@ class FullSimpleAgent : public FullAgent<ENCLAVE> {
   };
 
   explicit FullSimpleAgent(const AgentConfig& config)
-      : FullAgent<ENCLAVE>(config), channel_(GHOST_MAX_QUEUE_ELEMS, 0) {
+      : FullAgent<EnclaveType>(config), channel_(GHOST_MAX_QUEUE_ELEMS, 0) {
     channel_.SetEnclaveDefault();
     // Start an instance of SimpleAgent (above) on each cpu.
     this->StartAgentTasks();
@@ -373,13 +373,13 @@ int CountCpuTicks(Channel* channel) {
 
 constexpr int kTickChecker = 3;
 
-template <class ENCLAVE = LocalEnclave>
-class FullTickAgent : public FullAgent<ENCLAVE> {
+template <class EnclaveType = LocalEnclave>
+class FullTickAgent : public FullAgent<EnclaveType> {
 #define AGENT_AS(agent) agent_down_cast<SpinningAgent*>((agent).get())
 
  public:
   explicit FullTickAgent(const TickConfig& config)
-      : FullAgent<ENCLAVE>(config),
+      : FullAgent<EnclaveType>(config),
         default_channel_(GHOST_MAX_QUEUE_ELEMS, config.numa_node_),
         agent_channel_(GHOST_MAX_QUEUE_ELEMS, config.numa_node_) {
     default_channel_.SetEnclaveDefault();

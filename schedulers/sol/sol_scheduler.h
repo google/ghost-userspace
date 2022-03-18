@@ -248,10 +248,10 @@ class SolConfig : public AgentConfig {
 
 // An global agent scheduler.  It runs a single-threaded Sol scheduler on the
 // global_cpu.
-template <class ENCLAVE>
-class FullSolAgent : public FullAgent<ENCLAVE> {
+template <class EnclaveType>
+class FullSolAgent : public FullAgent<EnclaveType> {
  public:
-  explicit FullSolAgent(SolConfig config) : FullAgent<ENCLAVE>(config) {
+  explicit FullSolAgent(SolConfig config) : FullAgent<EnclaveType>(config) {
     global_scheduler_ = SingleThreadSolScheduler(
         &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id());
     this->StartAgentTasks();

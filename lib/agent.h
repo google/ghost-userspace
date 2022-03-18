@@ -276,7 +276,7 @@ struct AgentRpcResponse {
 //
 // Most agents operate on a LocalEnclave (i.e. the kernel ABI), but you can
 // replace that with any Enclave
-template <class ENCLAVE = LocalEnclave>
+template <class EnclaveType = LocalEnclave>
 class FullAgent {
  public:
   explicit FullAgent(AgentConfig config) : enclave_(config) {
@@ -304,7 +304,7 @@ class FullAgent {
   //
   //     this->StartAgentTasks();
   //
-  // Writing this out as FullAgent<ENCLAVE>::StartAgentTasks() also works
+  // Writing this out as FullAgent<EnclaveType>::StartAgentTasks() also works
   // but 'this' is easier to type.
   //
   // Details at https://gcc.gnu.org/onlinedocs/gcc/Name-lookup.html
@@ -345,7 +345,7 @@ class FullAgent {
     agents_.clear();
   }
 
-  ENCLAVE enclave_;
+  EnclaveType enclave_;
   std::vector<std::unique_ptr<Agent>> agents_;
 };
 

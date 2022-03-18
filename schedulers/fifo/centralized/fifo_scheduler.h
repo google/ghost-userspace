@@ -231,10 +231,10 @@ class FifoConfig : public AgentConfig {
 
 // A global agent scheduler. It runs a single-threaded FIFO scheduler on the
 // global_cpu.
-template <class ENCLAVE>
-class FullFifoAgent : public FullAgent<ENCLAVE> {
+template <class EnclaveType>
+class FullFifoAgent : public FullAgent<EnclaveType> {
  public:
-  explicit FullFifoAgent(FifoConfig config) : FullAgent<ENCLAVE>(config) {
+  explicit FullFifoAgent(FifoConfig config) : FullAgent<EnclaveType>(config) {
     global_scheduler_ = SingleThreadFifoScheduler(
         &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id());
     this->StartAgentTasks();
