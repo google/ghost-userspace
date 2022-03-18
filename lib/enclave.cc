@@ -608,15 +608,18 @@ bool LocalEnclave::CompleteRunRequest(RunRequest* req) {
   return false;
 }
 
-bool LocalEnclave::LocalYieldRunRequest(
+void LocalEnclave::LocalYieldRunRequest(
     const RunRequest* req, const StatusWord::BarrierToken agent_barrier,
     const int flags) {
   DCHECK_EQ(sched_getcpu(), req->cpu().id());
   int error = Ghost::Run(Gtid(0), agent_barrier, StatusWord::NullBarrierToken(),
                          req->cpu().id(), flags);
-  if (error != 0) CHECK_EQ(errno, ESTALE);
-
-  return error == 0;
+  // Sanity check why we failed.
+  //   ESTALE: old barrier / missed message
+  //   ENODEV: enclave is being destroyed (a kernfs ioctl errno)
+  if (error != 0) {
+    CHECK(errno == ESTALE || errno == ENODEV);
+  }
 }
 
 bool LocalEnclave::PingRunRequest(const RunRequest* req) {

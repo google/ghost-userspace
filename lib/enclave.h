@@ -106,7 +106,7 @@ class Enclave {
 
   // The agent calls this when it wants to yield its CPU without scheduling a
   // task on its own CPU.
-  virtual bool LocalYieldRunRequest(const RunRequest* req,
+  virtual void LocalYieldRunRequest(const RunRequest* req,
                                     StatusWord::BarrierToken agent_barrier,
                                     int flags) = 0;
 
@@ -311,9 +311,9 @@ class RunRequest {
   //
   // REQUIRES: Must be called by the agent of cpu().
   // TODO: This could locally submit when there's a READY transaction.
-  bool LocalYield(const StatusWord::BarrierToken agent_barrier,
+  void LocalYield(const StatusWord::BarrierToken agent_barrier,
                   const int flags) {
-    return enclave_->LocalYieldRunRequest(this, agent_barrier, flags);
+    enclave_->LocalYieldRunRequest(this, agent_barrier, flags);
   }
 
   // Ping() and queued-runs could interact with each other (when Ping clobbers
@@ -422,7 +422,7 @@ class LocalEnclave final : public Enclave {
   bool CommitRunRequest(RunRequest* req) final;
   void SubmitRunRequest(RunRequest* req) final;
   bool CompleteRunRequest(RunRequest* req) final;
-  bool LocalYieldRunRequest(const RunRequest* req,
+  void LocalYieldRunRequest(const RunRequest* req,
                             StatusWord::BarrierToken agent_barrier,
                             int flags) final;
   bool PingRunRequest(const RunRequest* req) final;
