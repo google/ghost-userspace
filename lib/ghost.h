@@ -79,8 +79,11 @@ class StatusWordTable {
     }
   }
 
- private:
-  int fd_;
+ protected:
+  // Empty constructor for subclasses.
+  StatusWordTable() {}
+
+  int fd_ = -1;
   size_t map_size_ = 0;
   ghost_sw_region_header* header_ = nullptr;
   ghost_status_word* table_ = nullptr;

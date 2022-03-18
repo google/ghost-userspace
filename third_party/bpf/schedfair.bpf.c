@@ -216,7 +216,7 @@ out:
 		current_load = 0;
 }
 
-	static uint64_t in_progress = false;
+static uint64_t in_progress = false;
 
 /*
  * When we change wl (by adding/subbing delta_load, aka "posting" a change),
