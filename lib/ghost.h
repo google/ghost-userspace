@@ -240,14 +240,17 @@ class Ghost {
   // - cpu: produce CPU_TIMER_EXPIRED msg into 'dst_q' of agent on this cpu. If
   // an uninitialized (ie. invalid) cpu is passed, the timerfd will not produce
   // any msg.
+  // - type: an opaque value that is reflected back in CPU_TIMER_EXPIRED msg.
   // - cookie: an opaque value that is reflected back in CPU_TIMER_EXPIRED msg.
   static int TimerFdSettime(
       const int fd, const int flags, itimerspec* const itimerspec,
       const Cpu& cpu = Cpu(Cpu::UninitializedType::kUninitialized),
+      const uint64_t type = 0,
       const uint64_t cookie = 0) {
     timerfd_ghost timerfd_ghost = {
         .cpu = cpu.valid() ? cpu.id() : -1,
         .flags = cpu.valid() ? TIMERFD_GHOST_ENABLED : 0,
+        .type = type,
         .cookie = cookie,
     };
     ghost_ioc_timerfd_settime data = {

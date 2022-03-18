@@ -538,6 +538,7 @@ TEST(AgentTest, MsgTimerExpired) {
     const ghost_msg_payload_timer* payload =
         static_cast<const ghost_msg_payload_timer*>(msg.payload());
     ASSERT_THAT(payload->cpu, Eq(cpu.id()));
+    ASSERT_THAT(payload->type, Eq(fd));
     ASSERT_THAT(payload->cookie, Eq(fd));
 
     msgs[cpu.id()]++;
@@ -594,10 +595,11 @@ TEST(AgentTest, MsgTimerExpired) {
       .it_value = absl::ToTimespec(kPeriod),     // periodic expiration.
   };
 
+  const uint64_t type = fd;
   const uint64_t cookie = fd;
-  ASSERT_THAT(
-      Ghost::TimerFdSettime(fd, /*flags=*/0, &itimerspec, target_cpu, cookie),
-      Eq(0));
+  ASSERT_THAT(Ghost::TimerFdSettime(fd, /*flags=*/0, &itimerspec, target_cpu,
+                                    type, cookie),
+              Eq(0));
 
   // Sleep for 50 msec.
   const absl::Duration kDelay = absl::Milliseconds(50);
