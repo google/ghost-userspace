@@ -61,14 +61,14 @@ TEST(TopologyTest, CpuNumaNode) {
 TEST(TopologyTest, TopologyNumCpus) {
   EXPECT_THAT(MachineTopology()->all_cpus().Size(),
               Eq(MachineTopology()->num_cpus()));
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   EXPECT_THAT(TestTopology()->all_cpus().Size(),
               Eq(TestTopology()->num_cpus()));
 }
 
 // Tests that the topology contains all CPUs.
 TEST(TopologyTest, TopologyAllCpus) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   for (uint32_t i = 0; i < Topology::kNumTestCpus; i++) {
     EXPECT_THAT(TestTopology()->cpu(i).id(), Eq(i));
   }
@@ -76,14 +76,14 @@ TEST(TopologyTest, TopologyAllCpus) {
 
 // Tests that `ToCpuList` returns an empty list when there are no CPUs.
 TEST(TopologyTest, CpuListContentsEmpty) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   EXPECT_THAT(TestTopology()->ToCpuList(std::vector<int>()).Empty(), IsTrue());
 }
 
 // Tests that `ToCpuList` returns a correct list of the specified CPUs.
 TEST(TopologyTest, CpuListContents) {
   std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   CpuList cpu_list = TestTopology()->ToCpuList(cpu_ids);
   absl::flat_hash_set<int> expected_contents(cpu_ids.begin(), cpu_ids.end());
 
@@ -95,7 +95,7 @@ TEST(TopologyTest, CpuListContents) {
 
 // Tests that `ToCpuSet` returns an empty list when there are no CPUs.
 TEST(TopologyTest, CpuSetContentEmpty) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   CpuList cpu_list = TestTopology()->ToCpuList(std::vector<int>());
   cpu_set_t cpu_set = Topology::ToCpuSet(cpu_list);
   EXPECT_THAT(CPU_COUNT(&cpu_set), Eq(0));
@@ -103,7 +103,7 @@ TEST(TopologyTest, CpuSetContentEmpty) {
 
 // Tests that `ToCpuSet` returns a correct list of the specified CPUs.
 TEST(TopologyTest, CpuSetContents) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
   CpuList cpu_list = TestTopology()->ToCpuList(cpu_ids);
   cpu_set_t cpu_set = Topology::ToCpuSet(cpu_list);
@@ -119,7 +119,7 @@ TEST(TopologyTest, CpuSetContents) {
 
 // Tests that `all_cores()` returns all physical cores in the topology.
 TEST(TopologyTest, CheckAllCores) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   std::vector<Cpu> expected;
   for (int i = 0; i < TestTopology()->num_cpus() / 2; i++) {
     expected.push_back(TestTopology()->cpu(i));
@@ -130,7 +130,7 @@ TEST(TopologyTest, CheckAllCores) {
 
 // Tests that each CPU is associated with the correct physical core.
 TEST(TopologyTest, CheckCores) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   for (int i = 0; i < TestTopology()->num_cpus() / 2; i++) {
     Cpu expected_core = TestTopology()->cpu(i);
 
@@ -148,7 +148,7 @@ TEST(TopologyTest, CheckCores) {
 // Tests that each CPU returns the correct siblings. The CPU's siblings are all
 // CPUs co-located on its physical core (including itself).
 TEST(TopologyTest, CheckSiblings) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   for (int i = 0; i < TestTopology()->num_cpus() / 2; i++) {
     // CPU 0 is co-located with CPU 56, CPU 1 is co-located with CPU 57, ...,
     // CPU 55 is co-located with CPU 111.
@@ -170,7 +170,7 @@ TEST(TopologyTest, CheckSiblings) {
 // CPUs [0 - 27] share L3 with [56 - 83]
 // CPUs [28 - 55] share L3 with [84 - 111]
 TEST(TopologyTest, CheckL3Siblings) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   int sibling_offset = TestTopology()->num_cpus() / 2;
   int l3_offset = sibling_offset / 2;
 
@@ -193,15 +193,25 @@ TEST(TopologyTest, CheckL3Siblings) {
   }
 }
 
+// Tests that on a microarchitecture with no L3 cache, each CPU returns an empty
+// list of L3 cache siblings.
+TEST(TopologyTest, CheckEmptyL3Siblings) {
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/false);
+
+  for (const Cpu& cpu : TestTopology()->all_cpus()) {
+    EXPECT_THAT(cpu.l3_siblings().Empty(), IsTrue());
+  }
+}
+
 // Tests that the topology returns the highest NUMA node.
 TEST(TopologyTest, CheckHighestNodeIdx) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   EXPECT_THAT(TestTopology()->highest_node_idx(), Eq(1));
 }
 
 // Tests that each CPU is assigned the correct SMT index.
 TEST(TopologyTest, CheckSmtIdx) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
 
   // We don't have any larger SMT toplogies.
   EXPECT_THAT(TestTopology()->smt_count(), Le(2));
@@ -233,7 +243,7 @@ TEST(TopologyTest, CheckSmtIdx) {
 
 // Tests the basic `Set`, `IsSet`, and `Clear` functionality of `CpuList`.
 TEST(TopologyTest, BitmapSet) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   CpuList list = TestTopology()->EmptyCpuList();
 
   std::vector<int> cpus = {5, 20, 87, 94, 100};
@@ -261,7 +271,7 @@ TEST(TopologyTest, BitmapSet) {
 // Tests the basic `Set`, `IsSet`, and `Clear` functionality of `CpuList` using
 // CPUs instead of ints.
 TEST(TopologyTest, BitmapSetCpu) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   CpuList list = TestTopology()->EmptyCpuList();
 
   std::vector<Cpu> cpus = {TestTopology()->cpu(5), TestTopology()->cpu(20),
@@ -291,7 +301,7 @@ TEST(TopologyTest, BitmapSetCpu) {
 // Tests that the `CpuList::Intersection` method calculates the
 // correct intersection of two `CpuList`s.
 TEST(TopologyTest, Intersection) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   CpuList list0 =
       TestTopology()->ToCpuList(std::vector<int>{5, 20, 87, 94, 100});
   CpuList list1 = TestTopology()->ToCpuList(
@@ -304,7 +314,7 @@ TEST(TopologyTest, Intersection) {
 // Tests that the `CpuList::Union` method calculates the correct union
 // of two `CpuList`s. Also tests the related `+` and `+=` operators.
 TEST(TopologyTest, Union) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   const CpuList list0 =
       TestTopology()->ToCpuList(std::vector<int>{5, 20, 87, 94, 100});
   const CpuList list1 = TestTopology()->ToCpuList(
@@ -327,7 +337,7 @@ TEST(TopologyTest, Union) {
 // Tests that the `CpuList::Subtract` method calculates the correct subtraction
 // of two `CpuList`s. Also tests the related `-` and `-=` operators.
 TEST(TopologyTest, Subtract) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   const CpuList list0 =
       TestTopology()->ToCpuList(std::vector<int>{1, 3, 5, 20, 87, 94, 100});
   const CpuList list1 =
@@ -350,21 +360,21 @@ TEST(TopologyTest, Subtract) {
 // Tests that immediately dereferencing the iterator returned by `begin()` for
 // the topology's CPUs returns the first CPU.
 TEST(TopologyTest, IteratorBegin) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   EXPECT_THAT(TestTopology()->all_cpus().begin()->id(), Eq(0));
 }
 
 // Tests that immediately dereferencing the iterator returned by `end()` for the
 // topology's CPUs returns an invalid CPU.
 TEST(TopologyTest, IteratorEnd) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   EXPECT_THAT(TestTopology()->all_cpus().end()->valid(), IsFalse());
 }
 
 // Tests that the iterator iterates over the `CpuList` correctly with a for
 // loop.
 TEST(TopologyTest, Iterator) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   std::vector<int> cpus = {5, 20, 87, 94, 100};
   CpuList list = TestTopology()->ToCpuList(cpus);
 
@@ -383,7 +393,7 @@ TEST(TopologyTest, Iterator) {
 // Tests that the iterator iterates over the `CpuList` correctly with a
 // range-based for loop.
 TEST(TopologyTest, IteratorRange) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   std::vector<int> cpus = {5, 20, 87, 94, 100};
   CpuList list = TestTopology()->ToCpuList(cpus);
 
@@ -398,7 +408,7 @@ TEST(TopologyTest, IteratorRange) {
 // Tests that the iterator works properly when the first and last CPUs are set
 // in the `CpuList` (i.e., tests the boundary cases).
 TEST(TopologyTest, IteratorBoundary) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   std::vector<int> cpus = {0, 20, 111};
   CpuList list = TestTopology()->ToCpuList(cpus);
 
@@ -443,7 +453,7 @@ static void TestList(Topology* t, const std::vector<int> cpus,
 }
 
 TEST(TopologyTest, CpuMaskStr) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
 
   TestList(TestTopology(), {1, 2, 3, 4, 5, 20, 87, 94, 100},
            "10,40800000,00000000,0010003e");
@@ -459,7 +469,7 @@ TEST(TopologyTest, CpuMaskStr) {
 }
 
 TEST(TopologyTest, ParseCpuStr) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
 
   // tuple[0] is the string to parse. tuple[1] is the expected CpuList.
   std::vector<std::tuple<std::string, CpuList>> test_cases;
@@ -492,7 +502,7 @@ TEST(TopologyTest, ParseCpuStr) {
 }
 
 TEST(TopologyTest, CpuInNodeTest) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   CpuList cpus_on_node0 = TestTopology()->CpusOnNode(0);
   auto cpus_on_node1 = TestTopology()->CpusOnNode(1);
   cpus_on_node0.Intersection(cpus_on_node1);
@@ -504,7 +514,7 @@ TEST(TopologyTest, CpuInNodeTest) {
 
 // Test conversion of cpu_set_t to CpuList.
 TEST(TopologyTest, CpuSetToCpuList) {
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
   CpuList list = TestTopology()->EmptyCpuList();
   int stride = 1;
   for (int i = 0; i < TestTopology()->num_cpus(); i += stride++) {
@@ -543,7 +553,11 @@ int GetRawNumaNode(int cpu) {
 // CPU 55 is co-located with CPU 111. This is how Linux configures CPUs. Lastly,
 // CPUs 0-27 and 56-83 are on NUMA node 0 and CPUs 28-55 and 84-111 are on NUMA
 // node 1.
-std::vector<Cpu::Raw> GetRawCustomTopology() {
+//
+// If `has_l3_cache` is true, an L3 cache is created. All CPUs in a NUMA node
+// share the same L3 cache. If `has_l3_cache` is false, then the topology is
+// configured as though the microarchitecture does not have an L3 cache.
+std::vector<Cpu::Raw> GetRawCustomTopology(bool has_l3_cache) {
   std::vector<Cpu::Raw> raw_cpus;
 
   for (int i = 0; i < Topology::kNumTestCpus; i++) {
@@ -560,11 +574,13 @@ std::vector<Cpu::Raw> GetRawCustomTopology() {
     }
     raw_cpu.numa_node = GetRawNumaNode(/*cpu=*/i);
 
-    for (int j = 0; j < Topology::kNumTestCpus; j++) {
-      // For CPU `j`, we want both `j` and the sibling(s) of `j` to be in the
-      // siblings list.
-      if (GetRawNumaNode(/*cpu=*/j) == raw_cpu.numa_node) {
-        raw_cpu.l3_siblings.push_back(j);
+    if (has_l3_cache) {
+      for (int j = 0; j < Topology::kNumTestCpus; j++) {
+        // For CPU `j`, we want both `j` and the sibling(s) of `j` to be in the
+        // siblings list.
+        if (GetRawNumaNode(/*cpu=*/j) == raw_cpu.numa_node) {
+          raw_cpu.l3_siblings.push_back(j);
+        }
       }
     }
 
@@ -575,14 +591,14 @@ std::vector<Cpu::Raw> GetRawCustomTopology() {
 
 // Tests that `num_cpus()` returns number of CPUs in the custom topology.
 TEST(TopologyTest, CustomTopologyNumCpus) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   EXPECT_THAT(CustomTopology()->all_cpus().Size(),
               Eq(CustomTopology()->num_cpus()));
 }
 
 // Tests that the custom topology contains all CPUs.
 TEST(TopologyTest, CustomTopologyAllCpus) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   for (uint32_t i = 0; i < Topology::kNumTestCpus; i++) {
     EXPECT_THAT(CustomTopology()->cpu(i).id(), Eq(i));
   }
@@ -590,7 +606,7 @@ TEST(TopologyTest, CustomTopologyAllCpus) {
 
 // Tests that `ToCpuList` returns an empty list when there are no CPUs.
 TEST(TopologyTest, CustomCpuListContentsEmpty) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   EXPECT_THAT(CustomTopology()->ToCpuList(std::vector<int>()).Empty(),
               IsTrue());
 }
@@ -598,7 +614,7 @@ TEST(TopologyTest, CustomCpuListContentsEmpty) {
 // Tests that `ToCpuList` returns a correct list of the specified CPUs.
 TEST(TopologyTest, CustomCpuListContents) {
   std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   CpuList cpu_list = CustomTopology()->ToCpuList(cpu_ids);
   absl::flat_hash_set<int> expected_contents(cpu_ids.begin(), cpu_ids.end());
 
@@ -610,7 +626,7 @@ TEST(TopologyTest, CustomCpuListContents) {
 
 // Tests that `ToCpuSet` returns an empty list when there are no CPUs.
 TEST(TopologyTest, CustomCpuSetContentEmpty) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   CpuList cpu_list = CustomTopology()->ToCpuList(std::vector<int>());
   cpu_set_t cpu_set = Topology::ToCpuSet(cpu_list);
   EXPECT_THAT(CPU_COUNT(&cpu_set), Eq(0));
@@ -618,7 +634,7 @@ TEST(TopologyTest, CustomCpuSetContentEmpty) {
 
 // Tests that `ToCpuSet` returns a correct list of the specified CPUs.
 TEST(TopologyTest, CustomCpuSetContents) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
   CpuList cpu_list = CustomTopology()->ToCpuList(cpu_ids);
   cpu_set_t cpu_set = Topology::ToCpuSet(cpu_list);
@@ -634,7 +650,7 @@ TEST(TopologyTest, CustomCpuSetContents) {
 
 // Tests that `all_cores()` returns all physical cores in the custom topology.
 TEST(TopologyTest, CustomCheckAllCores) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   std::vector<Cpu> expected;
   for (int i = 0; i < CustomTopology()->num_cpus() / 2; i++) {
     expected.push_back(CustomTopology()->cpu(i));
@@ -645,7 +661,7 @@ TEST(TopologyTest, CustomCheckAllCores) {
 
 // Tests that each CPU is associated with the correct physical core.
 TEST(TopologyTest, CustomCheckCores) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   for (int i = 0; i < CustomTopology()->num_cpus() / 2; i++) {
     Cpu expected_core = CustomTopology()->cpu(i);
 
@@ -663,7 +679,7 @@ TEST(TopologyTest, CustomCheckCores) {
 // Tests that each CPU returns the correct siblings. The CPU's siblings are all
 // CPUs co-located on its physical core (including itself).
 TEST(TopologyTest, CustomCheckSiblings) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   for (int i = 0; i < CustomTopology()->num_cpus() / 2; i++) {
     // CPU 0 is co-located with CPU 56, CPU 1 is co-located with CPU 57, ...,
     // CPU 55 is co-located with CPU 111.
@@ -686,7 +702,7 @@ TEST(TopologyTest, CustomCheckSiblings) {
 // CPUs [0 - 27] share L3 with [56 - 83]
 // CPUs [28 - 55] share L3 with [84 - 111]
 TEST(TopologyTest, CustomCheckL3Siblings) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   int sibling_offset = CustomTopology()->num_cpus() / 2;
   int l3_offset = sibling_offset / 2;
 
@@ -709,15 +725,25 @@ TEST(TopologyTest, CustomCheckL3Siblings) {
   }
 }
 
+// Tests that on a microarchitecture with no L3 cache, each CPU returns an empty
+// list of L3 cache siblings.
+TEST(TopologyTest, CustomCheckEmptyL3Siblings) {
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/false));
+
+  for (const Cpu& cpu : CustomTopology()->all_cpus()) {
+    EXPECT_THAT(cpu.l3_siblings().Empty(), IsTrue());
+  }
+}
+
 // Tests that the custom topology returns the highest NUMA node.
 TEST(TopologyTest, CustomCheckHighestNodeIdx) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   EXPECT_THAT(CustomTopology()->highest_node_idx(), Eq(1));
 }
 
 // Tests that each CPU is assigned the correct SMT index.
 TEST(TopologyTest, CustomCheckSmtIdx) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
 
   // We don't have any larger SMT toplogies.
   EXPECT_THAT(CustomTopology()->smt_count(), Le(2));
@@ -750,21 +776,21 @@ TEST(TopologyTest, CustomCheckSmtIdx) {
 // Tests that immediately dereferencing the iterator returned by `begin()` for
 // the custom topology's CPUs returns the first CPU.
 TEST(TopologyTest, CustomIteratorBegin) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   EXPECT_THAT(CustomTopology()->all_cpus().begin()->id(), Eq(0));
 }
 
 // Tests that immediately dereferencing the iterator returned by `end()` for the
 // custom topology's CPUs returns an invalid CPU.
 TEST(TopologyTest, CustomIteratorEnd) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   EXPECT_THAT(CustomTopology()->all_cpus().end()->valid(), IsFalse());
 }
 
 // Tests that the iterator iterates over the `CpuList` correctly with a for
 // loop.
 TEST(TopologyTest, CustomIterator) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   std::vector<int> cpus = {5, 20, 87, 94, 100};
   CpuList list = CustomTopology()->ToCpuList(cpus);
 
@@ -783,7 +809,7 @@ TEST(TopologyTest, CustomIterator) {
 // Tests that the iterator iterates over the `CpuList` correctly with a
 // range-based for loop.
 TEST(TopologyTest, CustomIteratorRange) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   std::vector<int> cpus = {5, 20, 87, 94, 100};
   CpuList list = CustomTopology()->ToCpuList(cpus);
 
@@ -798,7 +824,7 @@ TEST(TopologyTest, CustomIteratorRange) {
 // Tests that the iterator works properly when the first and last CPUs are set
 // in the `CpuList` (i.e., tests the boundary cases).
 TEST(TopologyTest, CustomIteratorBoundary) {
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
   std::vector<int> cpus = {0, 20, 111};
   CpuList list = CustomTopology()->ToCpuList(cpus);
 
@@ -817,7 +843,7 @@ TEST(TopologyTest, CustomIteratorBoundary) {
 // Tests that `ToVector()` returns a correct list of the topology CPUs.
 TEST(TopologyTest, CpuListToVector) {
   const std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
 
   CpuList cpu_list = CustomTopology()->ToCpuList(cpu_ids);
   std::vector<Cpu> compare = cpu_list.ToVector();
@@ -832,7 +858,7 @@ TEST(TopologyTest, CpuListToVector) {
 // Tests that `ToIntVector()` returns a correct list of the topology CPU IDs.
 TEST(TopologyTest, CpuListToIntVector) {
   const std::vector<int> cpu_ids = std::vector<int>{0, 1, 2};
-  UpdateCustomTopology(GetRawCustomTopology());
+  UpdateCustomTopology(GetRawCustomTopology(/*has_l3_cache=*/true));
 
   CpuList cpu_list = CustomTopology()->ToCpuList(cpu_ids);
   std::vector<int> compare = cpu_list.ToIntVector();
@@ -847,7 +873,24 @@ TEST(TopologyTest, CpuListToIntVector) {
 // Tests that when a `Topology` instance is constructed with a raw topology,
 // `Export()` returns the same raw topology.
 TEST(TopologyTest, ExportTopology) {
-  const std::vector<Cpu::Raw> raw_cpus = GetRawCustomTopology();
+  const std::vector<Cpu::Raw> raw_cpus =
+      GetRawCustomTopology(/*has_l3_cache=*/true);
+
+  UpdateCustomTopology(raw_cpus);
+  std::vector<Cpu::Raw> compare = CustomTopology()->Export();
+  std::sort(compare.begin(), compare.end());
+
+  // std::vector overrides the `==` operator. Two std::vector's are equal if
+  // they are the same length and each element in one vector is equal to the
+  // element in the same index in the other vector.
+  EXPECT_THAT(raw_cpus, Eq(compare));
+}
+
+// Tests that when a `Topology` instance is constructed with a raw topology that
+// has no L3 cache, `Export()` returns the same raw topology.
+TEST(TopologyTest, ExportTopologyWithNoL3Cache) {
+  const std::vector<Cpu::Raw> raw_cpus =
+      GetRawCustomTopology(/*has_l3_cache=*/false);
 
   UpdateCustomTopology(raw_cpus);
   std::vector<Cpu::Raw> compare = CustomTopology()->Export();
@@ -861,11 +904,30 @@ TEST(TopologyTest, ExportTopology) {
 
 // Tests that `Export()` exports the test topology correctly.
 TEST(TopologyTest, ExportTestTopology) {
-  const std::vector<Cpu::Raw> raw_cpus = GetRawCustomTopology();
+  const std::vector<Cpu::Raw> raw_cpus =
+      GetRawCustomTopology(/*has_l3_cache=*/true);
 
   // The test topology and the custom topology from `GetRawCustomTopology()` are
   // the same.
-  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir));
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
+  std::vector<Cpu::Raw> compare = TestTopology()->Export();
+  std::sort(compare.begin(), compare.end());
+
+  // std::vector overrides the `==` operator. Two std::vector's are equal if
+  // they are the same length and each element in one vector is equal to the
+  // element in the same index in the other vector.
+  EXPECT_THAT(raw_cpus, Eq(compare));
+}
+
+// Tests that `Export()` exports the test topology correctly when the
+// microarchitecture has no L3 cache.
+TEST(TopologyTest, ExportTestTopologyWithNoL3Cache) {
+  const std::vector<Cpu::Raw> raw_cpus =
+      GetRawCustomTopology(/*has_l3_cache=*/false);
+
+  // The test topology and the custom topology from `GetRawCustomTopology()` are
+  // the same.
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/false);
   std::vector<Cpu::Raw> compare = TestTopology()->Export();
   std::sort(compare.begin(), compare.end());
 

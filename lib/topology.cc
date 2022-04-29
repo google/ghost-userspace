@@ -100,6 +100,12 @@ absl::flat_hash_map<int, CpuList> Topology::GetAllSiblings(
     std::ifstream stream(path);
     std::string sibling_list;
     std::getline(stream, sibling_list);
+    if (sibling_list.empty()) {
+      // We should detect that there are no siblings on the first iteration.
+      CHECK_EQ(cpu, 0);
+      break;
+    }
+
     CHECK(!sibling_list.empty());
     // All siblings share the same sibling list as exported by the kernel in
     // sysfs. The siblings list may be exported in hexadecimal notation,
@@ -162,7 +168,11 @@ Topology::Topology(InitHost) : num_cpus_(std::thread::hardware_concurrency()) {
 
   absl::flat_hash_map<int, CpuList> l3_siblings =
       GetAllSiblings("/sys/devices/system/cpu", "cache/index3/shared_cpu_list");
-  CHECK_EQ(l3_siblings.size(), num_cpus_);
+  // Not all microarchitectures have an L3 cache, so only do the CHECK below if
+  // L3 siblings are found.
+  if (!l3_siblings.empty()) {
+    CHECK_EQ(l3_siblings.size(), num_cpus_);
+  }
   for (int i = 0; i < num_cpus_; i++) {
     Cpu::CpuRep* rep = &cpus_[i];
 
@@ -170,9 +180,14 @@ Topology::Topology(InitHost) : num_cpus_(std::thread::hardware_concurrency()) {
     rep->siblings = std::make_unique<CpuList>(*this);
     *rep->siblings = siblings.find(i)->second;
 
-    CHECK(l3_siblings.find(i) != l3_siblings.end());
+    // As mentioned above, not all microarchitectures have an L3 cache, so there
+    // may be no L3 siblings. Start by initializing `rep->l3_siblings` to an
+    // empty CPU list and only fill in the list if there are L3 siblings.
     rep->l3_siblings = std::make_unique<CpuList>(*this);
-    *rep->l3_siblings = l3_siblings.find(i)->second;
+    if (!l3_siblings.empty()) {
+      CHECK(l3_siblings.find(i) != l3_siblings.end());
+      *rep->l3_siblings = l3_siblings.find(i)->second;
+    }
 
     rep->core = rep->siblings->begin()->id();
     rep->numa_node = numa_node_of_cpu(rep->cpu);
@@ -216,7 +231,7 @@ void Topology::CreateTestSibling(
 }
 
 std::filesystem::path Topology::SetUpTestSiblings(
-    const std::filesystem::path& test_directory) const {
+    const std::filesystem::path& test_directory, bool has_l3_cache) const {
   std::filesystem::path topology_test_directory =
       test_directory / topology_test_subpath_;
 
@@ -236,7 +251,8 @@ std::filesystem::path Topology::SetUpTestSiblings(
                       "topology", "thread_siblings");
   }
 
-  // Construct an L3 siblings topology.
+  // Construct an L3 siblings topology if `has_l3_cache` is true. Otherwise,
+  // create empty files.
   // e.g. on a 112 CPU system.
   // CPUs [0 - 27] share L3 with [56 - 83]
   // CPUs [28 - 55] share L3 with [84 - 111]
@@ -262,9 +278,14 @@ std::filesystem::path Topology::SetUpTestSiblings(
 
   for (int i = 0; i < sibling_offset; i += l3_offset) {
     for (int j = i; j < (i + l3_offset); j++) {
-      std::string sibling_list = absl::StrFormat(
-          "%d-%d, %d-%d", i, i + (l3_offset - 1), i + sibling_offset,
-          i + sibling_offset - 1 + l3_offset);
+      std::string sibling_list;
+      if (has_l3_cache) {
+        sibling_list = absl::StrFormat("%d-%d, %d-%d", i, i + (l3_offset - 1),
+                                       i + sibling_offset,
+                                       i + sibling_offset - 1 + l3_offset);
+      } else {
+        // `sibling_list` is an empty string.
+      }
       CreateTestSibling(j, topology_test_directory, sibling_list,
                         "cache/index3", "shared_cpu_list");
       CreateTestSibling(j + sibling_offset, topology_test_directory,
@@ -291,7 +312,8 @@ std::filesystem::path Topology::SetupTestNodePossible(
   return path;
 }
 
-Topology::Topology(InitTest, const std::filesystem::path& test_directory)
+Topology::Topology(InitTest, const std::filesystem::path& test_directory,
+                   bool has_l3_cache)
     : num_cpus_(kNumTestCpus) {
   static_assert(kNumTestCpus <= MAX_CPUS);
 
@@ -305,12 +327,19 @@ Topology::Topology(InitTest, const std::filesystem::path& test_directory)
   }
 
   const std::filesystem::path siblings_prefix =
-      SetUpTestSiblings(test_directory);
+      SetUpTestSiblings(test_directory, has_l3_cache);
   absl::flat_hash_map<int, CpuList> siblings =
       GetAllSiblings(siblings_prefix, "topology/thread_siblings");
+  CHECK_EQ(siblings.size(), num_cpus_);
   absl::flat_hash_map<int, CpuList> l3_siblings =
       GetAllSiblings(siblings_prefix, "cache/index3/shared_cpu_list");
-  CHECK_EQ(l3_siblings.size(), num_cpus_);
+  // Not all microarchitectures have an L3 cache, so vary the CHECK based on
+  // whether there is an L3 cache.
+  if (has_l3_cache) {
+    CHECK_EQ(l3_siblings.size(), num_cpus_);
+  } else {
+    CHECK(l3_siblings.empty());
+  }
 
   const std::filesystem::path node_possible_path =
       SetupTestNodePossible(test_directory);
@@ -321,9 +350,12 @@ Topology::Topology(InitTest, const std::filesystem::path& test_directory)
     CHECK(siblings.find(i) != siblings.end());
     rep->siblings = std::make_unique<CpuList>(*this);
     *rep->siblings = siblings.find(i)->second;
-    CHECK(l3_siblings.find(i) != l3_siblings.end());
+
     rep->l3_siblings = std::make_unique<CpuList>(*this);
-    *rep->l3_siblings = l3_siblings.find(i)->second;
+    if (!l3_siblings.empty()) {
+      CHECK(l3_siblings.find(i) != l3_siblings.end());
+      *rep->l3_siblings = l3_siblings.find(i)->second;
+    }
 
     rep->core = rep->siblings->begin()->id();
     // Physical cores 0-27 are on NUMA node 0 and physical cores 28-55 are on
@@ -383,7 +415,6 @@ void Topology::CheckSiblings() const {
       CHECK_EQ(cpu.siblings(), sibling.siblings());
     }
 
-    CHECK(cpu.l3_siblings().IsSet(cpu));
     for (const Cpu& sibling : cpu.l3_siblings()) {
       CHECK_EQ(cpu.l3_siblings(), sibling.l3_siblings());
     }
@@ -492,11 +523,13 @@ Topology* custom_topology = nullptr;
 
 }  // namespace
 
-void UpdateTestTopology(const std::filesystem::path& test_directory) {
+void UpdateTestTopology(const std::filesystem::path& test_directory,
+                        bool has_l3_cache) {
   if (test_topology) {
     delete test_topology;
   }
-  test_topology = new Topology(Topology::InitTest{}, test_directory);
+  test_topology =
+      new Topology(Topology::InitTest{}, test_directory, has_l3_cache);
 }
 
 Topology* TestTopology() {

@@ -81,6 +81,8 @@ class Cpu {
   int smt_idx() const { return rep_->smt_idx; }
   bool valid() const { return rep_ != nullptr; }
   const CpuList& siblings() const { return *rep_->siblings; }
+  // Returns the L3 siblings for this CPU. If the returned CpuList is empty,
+  // then the microarchitecture does not have an L3 cache.
   const CpuList& l3_siblings() const { return *rep_->l3_siblings; }
   int numa_node() const { return rep_->numa_node; }
 
@@ -443,7 +445,8 @@ class Topology {
  public:
   // These two functions use the private `Topology` constructor.
   friend Topology* MachineTopology();
-  friend void UpdateTestTopology(const std::filesystem::path& test_directory);
+  friend void UpdateTestTopology(const std::filesystem::path& test_directory,
+                                 bool has_l3_cache);
   friend void UpdateCustomTopology(const std::vector<Cpu::Raw>& cpus);
   friend Topology* CustomTopology();
 
@@ -570,7 +573,11 @@ class Topology {
   // below for the `TestTopology` function for a description of the topology.
   // `test_directory` is a path to scratch space in the file system that the
   // topology can use.
-  Topology(InitTest, const std::filesystem::path& test_directory);
+  //
+  // If `has_l3_cache` is true, creates an L3 cache. Otherwise, does not create
+  // an L3 cache.
+  Topology(InitTest, const std::filesystem::path& test_directory,
+           bool has_l3_cache);
 
   Topology(InitCustom, std::vector<Cpu::Raw> cpus);
 
@@ -583,6 +590,10 @@ class Topology {
   // Returns a map from each CPU to the list of all sibling CPUs.
   // `path_prefix` is the prefix to the CPU information files on sysfs.
   // `path_suffix` steers the sibling search towards L2 or L3 cache siblings.
+  //
+  // This method will return an empty map if there are no siblings. For example,
+  // some microarchitectures do not have an L3 cache, so each CPU has no L3
+  // siblings.
   absl::flat_hash_map<int, CpuList> GetAllSiblings(
       const std::filesystem::path& path_prefix,
       const std::string path_suffix) const;
@@ -609,8 +620,11 @@ class Topology {
   // Initializes the test directory to contain `thread_siblings` files in the
   // same organization and structure as on a normal Linux system in the sysfs
   // CPU root.
+  //
+  // If `has_l3_cache` is true, creates an L3 cache. Otherwise, does not create
+  // an L3 cache.
   std::filesystem::path SetUpTestSiblings(
-      const std::filesystem::path& test_directory) const;
+      const std::filesystem::path& test_directory, bool has_l3_cache) const;
 
   // Initializes test directory with a node possible file.
   std::filesystem::path SetupTestNodePossible(
@@ -649,9 +663,14 @@ Topology* MachineTopology();
 // how Linux configures CPUs. Lastly, CPUs 0-27 and 56-83 are on NUMA node 0 and
 // CPUs 28-55 and 84-111 are on NUMA node 1.
 //
+// If `has_l3_cache` is true, an L3 cache is created. All CPUs in a NUMA node
+// share the same L3 cache. If `has_l3_cache` is false, then the topology is
+// configured as though the microarchitecture does not have an L3 cache.
+//
 // `test_directory` is a path to scratch space in the file system that the
 // topology can use.
-void UpdateTestTopology(const std::filesystem::path& test_directory);
+void UpdateTestTopology(const std::filesystem::path& test_directory,
+                        bool has_l3_cache);
 
 // Returns the test topology described above. The pointer is never null and is
 // owned by the `TestTopology` function. The pointer lives until the process
