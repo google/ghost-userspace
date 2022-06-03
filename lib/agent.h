@@ -364,7 +364,7 @@ inline To agent_down_cast(From* f) {
 // the actual FullAgent.  The parent can communicate with the child via a shared
 // memory region.  The primary mechanism for communication is a hand-rolled RPC
 // system, built on top of Notifications.
-template <class FULL_AGENT, class AGENT_CONFIG>
+template <class FullAgentType, class AgentConfigType>
 class AgentProcess {
  public:
   // This helper class is a blob of shared memory for sync between parent and
@@ -403,7 +403,7 @@ class AgentProcess {
     Notification agent_ready_;  // child to parent
     Notification kill_agent_;   // parent to child
 
-    // Simple RPC channel, passed to FULL_AGENT's Rpc() method.
+    // Simple RPC channel, passed to FullAgentType's Rpc() method.
     // Parent posts request, then notifies rpc_pending_.
     // Child posts response, then notifies rpc_done_.
     int64_t rpc_req_;
@@ -418,7 +418,7 @@ class AgentProcess {
 
   // Note the forked child's 'main' thread, which is in CFS, will never leave
   // the constructor.  It will create its own agent tasks.
-  explicit AgentProcess(AGENT_CONFIG config) {
+  explicit AgentProcess(AgentConfigType config) {
     sb_ = absl::make_unique<SharedBlob>();
 
     agent_proc_ = absl::make_unique<ForkedProcess>(config.stderr_fd);
@@ -429,7 +429,7 @@ class AgentProcess {
 
     CHECK_EQ(mlockall(MCL_CURRENT | MCL_FUTURE), 0);
 
-    full_agent_ = absl::make_unique<FULL_AGENT>(config);
+    full_agent_ = absl::make_unique<FullAgentType>(config);
 
     GhostSignals::IgnoreCommon();
 
@@ -511,7 +511,7 @@ class AgentProcess {
   std::unique_ptr<ForkedProcess> agent_proc_;
 
   // only set in child, nullptr in parent
-  std::unique_ptr<FULL_AGENT> full_agent_;
+  std::unique_ptr<FullAgentType> full_agent_;
 
   // set in both
   std::unique_ptr<SharedBlob> sb_ ABSL_GUARDED_BY(rpc_mutex_);
