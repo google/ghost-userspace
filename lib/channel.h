@@ -67,6 +67,17 @@ class Message {
 
   const ghost_msg* msg() const { return msg_; }
 
+  bool operator==(const Message& other) const {
+    // Note that this is just checking that both messages have the same `msg_`
+    // pointer. This is *not* checking the `ghost_msg` structs themselves.
+    return msg_ == other.msg_;
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const Message& msg) {
+    os << msg.stringify();
+    return os;
+  }
+
  private:
   const ghost_msg* msg_;
   static ghost_msg kEmpty;
