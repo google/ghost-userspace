@@ -121,6 +121,9 @@ class TestAgent : public Agent {
       if (!task || !runnable || prio_boost) {
         NotifyIdle();
         req->LocalYield(agent_barrier, prio_boost ? RTLA_ON_IDLE : 0);
+      } else if (task->status_word.on_cpu()) {
+        // 'task' is still oncpu: just loop back and try to schedule it
+        // in the next iteration.
       } else {
         req->Open({
             .target = task->gtid,
