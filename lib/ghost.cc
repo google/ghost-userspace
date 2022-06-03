@@ -128,8 +128,7 @@ bool Ghost::GhostIsMountedAt(const char* path) {
 
   mntent* ent;
   while ((ent = getmntent(mounts))) {
-    if (!strcmp(Ghost::kGhostfsMount, ent->mnt_dir) &&
-        !strcmp("ghost", ent->mnt_type)) {
+    if (!strcmp(path, ent->mnt_dir) && !strcmp("ghost", ent->mnt_type)) {
       ret = true;
       break;
     }
