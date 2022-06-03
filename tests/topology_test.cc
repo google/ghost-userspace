@@ -937,6 +937,30 @@ TEST(TopologyTest, ExportTestTopologyWithNoL3Cache) {
   EXPECT_THAT(raw_cpus, Eq(compare));
 }
 
+// Tests that CpusOnNode works correctly when we have >2 NUMA nodes.
+TEST(TopologyTest, CpusOnNode) {
+  constexpr int kNumNodes = 4;
+  std::vector<Cpu::Raw> cpus;
+  for (int i = 0; i < kNumNodes; i++) {
+    Cpu::Raw cpu;
+    cpu.cpu = i;
+    cpu.core = i;
+    cpu.smt_idx = 0;
+    cpu.numa_node = i;
+    cpu.siblings.push_back(i);
+    cpu.l3_siblings.push_back(i);
+    cpus.push_back(cpu);
+  }
+
+  UpdateCustomTopology(cpus);
+
+  for (int i = 0; i < kNumNodes; i++) {
+    CpuList cpus_on_node = CustomTopology()->CpusOnNode(i);
+    EXPECT_THAT(cpus_on_node.Size(), Eq(1));
+    EXPECT_THAT(cpus_on_node.Front().id(), Eq(i));
+  }
+}
+
 }  // namespace
 }  // namespace ghost
 

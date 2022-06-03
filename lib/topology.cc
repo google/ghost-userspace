@@ -212,7 +212,7 @@ Topology::Topology(InitHost) : num_cpus_(std::thread::hardware_concurrency()) {
   // many nodes are in the system (ignoring hotplug).
   highest_node_idx_ = GetHighestNodeIdx("/sys/devices/system/node/possible");
   CheckSiblings();
-  CreateCpuListsForNumaNodes();
+  CreateCpuListsForNumaNodes(highest_node_idx_ + 1);
 }
 
 void Topology::CreateTestSibling(
@@ -380,7 +380,7 @@ Topology::Topology(InitTest, const std::filesystem::path& test_directory,
 
   highest_node_idx_ = GetHighestNodeIdx(node_possible_path);
   CheckSiblings();
-  CreateCpuListsForNumaNodes();
+  CreateCpuListsForNumaNodes(highest_node_idx_ + 1);
 }
 
 namespace {
@@ -456,7 +456,7 @@ Topology::Topology(InitCustom, std::vector<Cpu::Raw> raw_cpus)
   }
 
   CheckSiblings();
-  CreateCpuListsForNumaNodes();
+  CreateCpuListsForNumaNodes(highest_node_idx_ + 1);
 }
 
 CpuList Topology::ParseCpuStr(const std::string& str) const {

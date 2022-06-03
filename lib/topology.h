@@ -556,7 +556,8 @@ class Topology {
   CpuList ParseCpuStr(const std::string& str) const;
 
   const CpuList& CpusOnNode(int node) const {
-    CHECK(node <= 1 && node >= 0);
+    CHECK_GE(node, 0);
+    CHECK_LT(node, cpus_on_node_.size());
     return cpus_on_node_[node];
   }
 
@@ -581,9 +582,13 @@ class Topology {
 
   Topology(InitCustom, std::vector<Cpu::Raw> cpus);
 
-  void CreateCpuListsForNumaNodes() {
+  void CreateCpuListsForNumaNodes(int num_possible_nodes) {
+    cpus_on_node_.resize(num_possible_nodes, EmptyCpuList());
     for (const Cpu& cpu : all_cpus()) {
-      cpus_on_node_[cpu.numa_node()].Set(cpu.id());
+      int node = cpu.numa_node();
+      CHECK_GE(node, 0);
+      CHECK_LT(node, num_possible_nodes);
+      cpus_on_node_[node].Set(cpu.id());
     }
   }
 
@@ -647,7 +652,7 @@ class Topology {
 
   int highest_node_idx_ = -1;
 
-  CpuList cpus_on_node_[2] = {EmptyCpuList(), EmptyCpuList()};
+  std::vector<CpuList> cpus_on_node_;
 };
 
 // Returns the topology for this machine. The pointer is never null and is
