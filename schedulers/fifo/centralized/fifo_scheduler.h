@@ -190,7 +190,7 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
 
   int global_cpu_core_;
   std::atomic<int32_t> global_cpu_;
-  Channel global_channel_;
+  LocalChannel global_channel_;
   int num_tasks_ = 0;
 
   std::deque<FifoTask*> run_queue_;

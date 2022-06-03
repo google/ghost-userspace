@@ -227,7 +227,7 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
   CpuState cpu_states_[MAX_CPUS];
 
   std::atomic<int32_t> global_cpu_;
-  Channel global_channel_;
+  LocalChannel global_channel_;
   int num_tasks_ = 0;
   bool in_discovery_ = false;
   // Heapified runqueue

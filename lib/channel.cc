@@ -31,8 +31,8 @@ ghost_msg Message::kEmpty = {
     .seqnum = 0,
 };
 
-Channel::Channel(int elems, int node, CpuList cpulist)
-    : elems_(elems), node_(node) {
+LocalChannel::LocalChannel(int elems, int node, CpuList cpulist)
+    : Channel(), elems_(elems), node_(node) {
   fd_ = Ghost::CreateQueue(elems_, node_, 0, map_size_);
   CHECK_GT(fd_, 0);
 
@@ -47,17 +47,17 @@ Channel::Channel(int elems, int node, CpuList cpulist)
   }
 };
 
-Channel::~Channel() {
+LocalChannel::~LocalChannel() {
   munmap(header_, map_size_);
   close(fd_);
 }
 
-bool Channel::AssociateTask(Gtid gtid, int barrier, int* status) const {
+bool LocalChannel::AssociateTask(Gtid gtid, int barrier, int* status) const {
   return Ghost::AssociateQueue(
       fd_, GHOST_TASK, gtid.id(), barrier, 0, status) == 0;
 }
 
-void Channel::Consume(const Message& msg) {
+void LocalChannel::Consume(const Message& msg) {
   ghost_ring* r = reinterpret_cast<ghost_ring*>(
       reinterpret_cast<char*>(header_) + header_->start);
   const int slot_size = sizeof(ghost_msg);
@@ -71,7 +71,7 @@ void Channel::Consume(const Message& msg) {
   r->tail.store(tail, std::memory_order_release);
 }
 
-Message Channel::Peek() {
+Message LocalChannel::Peek() const {
   ghost_ring* r = reinterpret_cast<ghost_ring*>(
       reinterpret_cast<char*>(header_) + header_->start);
   uint32_t tidx;
@@ -90,7 +90,7 @@ Message Channel::Peek() {
   return Message(&r->msgs[tidx]);
 }
 
-bool Channel::SetEnclaveDefault() const {
+bool LocalChannel::SetEnclaveDefault() const {
   return Ghost::SetDefaultQueue(fd_) == 0;
 }
 

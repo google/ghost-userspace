@@ -181,9 +181,9 @@ class FullDeadAgent final : public FullAgent<EnclaveType> {
   }
 
  private:
-  Cpu sched_cpu_;      // CPU running the main scheduling loop.
-  Cpu satellite_cpu_;  // Satellite agent CPU.
-  Channel channel_;    // Channel configured to wakeup `sched_cpu_`.
+  Cpu sched_cpu_;         // CPU running the main scheduling loop.
+  Cpu satellite_cpu_;     // Satellite agent CPU.
+  LocalChannel channel_;  // Channel configured to wakeup `sched_cpu_`.
 };
 
 TEST(ApiTest, RunDeadTask) {
@@ -229,7 +229,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
       std::shared_ptr<TaskAllocator<FifoTask>> allocator)
       : BasicDispatchScheduler(enclave, cpulist, std::move(allocator)),
         sched_cpu_(cpulist.Front()),
-        channel_(absl::make_unique<Channel>(
+        channel_(absl::make_unique<LocalChannel>(
             GHOST_MAX_QUEUE_ELEMS,
             /*node=*/0, MachineTopology()->ToCpuList({sched_cpu_}))) {}
 
@@ -464,7 +464,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
   FifoRq rq_;
   Cpu sched_cpu_;  // CPU making the scheduling decisions.
   std::array<CpuState, MAX_CPUS> cpu_states_;
-  std::unique_ptr<Channel> channel_;
+  std::unique_ptr<LocalChannel> channel_;
 };
 
 template <typename T>
@@ -708,7 +708,7 @@ class FullIdlingAgent final : public FullAgent<EnclaveType> {
   }
 
  private:
-  Channel channel_;
+  LocalChannel channel_;
 };
 
 TEST(IdleTest, NeedCpuNotIdle) {
@@ -813,7 +813,8 @@ class CoreScheduler {
     task_->seqnum = seqnum;
     task_->sibling = 0;  // arbitrary.
 
-    ASSERT_THAT(task_channel_.AssociateTask(task_->gtid, task_->seqnum),
+    ASSERT_THAT(task_channel_.AssociateTask(task_->gtid, task_->seqnum,
+                                            /*status=*/nullptr),
                 IsTrue());
 
     const Cpu cpu = siblings_[task_->sibling];
@@ -993,7 +994,7 @@ class CoreScheduler {
 
   mutable absl::Mutex mu_;
   int next_sibling_ ABSL_GUARDED_BY(mu_);
-  Channel task_channel_ ABSL_GUARDED_BY(mu_);
+  LocalChannel task_channel_ ABSL_GUARDED_BY(mu_);
   std::unique_ptr<CoreSchedTask> task_ ABSL_GUARDED_BY(mu_);
   std::array<CpuState, MAX_CPUS> cpu_states_ ABSL_GUARDED_BY(mu_);
 };
@@ -1160,7 +1161,7 @@ class TimeAgent : public Agent {
     }
   }
 
-  Channel channel_;
+  LocalChannel channel_;
 
   Notification idle_;
   absl::Time commit_time_;
@@ -1421,7 +1422,7 @@ class FullSchedAffinityAgent final : public FullAgent<EnclaveType> {
 
  private:
   const Cpu sched_cpu_;   // CPU running the main scheduling loop.
-  Channel channel_;       // Channel configured to wakeup `sched_cpu_`.
+  LocalChannel channel_;  // Channel configured to wakeup `sched_cpu_`.
 };
 
 TEST(ApiTest, SchedAffinityRace) {
@@ -1742,7 +1743,7 @@ class FullDepartedRaceAgent final : public FullAgent<EnclaveType> {
 
  private:
   const Cpu sched_cpu_;   // CPU running the main scheduling loop.
-  Channel channel_;       // Channel configured to wakeup `sched_cpu_`.
+  LocalChannel channel_;  // Channel configured to wakeup `sched_cpu_`.
 };
 
 TEST(ApiTest, DepartedRace) {

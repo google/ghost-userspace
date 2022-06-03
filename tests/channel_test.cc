@@ -162,8 +162,8 @@ TEST(ChannelTest, Wakeup) {
 
   // Configure 'chan0' to wakeup agent.
   const int numa_node = 0;
-  Channel chan0(GHOST_MAX_QUEUE_ELEMS, numa_node,
-                topology->ToCpuList({agent_cpu}));
+  LocalChannel chan0(GHOST_MAX_QUEUE_ELEMS, numa_node,
+                     topology->ToCpuList({agent_cpu}));
   TestAgent agent(enclave.get(), agent_cpu, &chan0, &chan0, [](Task<>*) {});
   agent.Start();
   enclave->Ready();
@@ -193,17 +193,18 @@ TEST(ChannelTest, Associate) {
 
   // Configure both 'chan0' and 'chan1' to wakeup agent.
   const int numa_node = 0;
-  Channel chan0(GHOST_MAX_QUEUE_ELEMS, numa_node,
-                topology->ToCpuList({agent_cpu}));
-  Channel chan1(GHOST_MAX_QUEUE_ELEMS, numa_node,
-                topology->ToCpuList({agent_cpu}));
+  LocalChannel chan0(GHOST_MAX_QUEUE_ELEMS, numa_node,
+                     topology->ToCpuList({agent_cpu}));
+  LocalChannel chan1(GHOST_MAX_QUEUE_ELEMS, numa_node,
+                     topology->ToCpuList({agent_cpu}));
 
   // The new task is associated with the default channel (chan0).
   // We change the association to chan1 in the task_new callback.
-  TestAgent agent(enclave.get(), agent_cpu, &chan0, &chan1,
-                  [&chan1](Task<>* task) {
-                    ASSERT_TRUE(chan1.AssociateTask(task->gtid, task->seqnum));
-                  });
+  TestAgent agent(
+      enclave.get(), agent_cpu, &chan0, &chan1, [&chan1](Task<>* task) {
+        ASSERT_TRUE(
+            chan1.AssociateTask(task->gtid, task->seqnum, /*status=*/nullptr));
+      });
   agent.Start();
   enclave->Ready();
 
@@ -227,7 +228,7 @@ TEST(ChannelTest, MaxElements) {
   auto enclave = absl::make_unique<LocalEnclave>(
       AgentConfig(topology, topology->all_cpus()));
   for (int elems = GHOST_MAX_QUEUE_ELEMS; elems > 0; elems >>= 1) {
-    Channel chan(elems, /*node=*/0);
+    LocalChannel chan(elems, /*node=*/0);
     EXPECT_EQ(chan.max_elements(), elems);
   }
 }

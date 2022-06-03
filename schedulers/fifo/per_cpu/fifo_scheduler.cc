@@ -24,7 +24,7 @@ FifoScheduler::FifoScheduler(Enclave* enclave, CpuList cpulist,
     // TODO: extend Cpu to get numa node.
     int node = 0;
     CpuState* cs = cpu_state(cpu);
-    cs->channel = absl::make_unique<ghost::Channel>(
+    cs->channel = absl::make_unique<ghost::LocalChannel>(
         GHOST_MAX_QUEUE_ELEMS, node, MachineTopology()->ToCpuList({cpu}));
     // This channel pointer is valid for the lifetime of FifoScheduler
     if (!default_channel_) {
@@ -66,7 +66,8 @@ void FifoScheduler::EnclaveReady() {
     Agent* agent = enclave()->GetAgent(cpu);
 
     // AssociateTask may fail if agent barrier is stale.
-    while (!cs->channel->AssociateTask(agent->gtid(), agent->barrier())) {
+    while (!cs->channel->AssociateTask(agent->gtid(), agent->barrier(),
+                                       /*status=*/nullptr)) {
       CHECK_EQ(errno, ESTALE);
     }
   }
@@ -92,7 +93,7 @@ void FifoScheduler::Migrate(FifoTask* task, Cpu cpu,
 
   CpuState* cs = cpu_state(cpu);
   const Channel* channel = cs->channel.get();
-  CHECK(channel->AssociateTask(task->gtid, seqnum));
+  CHECK(channel->AssociateTask(task->gtid, seqnum, /*status=*/nullptr));
 
   GHOST_DPRINT(3, stderr, "Migrating task %s to cpu %d", task->gtid.describe(),
                cpu.id());

@@ -74,33 +74,69 @@ class Message {
 
 class Channel {
  public:
-  // Construct a channel mapping holding up to 'elems' message objects.
-  // The optional 'cpu' parameter can be used to configure agent wakeup.
-  Channel(int elems, int node,
-          CpuList cpulist = MachineTopology()->EmptyCpuList());
-
-  // Signals to ghOSt that the underlying channel mapping may be deallocated.
-  ~Channel();
+  virtual ~Channel() {}
 
   // Read a single message from the underlying queue. If there are no messages
   // available, returns an empty message, e.g. result.empty() == true.
-  Message Peek();
-  void Consume(const Message& msg);
+  virtual Message Peek() const = 0;
+  virtual void Consume(const Message& msg) = 0;
 
   // May be larger than constructor size.
-  size_t max_elements() { return header_->nelems; }
+  virtual size_t max_elements() const = 0;
 
   // Associate task (identified by 'gtid') with this channel.
-  bool AssociateTask(Gtid gtid, int barrier, int* status = nullptr) const;
+  virtual bool AssociateTask(Gtid gtid, int barrier, int* status) const = 0;
 
   // Set this channel's queue to be the enclave's default queue.  Caller must be
   // an agent of an enclave.  Returns true on success.
-  bool SetEnclaveDefault() const;
+  virtual bool SetEnclaveDefault() const = 0;
 
-  int GetFd() const { return fd_; }
+  virtual int GetFd() const = 0;
+};
 
-  Channel(const Channel&) = delete;
-  Channel(Channel&&) = delete;
+// Ensure that `Channel` remains an abstract base class. Some methods, such as
+// `Scheduler::GetDefaultChannel()`, have a return type of `Channel&` rather
+// than `Channel`. We want to ensure that `Channel` remains an abstract base
+// class so that if code does something like `Channel channel =
+// scheduler.GetDefaultChannel()` rather than `Channel& channel =
+// scheduler.GetDefaultChannel()`, a compile error is generated as an instance
+// of an abstract base class cannot be constructed.
+//
+// If `Channel` were no longer an abstract base class, then `Channel channel =
+// scheduler.GetDefaultChannel()` would compile, which is bad because if a
+// subclass reference were returned (such as `LocalChannel`), the subclass
+// instance would be copied and then sliced to fit into `Channel channel`
+// (assuming the subclass did not delete its copy constructor).
+static_assert(std::is_abstract<Channel>::value);
+
+// Encapsulates a shared memory IPC queue created by the kernel.
+class LocalChannel : public Channel {
+ public:
+  // Construct a channel mapping holding up to `elems` message objects.
+  // The optional `cpulist` parameter can be used to configure agent wakeup.
+  LocalChannel(int elems, int node,
+               CpuList cpulist = MachineTopology()->EmptyCpuList());
+
+  // Signals to ghOSt that the underlying channel mapping may be deallocated.
+  ~LocalChannel();
+
+  Message Peek() const override;
+  void Consume(const Message& msg) override;
+
+  // May be larger than constructor size.
+  size_t max_elements() const override { return header_->nelems; }
+
+  // Associate task (identified by 'gtid') with this channel.
+  bool AssociateTask(Gtid gtid, int barrier, int* status) const override;
+
+  // Set this channel's queue to be the enclave's default queue.  Caller must be
+  // an agent of an enclave.  Returns true on success.
+  bool SetEnclaveDefault() const override;
+
+  int GetFd() const override { return fd_; }
+
+  LocalChannel(const LocalChannel&) = delete;
+  LocalChannel(LocalChannel&&) = delete;
 
  private:
   int elems_, node_, fd_;
