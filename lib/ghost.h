@@ -388,7 +388,7 @@ class StatusWord {
   // REQUIRES: *this must not be empty().
   virtual void Free();
 
-  bool empty() { return sw_ == nullptr; }
+  bool empty() const { return sw_ == nullptr; }
 
   // Returns a 'Null' barrier token, for call-sites where it is not required.
   static BarrierToken NullBarrierToken() { return 0; }
@@ -404,7 +404,7 @@ class StatusWord {
   }
   uint64_t runtime() const { return sw_runtime(); }
 
-  bool stale(BarrierToken prev) { return prev == barrier(); }
+  bool stale(BarrierToken prev) const { return prev == barrier(); }
 
   bool in_use() const { return sw_flags() & GHOST_SW_F_INUSE; }
   bool can_free() const { return sw_flags() & GHOST_SW_F_CANFREE; }
@@ -413,9 +413,12 @@ class StatusWord {
   bool runnable() const { return sw_flags() & GHOST_SW_TASK_RUNNABLE; }
   bool boosted_priority() const { return sw_flags() & GHOST_SW_BOOST_PRIO; }
 
-  uint32_t id() { return sw_info_.id; }
+  uint32_t id() const { return sw_info_.id; }
 
   Gtid owner() const { return owner_; }
+
+  ghost_sw_info sw_info() const { return sw_info_; }
+  const ghost_status_word* sw() const { return sw_; }
 
   StatusWord(const StatusWord&) = delete;
   StatusWord& operator=(const StatusWord&) = delete;

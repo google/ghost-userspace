@@ -83,6 +83,7 @@ class Agent {
   bool boosted_priority() const { return status_word().boosted_priority(); }
   StatusWord::BarrierToken barrier() const { return status_word().barrier(); }
   Enclave* enclave() const { return enclave_; }
+  const StatusWord& status_word() const { return status_word_; }
 
  protected:
   // Used by AgentThread() to signal that any internal, e.g. subclassed,
@@ -94,8 +95,6 @@ class Agent {
 
   virtual void AgentThread() = 0;
   virtual Scheduler* AgentScheduler() const { return nullptr; }
-
-  const StatusWord& status_word() const { return status_word_; }
 
  private:
   void WaitForExitNotification() {
