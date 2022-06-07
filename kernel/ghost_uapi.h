@@ -35,7 +35,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	62
+#define GHOST_VERSION	63
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -85,7 +85,7 @@ struct ghost_msg_src {
 struct timerfd_ghost {
 	int cpu;
 	int flags;
-  uint64_t type;
+	uint64_t type;
 	uint64_t cookie;
 };
 #define TIMERFD_GHOST_ENABLED	(1 << 0)

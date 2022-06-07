@@ -32,7 +32,7 @@
  */
 static long (*bpf_ghost_wake_agent)(__u32 cpu) = (void *) 204;
 static long (*bpf_ghost_run_gtid)(__s64 gtid, __u32 task_barrier, __s32 run_flags) = (void *) 205;
-
+static long (*bpf_ghost_resched_cpu)(__u32 cpu, __u64 cpu_seqnum) = (void *) 206;
 
 #define MAX_PIDS 102400
 #define SCHED_GHOST 18
