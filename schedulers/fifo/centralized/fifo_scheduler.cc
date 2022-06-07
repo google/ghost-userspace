@@ -236,45 +236,6 @@ void FifoScheduler::RemoveFromRunqueue(FifoTask* task) {
   CHECK(false);
 }
 
-bool FifoScheduler::PreemptTask(FifoTask* prev, FifoTask* next,
-                                StatusWord::BarrierToken agent_barrier) {
-  GHOST_DPRINT(2, stderr, "PREEMPT(%d)\n", prev->cpu.id());
-
-  CHECK_NE(prev, nullptr);
-  CHECK(prev->oncpu());
-
-  if (prev == next) {
-    return true;
-  }
-
-  CHECK(!next || !next->oncpu());
-
-  CpuState* cs = cpu_state(prev->cpu);
-  CHECK_NE(cs->current, nullptr);
-
-  RunRequest* req = enclave()->GetRunRequest(prev->cpu);
-  if (next) {
-    req->Open({.target = next->gtid,
-               .target_barrier = next->seqnum,
-               .agent_barrier = agent_barrier,
-               .commit_flags = COMMIT_AT_TXN_COMMIT});
-
-    if (!req->Commit()) {
-      return false;
-    }
-  } else {
-    req->OpenUnschedule();
-    CHECK(req->Commit());
-  }
-
-  cs->current = next;
-
-  if (next) {
-    TaskOnCpu(next, prev->cpu);
-  }
-  return true;
-}
-
 void FifoScheduler::TaskOnCpu(FifoTask* task, const Cpu& cpu) {
   CpuState* cs = cpu_state(cpu);
   CHECK_EQ(task, cs->current);
@@ -436,15 +397,16 @@ found:
   if (prev) {
     CHECK(prev->oncpu());
 
-    // Vacate CPU for running Global agent.
-    CHECK(PreemptTask(prev, nullptr, 0));
-    CHECK_EQ(cs->current, nullptr);
-
-    // Set 'prio_boost' to make it reschedule asap in case 'prev' is
-    // holding a critical resource.
-    prev->prio_boost = true;
-    prev->run_state = FifoTask::RunState::kRunnable;
-    Enqueue(prev);
+    // We ping the agent on `target` below. Once that agent wakes up, it
+    // automatically preempts `prev`. The kernel generates a TASK_PREEMPT
+    // message for `prev`, which allows the scheduler to update the state for
+    // `prev`.
+    //
+    // This also allows the scheduler to gracefully handle the case where `prev`
+    // actually blocks/yields/etc. before it is preempted by the agent on
+    // `target`. In any of those cases, a TASK_BLOCKED/TASK_YIELD/etc. message
+    // is delivered for `prev` instead of a TASK_PREEMPT, so the state is still
+    // updated correctly for `prev` even if it is not preempted by the agent.
   }
 
   SetGlobalCPU(target);

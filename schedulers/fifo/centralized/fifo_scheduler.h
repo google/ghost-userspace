@@ -148,13 +148,6 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
     const Agent* agent = nullptr;
   } ABSL_CACHELINE_ALIGNED;
 
-  // Unschedule `prev` from the CPU it is currently running on. If `next` is not
-  // NULL, then `next` is scheduled in place of `prev` (all done in a single
-  // transaction). If `next` is NULL, then `prev` is just unscheduled (all done
-  // in a single transaction).
-  bool PreemptTask(FifoTask* prev, FifoTask* next,
-                   StatusWord::BarrierToken agent_barrier);
-
   // Updates the state of `task` to reflect that it is now running on `cpu`.
   // This method should be called after a transaction scheduling `task` onto
   // `cpu` succeeds.
