@@ -174,8 +174,6 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 
   bool SyncCpuState(const Cpu& cpu);
   void SyncTaskState(SolTask* task);
-  bool PreemptTask(SolTask* prev, SolTask* next,
-                   StatusWord::BarrierToken agent_barrier);
 
   // Marks a task as yielded.
   void Yield(SolTask* task);
