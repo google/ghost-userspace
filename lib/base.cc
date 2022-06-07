@@ -222,19 +222,17 @@ static absl::node_hash_map<int64_t, std::string>& get_gtid_name_map() {
 
 // Returns the name previously assigned via 'assign_name()' or an
 // auto-generated unique name.
-static const std::string& get_gtid_name(int64_t key) {
+static const std::string& get_gtid_name(int64_t gtid) {
   absl::base_internal::SpinLockHolder lock(&gtid_name_map_lock);
   auto& name_map = get_gtid_name_map();
 
-  if (auto it = name_map.find(key); it == name_map.end()) {
-    char b[20];
+  if (auto it = name_map.find(gtid); it == name_map.end()) {
     int idx = name_map.size();
-    absl::SNPrintF(b, sizeof(b), "%c%d/%d", 'A' + (idx % 26), idx / 26,
-                   Gtid(key).tid());
-    name_map[key] = std::string(b);
+    name_map[gtid] = absl::StrFormat("%c%d/%d/%lld", 'A' + (idx % 26), idx / 26,
+                                     Gtid(gtid).tid(), gtid);
   }
 
-  return name_map[key];
+  return name_map[gtid];
 }
 
 void Gtid::assign_name(std::string name) const {
