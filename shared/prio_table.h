@@ -41,7 +41,7 @@ struct seqcount {
 typedef struct seqcount seqcount_t;
 
 // TODO: Replace with internal types.
-struct legorch_shmem_hdr {
+struct ghost_shmem_hdr {
   uint16_t version;
   uint16_t hdrlen;
   uint32_t maplen;
@@ -110,7 +110,7 @@ class PrioTable {
   struct sched_item* sched_item(int i) const;
   struct work_class* work_class(int i) const;
 
-  inline struct legorch_shmem_hdr* hdr() const { return hdr_; }
+  inline struct ghost_shmem_hdr* hdr() const { return hdr_; }
   inline int NumSchedItems() { return hdr()->si_num; }
   inline int NumWorkClasses() { return hdr()->wc_num; }
 
@@ -128,7 +128,7 @@ class PrioTable {
 
  private:
   std::unique_ptr<GhostShmem> shmem_;
-  struct legorch_shmem_hdr* hdr_ = nullptr;
+  struct ghost_shmem_hdr* hdr_ = nullptr;
 
   static constexpr int kStreamFreeEntry = std::numeric_limits<uint32_t>::max();
   struct stream* stream();

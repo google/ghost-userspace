@@ -26,7 +26,7 @@ static size_t shmem_size(uint32_t sched_items, uint32_t work_classes,
                          uint32_t stream_capacity) {
   size_t sz = 0;
 
-  sz += sizeof(struct legorch_shmem_hdr);
+  sz += sizeof(struct ghost_shmem_hdr);
   sz += sizeof(struct sched_item) * sched_items;
   sz += sizeof(struct work_class) * work_classes;
   // Check that 'sz' is a multiple of the cacheline size so that the stream
@@ -47,10 +47,10 @@ PrioTable::PrioTable(uint32_t num_items, uint32_t num_classes,
   size_t size = shmem_size(num_items, num_classes, st_cap);
   shmem_ = std::make_unique<GhostShmem>(kPrioTableVersion, kPrioTableShmemName,
                                         size);
-  hdr_ = reinterpret_cast<struct legorch_shmem_hdr*>(shmem_->bytes());
+  hdr_ = reinterpret_cast<struct ghost_shmem_hdr*>(shmem_->bytes());
 
   hdr()->version = 0;
-  hdr()->hdrlen = sizeof(struct legorch_shmem_hdr);
+  hdr()->hdrlen = sizeof(struct ghost_shmem_hdr);
   hdr()->maplen = size;
   hdr()->si_num = num_items;
   hdr()->si_off = hdr()->hdrlen;
@@ -78,7 +78,7 @@ bool PrioTable::Attach(pid_t remote) {
   if (!ret) {
     return ret;
   }
-  hdr_ = reinterpret_cast<struct legorch_shmem_hdr*>(shmem_->bytes());
+  hdr_ = reinterpret_cast<struct ghost_shmem_hdr*>(shmem_->bytes());
   CHECK_GE(shmem_->size(), hdr_->maplen);  // Paranoia.
   return true;
 }
