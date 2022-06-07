@@ -31,6 +31,7 @@ using ::testing::Gt;
 using ::testing::IsFalse;
 using ::testing::IsNull;
 using ::testing::IsTrue;
+using ::testing::Le;
 using ::testing::Lt;
 using ::testing::Ne;
 using ::testing::NotNull;
@@ -817,6 +818,22 @@ class CoreScheduler {
                                             /*status=*/nullptr),
                 IsTrue());
 
+    // A sync_group commit can fail on the _local_ cpu (e.g. due a stale
+    // agent barrier). In this case the task_ will run momentarily on the
+    // remote cpu before noticing a poisoned rendezvous and rescheduling.
+    // We set ALLOW_TASK_ONCPU in 'commit_flags' to account for this case.
+    //
+    // However this doesn't handle the case where a TASK_NEW is produced
+    // but the task hasn't fully gotten offcpu (ALLOW_TASK_ONCPU is only
+    // relevant if the task is oncpu on the cpu associated with the txn).
+    //
+    // We handle this here rather than setting 'allow_txn_target_on_cpu'
+    // in the sync_group commit since we don't need it in the common case.
+    while (task_->status_word.on_cpu()) {
+      // Wait for the task to get offcpu before making it available to
+      // the CoreScheduler.
+    }
+
     const Cpu cpu = siblings_[task_->sibling];
     ASSERT_THAT(enclave_->GetAgent(cpu)->Ping(), IsTrue());
   }
@@ -849,6 +866,57 @@ class CoreScheduler {
       cs->next = nullptr;
     }
 
+    if (task_) {
+      // In the common case sibling 0 kicks things off via TaskNew() and
+      // schedules 'task_' on sibling 1 and the NULL_GTID on its own CPU
+      // blocking itself. If the sync_group commit succeeds then we expect
+      // the next wakeup on sibling 1 when 'task_' schedules for whatever
+      // reason (preempt/block/yield). Sibling 1 then returns the favor by
+      // scheduling 'task_' on sibling 0 and blocking itself. Assuming the
+      // sync_group commit succeeds then the next wakeup is on sibling 0
+      // ... and the cycle continues.
+      //
+      // However there are other events that can wake an agent out of turn:
+      // - after delivering a MSG_CPU_TICK.
+      // - as a side-effect of CONFIG_QUEUE_WAKEUP.
+      // - via set_curr_ghost (e.g. when an oncpu task enters ghost on one
+      //   of the cpus in the enclave).
+      //
+      // Additionally there is an inherent race when the agents are released:
+      // we ping sibling 0 in TaskNew() to kick things off with the newly
+      // minted 'task_' but there is no guarantee that sibling 1 is won't
+      // see it first (we could use Notifiers to ensure that both agents
+      // are blocked _before_ calling TaskNew() but that is still not
+      // sufficient given the out-of-turn wakeups described above).
+      //
+      // If we detect that an agent has woken up out of turn then we just
+      // block here with the expectation that the real wakeup will get it
+      // running again.
+      //
+      // While this does dilute the premise of the test we validate that
+      // the number of bogus_wakeups is less than 5% of the legit_wakeups.
+      if (agent_cpu != siblings_[task_->sibling]) {
+        mu_.Unlock();
+        if (!finished) {
+          bogus_wakeups_.fetch_add(1, std::memory_order_relaxed);
+        }
+        RunRequest* req = enclave_->GetRunRequest(agent_cpu);
+        const int run_flags = finished ? RTLA_ON_IDLE : 0;
+        req->LocalYield(agent_barrier, run_flags);
+        return;
+      } else {
+        if (!finished) {
+          legit_wakeups_.fetch_add(1, std::memory_order_relaxed);
+        }
+      }
+    } else {
+      if (finished) {
+        mu_.Unlock();
+        return;
+      }
+      no_task_wakeups_.fetch_add(1, std::memory_order_relaxed);
+    }
+
     // We are testing agent wakeups so this test depends on controlling when
     // each agent wakes up. The one wakeup we cannot control is when the main
     // thread pings the agent via Agent::Terminate(). Thus we consume messages
@@ -856,7 +924,7 @@ class CoreScheduler {
     // to handle the final TASK_BLOCKED/TASK_DEAD messages (see cl/334728088
     // for a detailed description of the race between pthread_join() and
     // task_dead_ghost()).
-    while (!finished || (task_ && agent_cpu == siblings_[task_->sibling])) {
+    while (task_) {
       Message msg = Peek(&task_channel_);
       if (msg.empty()) break;
 
@@ -868,6 +936,7 @@ class CoreScheduler {
 
       Cpu task_cpu = siblings_[task_->sibling];
       CpuState* cs = cpu_state(task_cpu);
+      EXPECT_THAT(agent_cpu, Eq(task_cpu));
 
       // Scheduling is simple: we track whether the task is runnable
       // or blocked. If the task is runnable the agent schedules it
@@ -877,14 +946,12 @@ class CoreScheduler {
       switch (msg.type()) {
         case MSG_TASK_WAKEUP:
           EXPECT_THAT(task_->blocked(), IsTrue());
-          EXPECT_THAT(task_cpu, Eq(agent_cpu));
           EXPECT_THAT(cs->current, IsNull());
           task_->run_state = CoreSchedTask::RunState::kRunnable;
           break;
 
         case MSG_TASK_BLOCKED:
           EXPECT_THAT(task_->oncpu(), IsTrue());
-          EXPECT_THAT(task_cpu, Eq(agent_cpu));
           EXPECT_THAT(cs->current, Eq(task_.get()));
           task_->run_state = CoreSchedTask::RunState::kBlocked;
           cs->current = nullptr;
@@ -892,7 +959,6 @@ class CoreScheduler {
 
         case MSG_TASK_DEAD:
           EXPECT_THAT(task_->blocked(), IsTrue());
-          EXPECT_THAT(task_cpu, Eq(agent_cpu));
           EXPECT_THAT(cs->current, IsNull());
           task_.reset();
           break;
@@ -900,22 +966,17 @@ class CoreScheduler {
         case MSG_TASK_YIELD:
         case MSG_TASK_PREEMPT:
           EXPECT_THAT(task_->oncpu(), IsTrue());
-          EXPECT_THAT(task_cpu, Eq(agent_cpu));
           EXPECT_THAT(cs->current, Eq(task_.get()));
           task_->run_state = CoreSchedTask::RunState::kRunnable;
           cs->current = nullptr;
           break;
 
         default:
+          EXPECT_THAT(false, IsTrue()) << "unexpected msg: " << msg.stringify();
           break;
       }
 
       Consume(&task_channel_, msg);
-    }
-
-    if (finished && !task_) {
-      mu_.Unlock();
-      return;
     }
 
     // Either we don't have a runnable task or a task in another sched_class
@@ -943,9 +1004,10 @@ class CoreScheduler {
     const int sync_group_owner = agent_cpu.id();
     RunRequest* this_req = enclave_->GetRunRequest(agent_cpu);
     this_req->Open({
-        .target = Gtid(GHOST_IDLE_GTID),
+        .target = Gtid(GHOST_NULL_GTID),
         .agent_barrier = agent_barrier,
         .commit_flags = COMMIT_AT_TXN_COMMIT,
+        .run_flags = finished ? RTLA_ON_IDLE : 0,
         .sync_group_owner = sync_group_owner,
     });
 
@@ -955,10 +1017,11 @@ class CoreScheduler {
     cs->next = task_.get();
     next_sibling_ = other_sibling;
     RunRequest* other_req = enclave_->GetRunRequest(other_cpu);
+
     other_req->Open({
         .target = cs->next->gtid,
         .target_barrier = cs->next->seqnum,
-        .commit_flags = COMMIT_AT_TXN_COMMIT,
+        .commit_flags = COMMIT_AT_TXN_COMMIT | ALLOW_TASK_ONCPU,
         .sync_group_owner = sync_group_owner,
     });
     EXPECT_THAT(other_req->sync_group_owned(), IsTrue());
@@ -974,8 +1037,19 @@ class CoreScheduler {
     } else {
       // The sync_group commit failed and txn ownership was released by the
       // CommitSyncRequests() API after validating the reason for failure.
+      //
+      // N.B. if the overall sync_group commit failed due to failure of the
+      // _local_ transaction then it is possible to observe 'task_' oncpu in
+      // the subsequent sync_group commit (this happens because the task
+      // must still get oncpu, observe the poisoned rendezvous and then
+      // resched to get itself offcpu). We account for this by setting
+      // ALLOW_TASK_ONCPU in the remote txn's commit_flags.
     }
   }
+
+  int bogus_wakeups() const { return bogus_wakeups_.load(); }
+  int legit_wakeups() const { return legit_wakeups_.load(); }
+  int no_task_wakeups() const { return no_task_wakeups_.load(); }
 
  private:
   struct CpuState {
@@ -992,15 +1066,16 @@ class CoreScheduler {
   Enclave* enclave_;
   const CpuList& siblings_;
 
+  std::atomic<int> bogus_wakeups_ = 0;
+  std::atomic<int> legit_wakeups_ = 0;
+  std::atomic<int> no_task_wakeups_ = 0;
+
   mutable absl::Mutex mu_;
   int next_sibling_ ABSL_GUARDED_BY(mu_);
   LocalChannel task_channel_ ABSL_GUARDED_BY(mu_);
   std::unique_ptr<CoreSchedTask> task_ ABSL_GUARDED_BY(mu_);
   std::array<CpuState, MAX_CPUS> cpu_states_ ABSL_GUARDED_BY(mu_);
 };
-
-#ifdef notyet // b/214648944
-#endif  // b/214648944
 
 // This test ensures the version check functionality works properly.
 // 'Ghost::GetVersion' should return a version that matches 'GHOST_VERSION'.
