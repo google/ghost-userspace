@@ -305,9 +305,6 @@ TEST_F(EnclaveTest, DestroyAndSetsched) {
 
     int enclave_fd = LocalEnclave::GetEnclaveDirectory(ctl_fd);
     CHECK_GE(enclave_fd, 0);
-    int client_fd = openat(enclave_fd, "ctl", O_RDONLY);
-    CHECK_GE(client_fd, 0);
-    close(enclave_fd);
 
     std::atomic<bool> client_ready = false;
     std::atomic<bool> destroyer_ready = false;
@@ -324,7 +321,7 @@ TEST_F(EnclaveTest, DestroyAndSetsched) {
 
       SpinFor(absl::Microseconds(kLoops) - absl::Microseconds(i));
 
-      int ret = SchedTaskEnterGhost(/*pid=*/0, client_fd);
+      int ret = SchedTaskEnterGhost(/*pid=*/0, enclave_fd);
       if (ret != 0) {
         switch (errno) {
           case ENXIO:
@@ -379,7 +376,7 @@ TEST_F(EnclaveTest, DestroyAndSetsched) {
     client.join();
     destroyer.join();
 
-    close(client_fd);
+    close(enclave_fd);
     close(ctl_fd);
 
     ASSERT_FALSE(failed);

@@ -559,9 +559,9 @@ class GhostThread {
 };
 
 // Moves the thread with PID `pid` to the ghOSt scheduling class, using the
-// enclave ctl_fd.  If ctl_fd is -1, this will use the enclave ctl_fd previously
+// enclave dir_fd.  If dir_fd is -1, this will use the enclave dir_fd previously
 // set with SetGlobalEnclaveFds().
-int SchedTaskEnterGhost(pid_t pid, int ctl_fd = -1);
+int SchedTaskEnterGhost(pid_t pid, int dir_fd = -1);
 // Makes the calling thread an agent.  Note that the calling thread must have
 // the `CAP_SYS_NICE` capability to make itself an agent.
 int SchedAgentEnterGhost(int ctl_fd, int queue_fd);
