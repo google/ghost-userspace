@@ -197,10 +197,11 @@ class Ghost {
         .flags = flags,
     };
 
-    int err = ioctl(gbl_ctl_fd_, GHOST_IOC_ASSOC_QUEUE, &data);
+    int assoc_status = ioctl(gbl_ctl_fd_, GHOST_IOC_ASSOC_QUEUE, &data);
+    int err = (assoc_status < 0) ? assoc_status : 0;
 
     if (status != nullptr) {
-      *status = data.status;
+      *status = err ? 0 : assoc_status;
     }
     return err;
   }
