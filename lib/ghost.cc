@@ -173,6 +173,7 @@ int Ghost::GetSupportedVersions(std::vector<uint32_t>& versions) {
 
 // static
 int Ghost::gbl_ctl_fd_ = -1;
+int Ghost::gbl_dir_fd_ = -1;
 // static
 StatusWordTable* Ghost::gbl_sw_table_;
 
@@ -291,8 +292,12 @@ int SchedAgentEnterGhost(int ctl_fd, int queue_fd) {
   return ret;
 }
 
-// Returns the ctlfd for some enclave that is accepting tasks.
-static int FindActiveEnclave() {
+// Returns the ctlfd and dirfd for some enclave that is accepting tasks.
+struct ctl_dir {
+  int ctl;
+  int dir;
+};
+static ctl_dir FindActiveEnclave() {
   std::error_code ec;
   auto f = std::filesystem::directory_iterator(Ghost::kGhostfsMount, ec);
   auto end = std::filesystem::directory_iterator();
@@ -304,17 +309,21 @@ static int FindActiveEnclave() {
       while (std::getline(status, line)) {
         if (line == "active yes") {
           int ctl = open((f->path() / "ctl").string().c_str(), O_RDONLY);
-          if (ctl >= 0) return ctl;
+          if (ctl >= 0) {
+            int dir = open(f->path().string().c_str(), O_PATH);
+            CHECK_GE(dir, 0);
+            return {ctl, dir};
+          }
         }
       }
     }
   }
-  return -1;
+  return {-1, -1};
 }
 
 GhostThread::GhostThread(KernelScheduler ksched, std::function<void()> work)
     : ksched_(ksched) {
-  GhostThread::SetGlobalEnclaveCtlFdOnce();
+  GhostThread::SetGlobalEnclaveFdsOnce();
 
   thread_ = std::thread([this, w = std::move(work)] {
     tid_ = GetTID();
@@ -347,11 +356,15 @@ GhostThread::~GhostThread() { CHECK(!thread_.joinable()); }
 // transaction_test, where the same global value gets reused because we run our
 // tests from within the same process.
 // static
-void GhostThread::SetGlobalEnclaveCtlFdOnce() {
+void GhostThread::SetGlobalEnclaveFdsOnce() {
   static absl::Mutex mtx(absl::kConstInit);
   absl::MutexLock lock(&mtx);
   if (Ghost::GetGlobalEnclaveCtlFd() == -1) {
-    Ghost::SetGlobalEnclaveCtlFd(FindActiveEnclave());
+    CHECK_EQ(Ghost::GetGlobalEnclaveDirFd(), -1);
+    ctl_dir cd = FindActiveEnclave();
+    if (cd.ctl >= 0) {
+      Ghost::SetGlobalEnclaveFds(cd.ctl, cd.dir);
+    }
   }
 }
 

@@ -353,7 +353,8 @@ void LocalEnclave::CommonInit() {
   // more than one enclave per process at a time, at least not until we have
   // fully moved away from default enclaves.
   CHECK_EQ(Ghost::GetGlobalEnclaveCtlFd(), -1);
-  Ghost::SetGlobalEnclaveCtlFd(ctl_fd_);
+  CHECK_EQ(Ghost::GetGlobalEnclaveDirFd(), -1);
+  Ghost::SetGlobalEnclaveFds(ctl_fd_, dir_fd_);
 
   CHECK_EQ(GetAbiVersion(), GHOST_VERSION);
 
@@ -463,9 +464,10 @@ LocalEnclave::~LocalEnclave() {
     LocalEnclave::DestroyEnclave(ctl_fd_);
   }
   close(ctl_fd_);
+  close(dir_fd_);
   // agent_test has some cases where it creates new enclaves within the same
   // process, so reset the global enclave ghost variables
-  Ghost::SetGlobalEnclaveCtlFd(-1);
+  Ghost::SetGlobalEnclaveFds(-1, -1);
   delete Ghost::GetGlobalStatusWordTable();
   Ghost::SetGlobalStatusWordTable(nullptr);
 }

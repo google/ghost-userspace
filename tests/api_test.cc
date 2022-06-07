@@ -220,7 +220,7 @@ TEST(ApiTest, RunDeadTask) {
   // is over, we need to reset so we can get a fresh enclave later.  Note that
   // we used AgentProcess, so the only user of the gbl_enclave_fd_ is us, the
   // client.
-  Ghost::CloseGlobalEnclaveCtlFd();
+  Ghost::CloseGlobalEnclaveFds();
 }
 
 class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
@@ -580,7 +580,7 @@ TEST_P(SyncGroupTest, Commit) {
   // Wait for all threads to finish.
   for (auto& t : threads) t->Join();
 
-  Ghost::CloseGlobalEnclaveCtlFd();
+  Ghost::CloseGlobalEnclaveFds();
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -760,7 +760,7 @@ TEST(IdleTest, NeedCpuNotIdle) {
   // NEED_CPU_NOT_IDLE is set in `run_flags`.
   EXPECT_THAT(ap.Rpc(kNeedCpuNotIdle), 0);
 
-  Ghost::CloseGlobalEnclaveCtlFd();
+  Ghost::CloseGlobalEnclaveFds();
 }
 
 struct CoreSchedTask : public Task<> {
@@ -1537,7 +1537,7 @@ TEST(ApiTest, SchedAffinityRace) {
   // is over, we need to reset so we can get a fresh enclave later.  Note that
   // we used AgentProcess, so the only user of the gbl_enclave_fd_ is us, the
   // client.
-  Ghost::CloseGlobalEnclaveCtlFd();
+  Ghost::CloseGlobalEnclaveFds();
 }
 
 // DepartedRaceAgent tries to induce a race in producing MSG_TASK_NEW
@@ -1878,7 +1878,7 @@ TEST(ApiTest, DepartedRace) {
   // is over, we need to reset so we can get a fresh enclave later.  Note that
   // we used AgentProcess, so the only user of the gbl_enclave_fd_ is us, the
   // client.
-  Ghost::CloseGlobalEnclaveCtlFd();
+  Ghost::CloseGlobalEnclaveFds();
 }
 
 }  // namespace
