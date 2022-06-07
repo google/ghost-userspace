@@ -602,7 +602,8 @@ bool LocalEnclave::CompleteRunRequest(RunRequest* req) {
       ABSL_FALLTHROUGH_INTENDED;
 
     default:
-      GHOST_ERROR("unexpected state after commit: %d", state);
+      GHOST_ERROR("unexpected state after commit: %s",
+                  RunRequest::StateToString(state));
       return false;  // ERROR needs no-return annotation.
   }
   return false;
@@ -708,6 +709,58 @@ bool RunRequest::Abort() {
   }
   // This transaction has already committed.
   return false;
+}
+
+// static
+std::string RunRequest::StateToString(ghost_txn_state state) {
+  switch (state) {
+    case GHOST_TXN_COMPLETE:
+      return "GHOST_TXN_COMPLETE";
+    case GHOST_TXN_ABORTED:
+      return "GHOST_TXN_ABORTED";
+    case GHOST_TXN_TARGET_ONCPU:
+      return "GHOST_TXN_TARGET_ONCPU";
+    case GHOST_TXN_TARGET_STALE:
+      return "GHOST_TXN_TARGET_STALE";
+    case GHOST_TXN_TARGET_NOT_FOUND:
+      return "GHOST_TXN_TARGET_NOT_FOUND";
+    case GHOST_TXN_TARGET_NOT_RUNNABLE:
+      return "GHOST_TXN_TARGET_NOT_RUNNABLE";
+    case GHOST_TXN_AGENT_STALE:
+      return "GHOST_TXN_AGENT_STALE";
+    case GHOST_TXN_CPU_OFFLINE:
+      return "GHOST_TXN_CPU_OFFLINE";
+    case GHOST_TXN_CPU_UNAVAIL:
+      return "GHOST_TXN_CPU_UNAVAIL";
+    case GHOST_TXN_INVALID_FLAGS:
+      return "GHOST_TXN_INVALID_FLAGS";
+    case GHOST_TXN_INVALID_TARGET:
+      return "GHOST_TXN_INVALID_TARGET";
+    case GHOST_TXN_NOT_PERMITTED:
+      return "GHOST_TXN_NOT_PERMITTED";
+    case GHOST_TXN_INVALID_CPU:
+      return "GHOST_TXN_INVALID_CPU";
+    case GHOST_TXN_NO_AGENT:
+      return "GHOST_TXN_NO_AGENT";
+    case GHOST_TXN_UNSUPPORTED_VERSION:
+      return "GHOST_TXN_UNSUPPORTED_VERSION";
+    case GHOST_TXN_POISONED:
+      return "GHOST_TXN_POISONED";
+    case GHOST_TXN_READY:
+      return "GHOST_TXN_READY";
+    default: {
+      // Note that the topology may have fewer than `MAX_CPUS` CPUs, so a
+      // "SUCCESSFUL_COMMIT" below could actually be an error case. For example,
+      // if the state is `75` and the toplogy only has 64 CPUs, then
+      // "SUCCESSFUL_COMMIT_ON_CPU_75" will be returned because `MAX_CPUS` is
+      // `256` but this state is actually an unexpected state.
+      if (state >= 0 && state < MAX_CPUS) {
+        return absl::StrCat("SUCCESSFUL_COMMIT_ON_CPU_", state);
+      } else {
+        return absl::StrCat("UNKNOWN_COMMIT_STATE_", state);
+      }
+    }
+  }
 }
 
 }  // namespace ghost

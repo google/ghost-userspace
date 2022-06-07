@@ -388,6 +388,8 @@ class RunRequest {
 
   ghost_txn* txn() { return txn_; }
 
+  static std::string StateToString(ghost_txn_state state);
+
  private:
   // These are helper functions for the state-checking functions above. These
   // are useful because the caller may only want to call `state()` once since
