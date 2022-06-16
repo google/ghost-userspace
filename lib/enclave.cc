@@ -445,7 +445,7 @@ LocalEnclave::LocalEnclave(AgentConfig config)
   BuildCpuReps();
 
   if (config_.tick_config_ == CpuTickConfig::kAllTicks) {
-      SetDeliverTicks();
+      SetDeliverTicks(true);
   }
   CHECK_EQ(agent_bpf_init(), 0);
 }

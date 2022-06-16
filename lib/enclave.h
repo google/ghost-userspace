@@ -156,8 +156,8 @@ class Enclave {
   // LocalEnclaves have a ctl fd, which various agent functions use.
   virtual int GetCtlFd() { return -1; }
   virtual void SetRunnableTimeout(absl::Duration d) {}
-  virtual void SetCommitAtTick() {}
-  virtual void SetDeliverTicks() {}
+  virtual void SetCommitAtTick(bool enabled) {}
+  virtual void SetDeliverTicks(bool enabled) {}
 
   // REQUIRES: Must be called by an implementation when all Schedulers and
   // Agents have been constructed.
@@ -445,12 +445,14 @@ class LocalEnclave final : public Enclave {
                         std::to_string(ToInt64Milliseconds(d)));
   }
 
-  void SetCommitAtTick() final {
-    WriteEnclaveTunable(dir_fd_, "commit_at_tick", "1");  // 1 == enabled
+  void SetCommitAtTick(bool enabled) final {
+    const char* val = enabled ? "1" : "0";
+    WriteEnclaveTunable(dir_fd_, "commit_at_tick", val);
   }
 
-  void SetDeliverTicks() final {
-    WriteEnclaveTunable(dir_fd_, "deliver_ticks", "1");  // 1 == enabled
+  void SetDeliverTicks(bool enabled) final {
+    const char* val = enabled ? "1" : "0";
+    WriteEnclaveTunable(dir_fd_, "deliver_ticks", val);
   }
 
   // Runs l on every non-agent, ghost-task status word.
