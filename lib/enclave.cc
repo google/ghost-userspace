@@ -429,8 +429,26 @@ void LocalEnclave::CreateAndAttachToEnclave() {
   // than nr_cpu_ids, it may silently succeed.  The kernel only checks the cpus
   // it knows about.  However, since this cpumask was constructed from a
   // topology, there should not be more than nr_cpu_ids.
-  CHECK_EQ(write(cpumask_fd, cpumask.c_str(), cpumask.length()),
-           cpumask.length());
+  constexpr int kMaxRetries = 10;
+  int retries = 0;
+  do {
+    int ret = write(cpumask_fd, cpumask.c_str(), cpumask.length());
+    if (ret == cpumask.length()) {
+      break;
+    }
+    // go/kcl/466292 always defers enclave destruction to a CFS task.
+    // This sometimes causes failures in unit tests because enclave
+    // destruction from a prior test races with enclave creation in
+    // the next one.
+    //
+    // Fix this by retrying a finite number of times as long as the
+    // reason for failure matches the race described above (EBUSY).
+    CHECK_EQ(ret, -1);
+    CHECK_EQ(errno, EBUSY);
+    absl::SleepFor(absl::Milliseconds(50));
+  } while (++retries < kMaxRetries);
+  CHECK_LT(retries, kMaxRetries);
+
   close(cpumask_fd);
 }
 
