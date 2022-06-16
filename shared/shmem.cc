@@ -193,12 +193,18 @@ int GhostShmem::OpenGhostShmemFd(const char* suffix, pid_t pid) {
   needle.append(suffix);
 
   for (auto& f : fs::directory_iterator(path)) {
-    CHECK(fs::is_symlink(f));
-    std::string p = fs::read_symlink(f);
+    // It's possible for f to disappear at any moment if the file is closed.
+    std::error_code ec;
+    std::string p = fs::read_symlink(f, ec);
+    if (ec) {
+      continue;
+    }
     if (absl::StartsWith(p, needle)) {
       std::string path = fs::path(f);
       int fd = open(path.c_str(), O_RDWR | O_CLOEXEC);
-      CHECK_GE(fd, 0);
+      if (fd < 0) {
+        continue;
+      }
       return fd;
     }
   }
