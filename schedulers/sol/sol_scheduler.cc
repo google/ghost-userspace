@@ -127,7 +127,24 @@ void SolScheduler::TaskRunnable(SolTask* task, const Message& msg) {
   Enqueue(task);
 }
 
-void SolScheduler::TaskDeparted(SolTask* task, const Message& msg) { CHECK(0); }
+void SolScheduler::TaskDeparted(SolTask* task, const Message& msg) {
+  if (task->pending()) {
+    SyncTaskState(task);
+  }
+
+  if (task->oncpu()) {
+    CpuState* cs = cpu_state_of(task);
+    CHECK_EQ(cs->current, task);
+    cs->current = nullptr;
+  } else if (task->queued()) {
+    RemoveFromRunqueue(task);
+  } else {
+    CHECK(task->blocked());
+  }
+
+  allocator()->FreeTask(task);
+  num_tasks_--;
+}
 
 void SolScheduler::TaskDead(SolTask* task, const Message& msg) {
   CHECK_EQ(task->run_state, SolTask::RunState::kBlocked);
@@ -171,7 +188,9 @@ void SolScheduler::SyncTaskState(SolTask* task) {
 }
 
 void SolScheduler::TaskBlocked(SolTask* task, const Message& msg) {
-  if (task->pending()) SyncTaskState(task);
+  if (task->pending()) {
+    SyncTaskState(task);
+  }
 
   if (task->oncpu()) {
     CpuState* cs = cpu_state_of(task);
@@ -187,7 +206,9 @@ void SolScheduler::TaskBlocked(SolTask* task, const Message& msg) {
 }
 
 void SolScheduler::TaskPreempted(SolTask* task, const Message& msg) {
-  if (task->pending()) SyncTaskState(task);
+  if (task->pending()) {
+    SyncTaskState(task);
+  }
 
   task->preempted = true;
 
@@ -204,7 +225,9 @@ void SolScheduler::TaskPreempted(SolTask* task, const Message& msg) {
 }
 
 void SolScheduler::TaskYield(SolTask* task, const Message& msg) {
-  if (task->pending()) SyncTaskState(task);
+  if (task->pending()) {
+    SyncTaskState(task);
+  }
 
   if (task->oncpu()) {
     CpuState* cs = cpu_state_of(task);
