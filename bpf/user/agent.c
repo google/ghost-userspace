@@ -27,19 +27,10 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
-#include "third_party/bpf/ghost.h"
-#include "bpf/user/ghost_bpf.skel.h"
 #include "bpf/user/schedghostidle_bpf.skel.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
 
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
-
-// The ghost_bpf object and its cpu_data mmap is our set of
-// "scheduler-independent" BPF programs.  Right now, we have a generic one that
-// controls whether the kernel generates a timer tick message.
-static struct ghost_bpf *obj;
-static struct ghost_per_cpu_data *cpu_data;
-static bool gbl_tick_on_request;
 
 // This contains all registered BPF programs, both from struct ghost_bpf as well
 // as any scheduler-specific programs.  The kernel lets you insert up to one
@@ -101,7 +92,6 @@ static int insert_prog(int ctl_fd, struct bpf_program *prog)
 
 	// Mask the ABI value encoded in the upper 16 bits.
 	switch (eat & 0xFFFF) {
-	case BPF_GHOST_SCHED_SKIP_TICK:
 	case BPF_GHOST_SCHED_PNT:
 	case BPF_GHOST_MSG_SEND:
 		ret = bpf_link_create(prog_fd, ctl_fd, eat, NULL);
@@ -128,67 +118,14 @@ static int insert_prog(int ctl_fd, struct bpf_program *prog)
 	return ret;
 }
 
-// Initializes the BPF infrastructure.
-//
-// Additionally, this loads and registers programs for scheduler-independent
-// policies, such as how to handle the timer tick.  If a scheduler plans to
-// insert its own timer tick program, then unset tick_on_request.
+// Common BPF initialization
 //
 // Returns 0 on success, -1 with errno set on failure.
-int agent_bpf_init(bool tick_on_request)
+int agent_bpf_init(void)
 {
-	int err;
-
-	if (obj)
-		return 0;
-
 	if (bump_memlock_rlimit())
 		return -1;
-
-	obj = ghost_bpf__open();
-	if (!obj) {
-		// ghost_bpf__open() clobbered errno.
-		errno = EINVAL;
-		return -1;
-	}
-
-	bpf_map__resize(obj->maps.cpu_data, libbpf_num_possible_cpus());
-
-	bpf_program__set_types(obj->progs.ghost_sched_skip_tick,
-			       BPF_PROG_TYPE_GHOST_SCHED,
-			       BPF_GHOST_SCHED_SKIP_TICK);
-
-	err = ghost_bpf__load(obj);
-
-	if (err) {
-		// ghost_bpf__load() returns a *negative* error code.
-		err = -err;
-		goto out_error;
-	}
-
-	if (tick_on_request) {
-		err = agent_bpf_register(obj->progs.ghost_sched_skip_tick,
-					 BPF_GHOST_SCHED_SKIP_TICK);
-		if (err) {
-			err = errno;
-			goto out_error;
-		}
-		gbl_tick_on_request = true;
-	}
-
-	cpu_data = bpf_map__mmap(obj->maps.cpu_data);
-	if (cpu_data == MAP_FAILED) {
-		err = errno;
-		goto out_error;
-	}
-
-
 	return 0;
-
-out_error:
-	ghost_bpf__destroy(obj);
-	errno = err;
-	return -1;
 }
 
 // We'd like to use `enum bpf_attach_type eat` here, but for now we need an int
@@ -247,36 +184,6 @@ void agent_bpf_destroy(void)
 			r->inserted = false;
 		}
 	}
-
-	ghost_bpf__destroy(obj);
-	obj = NULL;
-	gbl_tick_on_request = false;
-}
-
-// Returns 0 on success, -1 with errno set on failure.  Must have called
-// agent_bpf_init() with tick_on_request.
-int agent_bpf_request_tick_on_cpu(int cpu)
-{
-	unsigned int nr_cpus = libbpf_num_possible_cpus();
-
-	if (!gbl_tick_on_request) {
-		errno = EINVAL;
-		return -1;
-	}
-	if (!bpf_registry[BPF_GHOST_SCHED_SKIP_TICK].inserted) {
-		errno = ENOENT;
-		return -1;
-	}
-	if (cpu >= nr_cpus) {
-		errno = ERANGE;
-		return -1;
-	}
-	if (!cpu_data) {
-		errno = EINVAL;
-		return -1;
-	}
-	cpu_data[cpu].want_tick = true;
-	return 0;
 }
 
 /* schedghostidle tracer */

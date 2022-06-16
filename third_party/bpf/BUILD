@@ -14,21 +14,10 @@ licenses(["restricted"])
 exports_files([
     "common.bpf.h",
     "edf.h",
-    "ghost.h",
     "schedfair.h",
     "schedlat.h",
     "schedrun.h",
 ])
-
-bpf_program(
-    name = "ghost_bpf",
-    src = "ghost.bpf.c",
-    hdrs = [
-        "ghost.h",
-        "//:kernel/vmlinux_ghost_5_11.h",
-    ],
-    bpf_object = "ghost_bpf.o",
-)
 
 bpf_program(
     name = "edf_bpf",

@@ -45,7 +45,6 @@ class Scheduler;
 enum class CpuTickConfig {
   kNoTicks,
   kAllTicks,
-  kTickOnRequest,
 };
 
 // Contains the configuration for an Agent, including the topology, the list of
@@ -158,6 +157,7 @@ class Enclave {
   virtual int GetCtlFd() { return -1; }
   virtual void SetRunnableTimeout(absl::Duration d) {}
   virtual void SetCommitAtTick() {}
+  virtual void SetDeliverTicks() {}
 
   // REQUIRES: Must be called by an implementation when all Schedulers and
   // Agents have been constructed.
@@ -447,6 +447,10 @@ class LocalEnclave final : public Enclave {
 
   void SetCommitAtTick() final {
     WriteEnclaveTunable(dir_fd_, "commit_at_tick", "1");  // 1 == enabled
+  }
+
+  void SetDeliverTicks() final {
+    WriteEnclaveTunable(dir_fd_, "deliver_ticks", "1");  // 1 == enabled
   }
 
   // Runs l on every non-agent, ghost-task status word.

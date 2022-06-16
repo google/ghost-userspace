@@ -94,8 +94,6 @@ EdfScheduler::EdfScheduler(Enclave* enclave, CpuList cpulist,
     case CpuTickConfig::kAllTicks:
       bpf_obj_->bss->skip_tick = false;
       break;
-    case CpuTickConfig::kTickOnRequest:
-      GHOST_ERROR("Must pick kAllTicks or kNoTicks");
   }
   CHECK_EQ(agent_bpf_register(bpf_obj_->progs.edf_pnt, BPF_GHOST_SCHED_PNT),
            0);

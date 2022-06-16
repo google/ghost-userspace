@@ -444,18 +444,10 @@ LocalEnclave::LocalEnclave(AgentConfig config)
 
   BuildCpuReps();
 
-  bool tick_on_request = false;
-  switch (config_.tick_config_) {
-    case CpuTickConfig::kNoTicks:
-    case CpuTickConfig::kTickOnRequest:
-      // kNoTicks is the same as kTickOnRequest: you just never ask for one.
-      tick_on_request = true;
-      break;
-    case CpuTickConfig::kAllTicks:
-      tick_on_request = false;
-      break;
-  };
-  CHECK_EQ(agent_bpf_init(tick_on_request), 0);
+  if (config_.tick_config_ == CpuTickConfig::kAllTicks) {
+      SetDeliverTicks();
+  }
+  CHECK_EQ(agent_bpf_init(), 0);
 }
 
 LocalEnclave::~LocalEnclave() {

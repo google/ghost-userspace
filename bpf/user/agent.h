@@ -39,8 +39,7 @@ enum {
   BPF_PROG_TYPE_GHOST_SCHED = 1000,
   BPF_PROG_TYPE_GHOST_MSG,
 
-  BPF_GHOST_SCHED_SKIP_TICK = 2000,
-  BPF_GHOST_SCHED_PNT,
+  BPF_GHOST_SCHED_PNT = 2000,
   BPF_GHOST_MSG_SEND,
   BPF_GHOST_MAX_ATTACH_TYPE,  // __MAX_BPF_ATTACH_TYPE
 };
@@ -60,14 +59,10 @@ int bpf_map__munmap(struct bpf_map *map, void *addr);
 void bpf_program__set_types(struct bpf_program *prog, int prog_type,
                             int expected_attach_type);
 
-// Initializes the BPF infrastructure.
-//
-// Additionally, this loads and registers programs for scheduler-independent
-// policies, such as how to handle the timer tick.  If a scheduler plans to
-// insert its own timer tick program, then unset tick_on_request.
+// Common BPF initialization
 //
 // Returns 0 on success, -1 with errno set on failure.
-int agent_bpf_init(bool tick_on_request);
+int agent_bpf_init(void);
 
 // Registers `prog` to be inserted at attach point `eat` during
 // agent_bpf_insert_registered().  You must load the programs before calling
@@ -87,10 +82,6 @@ int agent_bpf_insert_registered(int ctl_fd);
 // explicitly close (and thus unlink/detach) BPF programs from the enclave,
 // which will speed up agent upgrade/handoff.
 void agent_bpf_destroy(void);
-
-// Returns 0 on success, -1 with errno set on failure.  Must have called
-// agent_bpf_init() with tick_on_request.
-int agent_bpf_request_tick_on_cpu(int cpu);
 
 enum {
 	AGENT_BPF_TRACE_SCHEDGHOSTIDLE,

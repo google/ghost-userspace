@@ -44,7 +44,6 @@ cc_library(
     ],
     hdrs = [
         "bpf/user/agent.h",
-        "bpf/user/ghost_bpf.skel.h",
         "bpf/user/schedghostidle_bpf.skel.h",
         "lib/agent.h",
         "lib/channel.h",
@@ -52,7 +51,6 @@ cc_library(
         "lib/scheduler.h",
         "lib/topology.h",
         "//third_party:iovisor_bcc/trace_helpers.h",
-        "//third_party/bpf:ghost.h",
     ],
     copts = compiler_flags,
     linkopts = bpf_linkopts + ["-lnuma"],
@@ -459,12 +457,6 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
     ],
-)
-
-bpf_skeleton(
-    name = "ghost_bpf_skel",
-    bpf_object = "//third_party/bpf:ghost_bpf",
-    skel_hdr = "bpf/user/ghost_bpf.skel.h",
 )
 
 bpf_skeleton(
