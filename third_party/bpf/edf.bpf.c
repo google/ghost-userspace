@@ -19,6 +19,8 @@
 #include "third_party/bpf/common.bpf.h"
 #include "third_party/bpf/edf.h"
 
+bool skip_tick = false;
+
 /* max_entries is patched at runtime to num_possible_cpus */
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
@@ -27,18 +29,6 @@ struct {
 	__type(value, struct edf_bpf_per_cpu_data);
 	__uint(map_flags, BPF_F_MMAPABLE);
 } cpu_data SEC(".maps");
-
-SEC("ghost_sched/skip_tick")
-int edf_skip_tick(struct bpf_ghost_sched *ctx)
-{
-	return 0;
-}
-
-SEC("ghost_sched/skip_tick")
-int edf_send_tick(struct bpf_ghost_sched *ctx)
-{
-	return 1;
-}
 
 SEC("ghost_sched/pnt")
 int edf_pnt(struct bpf_ghost_sched *ctx)
@@ -78,7 +68,12 @@ int edf_msg_send(struct bpf_ghost_msg *msg)
 	case MSG_TASK_YIELD:
 		handle_yield(msg);
 		break;
+	case MSG_CPU_TICK:
+		if (skip_tick)
+			return 1;
+		break;
 	}
+
 	return 0;
 }
 
