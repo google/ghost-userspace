@@ -14,6 +14,8 @@
 
 #include "experiments/shared/thread_wait.h"
 
+#include "lib/base.h"
+
 namespace ghost_test {
 
 ThreadWait::ThreadWait(uint32_t num_threads, WaitType wait_type)
@@ -45,7 +47,7 @@ void ThreadWait::WaitUntilRunnable(uint32_t sid) const {
   const std::unique_ptr<std::atomic<int>>& r = runnability_[sid];
   if (wait_type_ == WaitType::kSpin) {
     while (r->load(std::memory_order_acquire) == 0) {
-      asm volatile("pause");
+      ghost::Pause();
     }
   } else {
     CHECK_EQ(wait_type_, WaitType::kFutex);

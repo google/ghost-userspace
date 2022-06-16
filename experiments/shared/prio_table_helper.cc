@@ -14,6 +14,8 @@
 
 #include "experiments/shared/prio_table_helper.h"
 
+#include "lib/base.h"
+
 namespace ghost_test {
 
 void PrioTableHelper::GetWorkClass(uint32_t wcid, ghost::work_class& wc) const {
@@ -92,7 +94,7 @@ void PrioTableHelper::WaitUntilRunnable(uint32_t sid) const {
   std::atomic<uint32_t>* flags =
       reinterpret_cast<std::atomic<uint32_t>*>(&si->flags);
   while ((flags->load(std::memory_order_acquire) & SCHED_ITEM_RUNNABLE) == 0) {
-    asm volatile("pause");
+    ghost::Pause();
   }
 }
 

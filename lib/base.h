@@ -128,6 +128,24 @@ static inline pid_t GetTID() {
 // Gtid::Current() since it caches the gtid in a thread-local var).
 int64_t GetGtid();
 
+// Issues the equivalent of an x86 `pause` instruction on the target
+// architecture. This is generally useful to call in the body of a spinlock loop
+// since it reduces power consumption and cache contention.
+inline void Pause() {
+#ifndef __GNUC__
+#error "GCC is needed for the macros in the `Pause()` function."
+#endif
+#if defined(__x86_64__)
+  asm volatile("pause");
+#elif defined(__aarch64__)
+  asm volatile("yield");
+#elif defined(__powerpc64__)
+  asm volatile("or 27,27,27");
+#else
+  // Do nothing.
+#endif
+}
+
 // This class encapsulates a GTID (ghOSt thread identifier).
 //
 // Example:

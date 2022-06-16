@@ -143,7 +143,7 @@ inline uint32_t seqcount::write_begin() {
 
   do {
     while (seq0 & kLocked) {  // Another writer exists, reload and spin/wait.
-      asm volatile("pause");
+      Pause();
       seq0 = seqnum.load(std::memory_order_relaxed);
     }
   } while (!seqnum.compare_exchange_weak(seq0, seq0 + kLocked,

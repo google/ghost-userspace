@@ -135,7 +135,7 @@ class DeadAgent : public Agent {
         // which is not expected with a well-behaved agent).
         req->Submit();
         while (!req->committed()) {
-          asm volatile("pause");
+          Pause();
         }
       }
     }

@@ -343,7 +343,7 @@ class SpinningAgent : public Agent {
         RunRequest* req = enclave()->GetRunRequest(cpu());
         req->LocalYield(agent_barrier, RTLA_ON_IDLE);
       }
-      asm volatile("pause");
+      Pause();
     }
   }
 };
