@@ -33,8 +33,6 @@ extern "C" {
 
 // From include/uapi/linux/bpf.h for the ghost kernel.
 
-struct bpf_ghost_sched {};
-
 enum {
   BPF_PROG_TYPE_GHOST_SCHED = 1000,
   BPF_PROG_TYPE_GHOST_MSG,
