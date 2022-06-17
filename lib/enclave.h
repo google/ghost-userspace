@@ -164,6 +164,8 @@ class Enclave {
   virtual void SetRunnableTimeout(absl::Duration d) {}
   virtual void SetCommitAtTick(bool enabled) {}
   virtual void SetDeliverTicks(bool enabled) {}
+  virtual void SetWakeOnWakerCpu(bool enabled) {}
+  virtual void DiscoverTasks() {}
 
   // REQUIRES: Must be called by an implementation when all Schedulers and
   // Agents have been constructed.
@@ -458,6 +460,16 @@ class LocalEnclave final : public Enclave {
   void SetDeliverTicks(bool enabled) final {
     const char* val = enabled ? "1" : "0";
     WriteEnclaveTunable(dir_fd_, "deliver_ticks", val);
+  }
+
+  void SetWakeOnWakerCpu(bool enabled) final {
+    const char* val = enabled ? "1" : "0";
+    WriteEnclaveTunable(dir_fd_, "wake_on_waker_cpu", val);
+  }
+
+  // The kernel will send a task_new for every task in the enclave
+  void DiscoverTasks() final {
+    WriteEnclaveTunable(dir_fd_, "ctl", "discover tasks");
   }
 
   // Runs l on every non-agent, ghost-task status word.
