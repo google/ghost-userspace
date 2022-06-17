@@ -45,6 +45,7 @@ namespace ghost {
 inline pid_t GetTID();
 void Exit(int code);
 size_t GetFileSize(int fd);
+void SpinFor(absl::Duration remaining);
 void PrintBacktrace(FILE* f, void* uctx = nullptr);
 
 // This is useful for reading non-atomic variables that may be changed by the

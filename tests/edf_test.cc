@@ -97,25 +97,6 @@ void SetupWorkClasses(PrioTable* table) {
   wc->period = absl::ToInt64Nanoseconds(absl::Milliseconds(100));
 }
 
-void SpinFor(absl::Duration d) {
-  while (d > absl::ZeroDuration()) {
-    absl::Time a = absl::Now();
-    absl::Time b;
-
-    // Try to minimize the contribution of arithmetic/Now() overhead.
-    for (int i = 0; i < 150; ++i) {
-      b = absl::Now();
-    }
-
-    absl::Duration t = b - a;
-
-    // Don't count preempted time
-    if (t < absl::Microseconds(100)) {
-      d -= t;
-    }
-  }
-}
-
 class EdfTest : public testing::Test {
  protected:
   // SetUpTestSuite runs once for the entire test suite.  We don't use the usual

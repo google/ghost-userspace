@@ -293,6 +293,25 @@ size_t GetFileSize(int fd) {
   return stat_buf.st_size;
 }
 
+void SpinFor(absl::Duration remaining) {
+  while (remaining > absl::ZeroDuration()) {
+    // We use MonotonicNow instead of absl::Now(), since the latter can acquire
+    // a lock and sleep.
+    absl::Time start = ghost::MonotonicNow();
+    absl::Duration delta;
+
+    for (int i = 0; i < 100; ++i) {
+      delta = ghost::MonotonicNow() - start;
+    }
+
+    // Don't count preempted time; if we were off cpu, the large delta
+    // represents time we were waiting, not running.
+    if (delta < absl::Microseconds(100)) {
+      remaining -= delta;
+    }
+  }
+}
+
 absl::Mutex ForkedProcess::mu_(absl::kConstInit);
 
 // static

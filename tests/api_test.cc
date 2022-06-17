@@ -528,21 +528,6 @@ class SyncGroupAgent final : public FullAgent<EnclaveType> {
   std::unique_ptr<SyncGroupScheduler> scheduler_;
 };
 
-void SpinFor(absl::Duration d) {
-  while (d > absl::ZeroDuration()) {
-    absl::Time a = absl::Now();
-    absl::Time b;
-
-    // Try to minimize the contribution of arithmetic/Now() overhead.
-    for (int i = 0; i < 150; i++) b = absl::Now();
-
-    absl::Duration t = b - a;
-
-    // Don't count preempted time.
-    if (t < absl::Microseconds(100)) d -= t;
-  }
-}
-
 // std:tuple<int,int> contains the test parameters:
 // - first field of tuple is number of cpus.
 // - second field of tuple is number of threads.

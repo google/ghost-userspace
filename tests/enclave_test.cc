@@ -281,25 +281,6 @@ TEST_F(EnclaveTest, CpuListComma) {
   close(ctl_fd);
 }
 
-void SpinFor(absl::Duration d) {
-  while (d > absl::ZeroDuration()) {
-    absl::Time a = absl::Now();
-    absl::Time b;
-
-    // Try to minimize the contribution of arithmetic/Now() overhead.
-    for (int i = 0; i < 150; ++i) {
-      b = absl::Now();
-    }
-
-    absl::Duration t = b - a;
-
-    // Don't count preempted time
-    if (t < absl::Microseconds(100)) {
-      d -= t;
-    }
-  }
-}
-
 // One thread destroys the enclave while another thread tries to join it.  The
 // race is rare enough that this only failed on a loaded system or one with a
 // hacked kernel to exploit the race.
