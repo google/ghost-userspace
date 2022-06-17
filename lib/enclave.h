@@ -153,6 +153,7 @@ class Enclave {
   // agent exits.
   virtual void WaitForOldAgent() = 0;
   virtual void InsertBpfPrograms() {}
+  virtual void DisableMyBpfProgLoad() {}
   // LocalEnclaves have a ctl fd, which various agent functions use.
   virtual int GetCtlFd() { return -1; }
   virtual void SetRunnableTimeout(absl::Duration d) {}
@@ -468,6 +469,14 @@ class LocalEnclave final : public Enclave {
   // agent_online), this blocks until that FD is closed.
   void WaitForOldAgent() final;
   void InsertBpfPrograms() final;
+
+  // Permanently disables the ability to load BPF programs for the calling
+  // process.
+  void DisableMyBpfProgLoad() final {
+    std::string cmd = "disable my bpf_prog_load";
+    CHECK_EQ(write(ctl_fd_, cmd.c_str(), cmd.length()), cmd.length());
+  }
+
   int GetCtlFd() final { return ctl_fd_; }
 
   static int MakeNextEnclave();

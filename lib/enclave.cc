@@ -93,6 +93,7 @@ void Enclave::Ready() {
   for (auto scheduler : schedulers_) scheduler->EnclaveReady();
 
   InsertBpfPrograms();
+  DisableMyBpfProgLoad();
 
   // We could use agents_ here, but this allows extra checking.
   for (const Cpu& cpu : enclave_cpus_) {
