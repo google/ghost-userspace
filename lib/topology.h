@@ -32,7 +32,9 @@
 #include "lib/base.h"
 
 // We carry some definitions currently which anchor on this for convenience.
-#define MAX_CPUS 256
+// LINT.IfChange
+#define MAX_CPUS 512
+// LINT.ThenChange(//depot/google3/third_party/ghost/bpf/bpf/schedghostidle.bpf.c)
 
 namespace ghost {
 

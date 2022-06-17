@@ -766,7 +766,7 @@ std::string RunRequest::StateToString(ghost_txn_state state) {
       // "SUCCESSFUL_COMMIT" below could actually be an error case. For example,
       // if the state is `75` and the toplogy only has 64 CPUs, then
       // "SUCCESSFUL_COMMIT_ON_CPU_75" will be returned because `MAX_CPUS` is
-      // `256` but this state is actually an unexpected state.
+      // `512` but this state is actually an unexpected state.
       if (state >= 0 && state < MAX_CPUS) {
         return absl::StrCat("SUCCESSFUL_COMMIT_ON_CPU_", state);
       } else {

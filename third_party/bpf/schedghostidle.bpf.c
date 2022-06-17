@@ -19,7 +19,7 @@
 
 #include "third_party/iovisor_bcc/bits.bpf.h"
 
-#define MAX_CPUS 256
+#define MAX_CPUS 512
 /* Keep this in sync with schedghostidle.c and bpf/user/agent.c */
 #define NR_SLOTS 25
 
