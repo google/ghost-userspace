@@ -421,13 +421,15 @@ class AgentProcess {
   explicit AgentProcess(AgentConfigType config) {
     sb_ = absl::make_unique<SharedBlob>();
 
-    agent_proc_ = absl::make_unique<ForkedProcess>(config.stderr_fd);
+    agent_proc_ = absl::make_unique<ForkedProcess>(config.stderr_fd_);
     if (!agent_proc_->IsChild()) {
       sb_->agent_ready_.WaitForNotification();
       return;
     }
 
-    CHECK_EQ(mlockall(MCL_CURRENT | MCL_FUTURE), 0);
+    if (config.mlockall_) {
+      CHECK_EQ(mlockall(MCL_CURRENT | MCL_FUTURE), 0);
+    }
 
     full_agent_ = absl::make_unique<FullAgentType>(config);
 

@@ -56,7 +56,12 @@ class AgentConfig {
   CpuList cpus_;
   int enclave_fd_ = -1;
   CpuTickConfig tick_config_ = CpuTickConfig::kNoTicks;
-  int stderr_fd = 2;
+  int stderr_fd_ = 2;
+  // Default to false to avoid initialization overhead of mlock (e.g., agent
+  // upgrade/restart may be slower due to mlock of the stacks of all agents). If
+  // a scheduler has a performance benefit from using mlock, then it can opt-in
+  // by setting this option to true.
+  bool mlockall_ = false;
 
   explicit AgentConfig(Topology* topology = nullptr,
                        CpuList cpus = MachineTopology()->EmptyCpuList())
