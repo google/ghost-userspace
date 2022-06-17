@@ -449,8 +449,8 @@ cc_binary(
     ],
     copts = compiler_flags,
     deps = [
-        "//:agent",
-        "//third_party/ghost",
+        ":agent",
+        ":ghost",
         "@com_google_absl//absl/flags:parse",
     ],
 )
