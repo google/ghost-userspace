@@ -129,7 +129,14 @@ void SolScheduler::TaskRunnable(SolTask* task, const Message& msg) {
 
 void SolScheduler::TaskDeparted(SolTask* task, const Message& msg) {
   if (task->pending()) {
-    SyncTaskState(task);
+    RunRequest* req = enclave()->GetRunRequest(task->cpu);
+    // Wait for txn to complete, because we might not get another message
+    // against this task to asynchronously complete it. Ignore return value,
+    // since SyncCpuState will check it anyway.
+    enclave()->CompleteRunRequest(req);
+    // Put the task either back into runqueue (txn failed) or oncpu (txn
+    // completed). It will be adjusted again appropriately by the checks below.
+    SyncCpuState(task->cpu);
   }
 
   if (task->oncpu()) {
