@@ -290,6 +290,7 @@ void GhostOrchestrator::Worker(uint32_t sid) {
     // the experiment. Remember that `MarkIdle` does not make the worker
     // spin/sleep -- only `WaitUntilRunnable` does.
     work->num_requests.store(0, std::memory_order_release);
+    printf("Worker with SID %u is waiting until runnable\n", sid);
     thread_wait_->WaitUntilRunnable(sid);
   }
 }

@@ -316,32 +316,6 @@ void SolScheduler::GlobalSchedule(const StatusWord& agent_sw,
         // Note that txn could have failed to commit in which case the
         // 'cs->next' will go back into the run queue.
         SyncCpuState(cpu);
-      } else if (Available(cpu) && req->commit_flags() == COMMIT_AT_SCHEDULE) {
-        // 'cpu' transitioned from !available->available without committing
-        // our transaction (this is an expected race with cpu going to idle).
-        // Abort the transaction and put 'cs->next' back on the runqueue.
-        if (req->Abort()) {
-          CHECK(!SyncCpuState(cpu));  // must return false since we aborted.
-        } else {
-          // Raced with kernel that was committing the txn (this is benign
-          // and we'll reap the completion next time around the loop).
-        }
-      } else {
-        // Available    req->commit_flags()
-        //     0               0              CPU hasn't processed the IPI.
-        //                                    (most likely it has claimed but
-        //                                     not committed the txn).
-        //
-        //     0         COMMIT_AT_SCHEDULE   CPU hasn't scheduled yet.
-        //                                    (this is the common case for
-        //                                     COMMIT_AT_SCHEDULE).
-        //
-        //     1               0              CPU hasn't processed the IPI
-        //                                    (eager abort since commit will
-        //                                     most likely fail?)
-        //
-        //     1         COMMIT_AT_SCHEDULE   Raced with CPU going idle
-        //                                    (handled explicitly above).
       }
     }
 
