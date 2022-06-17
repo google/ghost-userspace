@@ -81,7 +81,7 @@ class Agent {
   bool boosted_priority() const { return status_word().boosted_priority(); }
   StatusWord::BarrierToken barrier() const { return status_word().barrier(); }
   Enclave* enclave() const { return enclave_; }
-  const StatusWord& status_word() const { return status_word_; }
+  virtual const StatusWord& status_word() const = 0;
 
  protected:
   Agent(Enclave* enclave, const Cpu& cpu) : enclave_(enclave), cpu_(cpu) {}
@@ -109,7 +109,6 @@ class Agent {
   Gtid gtid_;
   Cpu cpu_;
   Notification ready_, finished_, enclave_ready_, do_exit_;
-  StatusWord status_word_;
 
   std::thread thread_;
 
@@ -125,9 +124,14 @@ class Agent {
 class LocalAgent : public Agent {
  public:
   LocalAgent(Enclave* enclave, const Cpu& cpu) : Agent(enclave, cpu) {}
+  ~LocalAgent() override { status_word_.Free(); }
+
+  const StatusWord& status_word() const override { return status_word_; }
 
  private:
   void ThreadBody() override;
+
+  LocalStatusWord status_word_;
 };
 
 // A buffer that may be used within the RPC shared memory region to transmit

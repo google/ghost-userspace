@@ -31,7 +31,7 @@
 namespace ghost {
 
 // REQUIRES: All Task implementations should derive from Task.
-template <class StatusWordType = StatusWord>
+template <class StatusWordType = LocalStatusWord>
 struct Task {
   Task(Gtid gtid, ghost_sw_info sw_info)
       : gtid(gtid), status_word(StatusWordType(gtid, sw_info)) {}

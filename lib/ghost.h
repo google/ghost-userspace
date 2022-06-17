@@ -380,24 +380,13 @@ class StatusWord {
   struct AgentSW {};
   typedef uint32_t BarrierToken;
 
-  // Initializes to an empty status word.
-  StatusWord() {}
-  // Initializes to a known sw.  gtid is only used for debugging.
-  StatusWord(Gtid gtid, ghost_sw_info sw_info);
-  // Initializes an agent status word.
-  explicit StatusWord(AgentSW);
-
-  // Takes ownership of the word in "move_from", move_from becomes empty.
-  StatusWord(StatusWord&& move_from);
-  StatusWord& operator=(StatusWord&&);
-
   // REQUIRES: *this must be empty.
   virtual ~StatusWord();
 
   // Signals to ghOSt that the status-word associated with *this is no longer
   // being used and may be potentially freed.  Resets *this to empty().
   // REQUIRES: *this must not be empty().
-  virtual void Free();
+  virtual void Free() = 0;
 
   bool empty() const { return sw_ == nullptr; }
 
@@ -431,13 +420,10 @@ class StatusWord {
   ghost_sw_info sw_info() const { return sw_info_; }
   const ghost_status_word* sw() const { return sw_; }
 
-  StatusWord(const StatusWord&) = delete;
-  StatusWord& operator=(const StatusWord&) = delete;
-
  protected:
-  Gtid owner_;  // Debug only, remove at some point.
-  ghost_sw_info sw_info_;
-  ghost_status_word* sw_ = nullptr;
+  // Initializes to an empty status word.
+  StatusWord() {}
+  StatusWord(Gtid gtid, ghost_sw_info sw_info);
 
   uint32_t sw_barrier() const {
     std::atomic<uint32_t>* barrier =
@@ -456,6 +442,30 @@ class StatusWord {
         reinterpret_cast<std::atomic<uint32_t>*>(&sw_->flags);
     return flags->load(std::memory_order_acquire);
   }
+
+  Gtid owner_;  // Debug only, remove at some point.
+  ghost_sw_info sw_info_;
+  ghost_status_word* sw_ = nullptr;
+};
+
+class LocalStatusWord : public StatusWord {
+ public:
+  // Initializes to an empty status word.
+  LocalStatusWord() {}
+  // Initializes to a known sw.  gtid is only used for debugging.
+  LocalStatusWord(Gtid gtid, ghost_sw_info sw_info)
+      : StatusWord(gtid, sw_info) {}
+  // Initializes an agent status word.
+  explicit LocalStatusWord(StatusWord::AgentSW);
+
+  // Takes ownership of the word in "move_from", move_from becomes empty.
+  LocalStatusWord(LocalStatusWord&& move_from);
+  LocalStatusWord& operator=(LocalStatusWord&&);
+
+  LocalStatusWord(const LocalStatusWord&) = delete;
+  LocalStatusWord& operator=(const LocalStatusWord&) = delete;
+
+  void Free() override;
 };
 
 class PeriodicEdge {

@@ -79,7 +79,26 @@ static ghost_status_word* status_word_from_info(ghost_sw_info* sw_info) {
   return table->get(sw_info->index);
 }
 
-StatusWord& StatusWord::operator=(StatusWord&& move_from) {
+StatusWord::StatusWord(Gtid gtid, ghost_sw_info sw_info) {
+  sw_info_ = sw_info;
+  sw_ = status_word_from_info(&sw_info_);
+  owner_ = gtid;
+}
+
+StatusWord::~StatusWord() {
+  // TODO: Consider just making this automatic?
+  if (!empty()) {
+    GHOST_ERROR("%s leaked status word", owner_.describe());
+  }
+}
+
+LocalStatusWord::LocalStatusWord(StatusWord::AgentSW) {
+  CHECK_ZERO(Ghost::GetStatusWordInfo(GHOST_AGENT, GHOST_THIS_CPU, &sw_info_));
+  sw_ = status_word_from_info(&sw_info_);
+  owner_ = Gtid::Current();
+}
+
+LocalStatusWord& LocalStatusWord::operator=(LocalStatusWord&& move_from) {
   if (&move_from == this) return *this;
 
   sw_info_ = move_from.sw_info_;
@@ -90,28 +109,11 @@ StatusWord& StatusWord::operator=(StatusWord&& move_from) {
   return *this;
 }
 
-StatusWord::StatusWord(StatusWord&& move_from) { *this = std::move(move_from); }
-
-StatusWord::~StatusWord() {
-  // TODO: Consider just making this automatic?
-  if (!empty()) {
-    GHOST_ERROR("%s leaked status word", owner_.describe());
-  }
+LocalStatusWord::LocalStatusWord(LocalStatusWord&& move_from) {
+  *this = std::move(move_from);
 }
 
-StatusWord::StatusWord(AgentSW) {
-  CHECK_ZERO(Ghost::GetStatusWordInfo(GHOST_AGENT, GHOST_THIS_CPU, &sw_info_));
-  sw_ = status_word_from_info(&sw_info_);
-  owner_ = Gtid::Current();
-}
-
-StatusWord::StatusWord(Gtid gtid, ghost_sw_info sw_info) {
-  sw_info_ = sw_info;
-  sw_ = status_word_from_info(&sw_info_);
-  owner_ = gtid;
-}
-
-void StatusWord::Free() {
+void LocalStatusWord::Free() {
   CHECK(!empty());
   CHECK(can_free());
 
