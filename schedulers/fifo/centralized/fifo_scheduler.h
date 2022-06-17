@@ -201,10 +201,10 @@ std::unique_ptr<FifoScheduler> SingleThreadFifoScheduler(Enclave* enclave,
 
 // Operates as the Global or Satellite agent depending on input from the
 // global_scheduler->GetGlobalCPU callback.
-class FifoAgent : public Agent {
+class FifoAgent : public LocalAgent {
  public:
   FifoAgent(Enclave* enclave, Cpu cpu, FifoScheduler* global_scheduler)
-      : Agent(enclave, cpu), global_scheduler_(global_scheduler) {}
+      : LocalAgent(enclave, cpu), global_scheduler_(global_scheduler) {}
 
   void AgentThread() override;
   Scheduler* AgentScheduler() const override { return global_scheduler_; }

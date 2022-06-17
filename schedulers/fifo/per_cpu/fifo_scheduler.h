@@ -155,10 +155,10 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
 
 std::unique_ptr<FifoScheduler> MultiThreadedFifoScheduler(Enclave* enclave,
                                                           CpuList cpulist);
-class FifoAgent : public Agent {
+class FifoAgent : public LocalAgent {
  public:
   FifoAgent(Enclave* enclave, Cpu cpu, FifoScheduler* scheduler)
-      : Agent(enclave, cpu), scheduler_(scheduler) {}
+      : LocalAgent(enclave, cpu), scheduler_(scheduler) {}
 
   void AgentThread() override;
   Scheduler* AgentScheduler() const override { return scheduler_; }

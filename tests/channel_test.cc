@@ -32,11 +32,11 @@ using ::testing::NotNull;
 // transitions.
 //
 // 'task_new_callback_' is executed when a new task is discovered.
-class TestAgent : public Agent {
+class TestAgent : public LocalAgent {
  public:
   TestAgent(Enclave* enclave, Cpu cpu, Channel* default_channel,
             Channel* task_channel, std::function<void(Task<>*)> callback)
-      : Agent(enclave, cpu),
+      : LocalAgent(enclave, cpu),
         default_channel_(default_channel),
         task_channel_(task_channel),
         task_new_callback_(callback) {

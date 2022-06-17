@@ -195,16 +195,16 @@ class Enclave {
   Topology* topology() const { return topology_; }
   const CpuList* cpus() const { return &enclave_cpus_; }
 
- protected:
-  const AgentConfig config_;
-  Topology* topology_;
-  CpuList enclave_cpus_;
-
   // Specializations for Attach and Detach must invoke the base method.
   // Note: Invoked by the actual thread associated with the Agent, prior to
   // invoking specialization.
   virtual void AttachAgent(const Cpu& cpu, Agent* agent);
   virtual void DetachAgent(Agent* agent);
+
+ protected:
+  const AgentConfig config_;
+  Topology* topology_;
+  CpuList enclave_cpus_;
 
   virtual void AttachScheduler(Scheduler* scheduler);
   virtual void DetachScheduler(Scheduler* scheduler);
@@ -218,7 +218,6 @@ class Enclave {
   std::list<Scheduler*> schedulers_ ABSL_GUARDED_BY(mu_);
   std::list<Agent*> agents_ ABSL_GUARDED_BY(mu_);
 
-  friend class Agent;
   friend class Scheduler;
 };
 

@@ -30,7 +30,7 @@ void Agent::StartBegin() { thread_ = std::thread(&Agent::ThreadBody, this); }
 
 void Agent::StartComplete() { ready_.WaitForNotification(); }
 
-void Agent::ThreadBody() {
+void LocalAgent::ThreadBody() {
   int queue_fd;
   Scheduler* s = AgentScheduler();
   if (!s) {
@@ -95,7 +95,9 @@ void Agent::TerminateComplete() {
   // Since agent state transitions don't produce task messages we use
   // the GHOST_SW_F_CANFREE bit to check whether the kernel has invoked
   // the 'task_dead' callback.
-  while (!status_word_.can_free()) absl::SleepFor(absl::Milliseconds(1));
+  while (!status_word_.can_free()) {
+    absl::SleepFor(absl::Milliseconds(1));
+  }
 }
 
 // static

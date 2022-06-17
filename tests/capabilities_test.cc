@@ -52,13 +52,13 @@ TEST(CapabilitiesTest, RunNice) {
 // agent.Start();
 // notification.WaitForNotification();
 // agent.Terminate();
-class CapabilitiesAgent : public Agent {
+class CapabilitiesAgent : public LocalAgent {
  public:
   // Constructs the agent on the specified enclave (`enclave`) and CPU (`cpu`).
   // The agent notifies `notification` in its main thread body so that the test
   // can confirm that the agent actually ran.
   CapabilitiesAgent(Enclave* enclave, Cpu cpu, Notification* notification)
-      : Agent(enclave, cpu), notification_(notification) {}
+      : LocalAgent(enclave, cpu), notification_(notification) {}
 
  private:
   // The main thread body checks that it is in the ghOSt scheduling class and

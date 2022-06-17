@@ -248,10 +248,10 @@ std::unique_ptr<EdfScheduler> SingleThreadEdfScheduler(Enclave* enclave,
 
 // Operates as the Global or Satellite agent depending on input from the
 // global_scheduler->GetGlobalCPU callback.
-class GlobalSatAgent : public Agent {
+class GlobalSatAgent : public LocalAgent {
  public:
   GlobalSatAgent(Enclave* enclave, Cpu cpu, EdfScheduler* global_scheduler)
-      : Agent(enclave, cpu), global_scheduler_(global_scheduler) {}
+      : LocalAgent(enclave, cpu), global_scheduler_(global_scheduler) {}
 
   void AgentThread() override;
   Scheduler* AgentScheduler() const override { return global_scheduler_; }

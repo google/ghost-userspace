@@ -39,16 +39,14 @@ namespace ghost {
 // Implementations should override "AgentThread()".
 class Agent {
  public:
-  explicit Agent(Enclave* enclave, const Cpu& cpu)
-      : enclave_(enclave), cpu_(cpu) {}
   virtual ~Agent();
 
   // Initiates binding of *this to the constructor passed CPU.  Must call
   // StartComplete.
   // REQUIRES: AgentThread() implementation must call SignalReady().
-  void StartBegin();
+  virtual void StartBegin();
   // All methods are valid to call when StartComplete returns.
-  void StartComplete();
+  virtual void StartComplete();
   void Start() {
     StartBegin();
     StartComplete();
@@ -56,10 +54,10 @@ class Agent {
 
   // Signals Finished() and guarantees that the agent will wake to observe it.
   // REQUIRES: May only be called once, and must call TerminateComplete.
-  void TerminateBegin();
+  virtual void TerminateBegin();
   // Returns when the thread associated with *this has completed its tear-down.
   // REQUIRES: May only be called once after TerminateBegin.
-  void TerminateComplete();
+  virtual void TerminateComplete();
   void Terminate() {
     TerminateBegin();
     TerminateComplete();
@@ -86,6 +84,8 @@ class Agent {
   const StatusWord& status_word() const { return status_word_; }
 
  protected:
+  Agent(Enclave* enclave, const Cpu& cpu) : enclave_(enclave), cpu_(cpu) {}
+
   // Used by AgentThread() to signal that any internal, e.g. subclassed,
   // initialization is complete and that StartComplete() can return.
   void SignalReady() { ready_.Notify(); }
@@ -96,7 +96,6 @@ class Agent {
   virtual void AgentThread() = 0;
   virtual Scheduler* AgentScheduler() const { return nullptr; }
 
- private:
   void WaitForExitNotification() {
     CHECK(Finished());
     do_exit_.WaitForNotification();
@@ -105,7 +104,7 @@ class Agent {
   void EnclaveReady() { enclave_ready_.Notify(); }
 
   Enclave* const enclave_;
-  void ThreadBody();
+  virtual void ThreadBody() = 0;
 
   Gtid gtid_;
   Cpu cpu_;
@@ -121,6 +120,14 @@ class Agent {
   static const bool kVersionCheck;
 
   friend class Enclave;
+};
+
+class LocalAgent : public Agent {
+ public:
+  LocalAgent(Enclave* enclave, const Cpu& cpu) : Agent(enclave, cpu) {}
+
+ private:
+  void ThreadBody() override;
 };
 
 // A buffer that may be used within the RPC shared memory region to transmit

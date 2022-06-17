@@ -35,9 +35,9 @@ using ::testing::Ne;
 
 // A simple agent that just idles.
 template <size_t max_notifications = 1>
-class SimpleAgent : public Agent {
+class SimpleAgent : public LocalAgent {
  public:
-  SimpleAgent(Enclave* enclave, Cpu cpu) : Agent(enclave, cpu) {
+  SimpleAgent(Enclave* enclave, Cpu cpu) : LocalAgent(enclave, cpu) {
     // Agent notifies the main thread on idle (up to max_notifications_ times).
     static_assert(max_notifications > 0);
     static_assert(max_notifications < 100);  // let's be reasonable.
@@ -324,9 +324,9 @@ TEST(AgentTest, ExitHandler) {
   LocalEnclave::DestroyAllEnclaves();
 }
 
-class SpinningAgent : public Agent {
+class SpinningAgent : public LocalAgent {
  public:
-  SpinningAgent(Enclave* enclave, Cpu cpu) : Agent(enclave, cpu) {}
+  SpinningAgent(Enclave* enclave, Cpu cpu) : LocalAgent(enclave, cpu) {}
 
  protected:
   void AgentThread() override {
@@ -450,14 +450,14 @@ TEST(AgentTest, CpuTick) {
 }
 
 // An agent that dequeues messages and invokes a msg-specific callback.
-class CallbackAgent : public Agent {
+class CallbackAgent : public LocalAgent {
  public:
   using CallbackMap =
       absl::flat_hash_map<int, std::function<void(Message, Cpu)>>;
 
   CallbackAgent(Enclave* enclave, Cpu cpu, Channel* channel,
                 CallbackMap callbacks)
-      : Agent(enclave, cpu), channel_(channel), callbacks_(callbacks) {
+      : LocalAgent(enclave, cpu), channel_(channel), callbacks_(callbacks) {
     channel_->SetEnclaveDefault();
   }
 
@@ -728,9 +728,9 @@ TEST(AgentTest, MsgCpuNotIdle) {
 //   SetSchedAgent agent(enclave, cpu);
 //   agent.Start();
 //   agent.Terminate();
-class SetSchedAgent : public Agent {
+class SetSchedAgent : public LocalAgent {
  public:
-  SetSchedAgent(Enclave* enclave, Cpu cpu) : Agent(enclave, cpu) {}
+  SetSchedAgent(Enclave* enclave, Cpu cpu) : LocalAgent(enclave, cpu) {}
 
  protected:
   void AgentThread() override {

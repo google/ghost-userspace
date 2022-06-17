@@ -42,10 +42,12 @@ using ::testing::NotNull;
 //
 // Prior to the fix in go/kcl/353858 the kernel would reliably panic in less
 // than 1000 iterations of this test in virtme.
-class DeadAgent : public Agent {
+class DeadAgent : public LocalAgent {
  public:
   DeadAgent(Enclave* enclave, Cpu this_cpu, Cpu other_cpu, Channel* channel)
-      : Agent(enclave, this_cpu), other_cpu_(other_cpu), channel_(channel) {}
+      : LocalAgent(enclave, this_cpu),
+        other_cpu_(other_cpu),
+        channel_(channel) {}
 
  protected:
   void AgentThread() final {
@@ -469,10 +471,10 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
 };
 
 template <typename T>
-class TestAgent : public Agent {
+class TestAgent : public LocalAgent {
  public:
   TestAgent(Enclave* enclave, Cpu cpu, T* scheduler)
-      : Agent(enclave, cpu), scheduler_(scheduler) {}
+      : LocalAgent(enclave, cpu), scheduler_(scheduler) {}
 
  protected:
   void AgentThread() override {
@@ -589,10 +591,10 @@ INSTANTIATE_TEST_SUITE_P(
                      testing::Values(1, 4, 8, 16))  // num_threads
 );
 
-class IdlingAgent : public Agent {
+class IdlingAgent : public LocalAgent {
  public:
   IdlingAgent(Enclave* enclave, Cpu cpu, bool schedule)
-      : Agent(enclave, cpu), schedule_(schedule) {}
+      : LocalAgent(enclave, cpu), schedule_(schedule) {}
 
  protected:
   void AgentThread() final {
@@ -1091,10 +1093,10 @@ TEST(ApiTest, CheckVersion) {
 // Bare-bones agent implementation that can schedule exactly one task.
 // TODO: Put agent and test thread into separate address spaces to
 // avoid potential deadlock.
-class TimeAgent : public Agent {
+class TimeAgent : public LocalAgent {
  public:
   TimeAgent(Enclave* enclave, Cpu cpu)
-      : Agent(enclave, cpu),
+      : LocalAgent(enclave, cpu),
         channel_(GHOST_MAX_QUEUE_ELEMS, kNumaNode,
                  MachineTopology()->ToCpuList({cpu})) {
     channel_.SetEnclaveDefault();
@@ -1308,10 +1310,10 @@ TEST(ApiTest, SchedGetAffinity) {
 // This in turn invalidates the latched_task which prior to the kernel
 // fix would just result in task stranding (task is no longer latched
 // and kernel did not produce any msg to let the agent know).
-class SchedAffinityAgent : public Agent {
+class SchedAffinityAgent : public LocalAgent {
  public:
   SchedAffinityAgent(Enclave* enclave, const Cpu& this_cpu, Channel* channel)
-      : Agent(enclave, this_cpu), channel_(channel) {}
+      : LocalAgent(enclave, this_cpu), channel_(channel) {}
 
  protected:
   void AgentThread() final {
@@ -1588,10 +1590,10 @@ TEST(ApiTest, SchedAffinityRace) {
 //
 // It is possible for TASK_NEW and TASK_AFFINITY_CHANGED to be reordered
 // in a similar way. We reuse the same test to trigger this reordering.
-class DepartedRaceAgent : public Agent {
+class DepartedRaceAgent : public LocalAgent {
  public:
   DepartedRaceAgent(Enclave* enclave, const Cpu& this_cpu, Channel* channel)
-      : Agent(enclave, this_cpu), channel_(channel) {}
+      : LocalAgent(enclave, this_cpu), channel_(channel) {}
 
  protected:
   void AgentThread() final {

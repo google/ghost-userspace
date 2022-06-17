@@ -377,12 +377,15 @@ class GhostSignals {
 // It releases the word in its destructor.
 class StatusWord {
  public:
+  struct AgentSW {};
   typedef uint32_t BarrierToken;
 
   // Initializes to an empty status word.
   StatusWord() {}
   // Initializes to a known sw.  gtid is only used for debugging.
   StatusWord(Gtid gtid, ghost_sw_info sw_info);
+  // Initializes an agent status word.
+  explicit StatusWord(AgentSW);
 
   // Takes ownership of the word in "move_from", move_from becomes empty.
   StatusWord(StatusWord&& move_from);
@@ -432,9 +435,6 @@ class StatusWord {
   StatusWord& operator=(const StatusWord&) = delete;
 
  protected:
-  struct AgentSW {};
-  explicit StatusWord(AgentSW);
-
   Gtid owner_;  // Debug only, remove at some point.
   ghost_sw_info sw_info_;
   ghost_status_word* sw_ = nullptr;
@@ -456,8 +456,6 @@ class StatusWord {
         reinterpret_cast<std::atomic<uint32_t>*>(&sw_->flags);
     return flags->load(std::memory_order_acquire);
   }
-
-  friend class Agent;  // For AgentSW constructor.
 };
 
 class PeriodicEdge {
