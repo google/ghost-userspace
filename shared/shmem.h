@@ -68,6 +68,9 @@ class GhostShmem {
   size_t absolute_size() const { return map_size_; }
   inline const void* absolute_start() const { return shmem_; }
 
+  // The process that owns the shmem region.
+  pid_t Owner() const;
+
   // Internal overheads that clients may optimized passed mapping sizes against.
   // This is useful as it represents the padding that should be considered if
   // trying to optimally pack against the huge-page backing.

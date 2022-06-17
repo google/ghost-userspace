@@ -67,7 +67,7 @@ struct GhostShmem::InternalHeader {
 
   std::atomic<bool> ready, finished;
 
-  int owning_pid;
+  pid_t owning_pid;
   int64_t client_version;
 };
 
@@ -182,6 +182,7 @@ bool GhostShmem::ConnectShmem(int64_t client_version, const char* suffix,
   CHECK_EQ(hdr_->client_version, client_version);
   CHECK_EQ(hdr_->mapping_size, map_size_);
   CHECK_EQ(hdr_->header_size, kHeaderReservedBytes);
+  CHECK_EQ(hdr_->owning_pid, pid);
   return true;
 }
 
@@ -209,6 +210,10 @@ int GhostShmem::OpenGhostShmemFd(const char* suffix, pid_t pid) {
     }
   }
   return -1;
+}
+
+pid_t GhostShmem::Owner() const {
+  return hdr_ ? hdr_->owning_pid : 0;
 }
 
 // static
