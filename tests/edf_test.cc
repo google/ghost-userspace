@@ -173,7 +173,9 @@ TEST_F(EdfTest, Simple) {
     return 0;
   });
 
-  ASSERT_EQ(fp.WaitForChildExit(), 0);
+  // Not checking return value because the child could have already exited
+  // in which case WaitForChildExit() would return a "failure".
+  fp.WaitForChildExit();
 }
 
 // If we keep the tests all in the same process, then this is a good check
@@ -192,7 +194,7 @@ TEST_F(EdfTest, SimpleAgain) {
     return 0;
   });
 
-  ASSERT_EQ(fp.WaitForChildExit(), 0);
+  fp.WaitForChildExit();
 }
 
 TEST_F(EdfTest, SimpleMany) {
@@ -235,7 +237,7 @@ TEST_F(EdfTest, SimpleMany) {
     }
     return 0;
   });
-  ASSERT_EQ(fp.WaitForChildExit(), 0);
+  fp.WaitForChildExit();
 }
 
 TEST_F(EdfTest, SimpleRepeatable) {
@@ -260,7 +262,7 @@ TEST_F(EdfTest, SimpleRepeatable) {
 
     return 0;
   });
-  ASSERT_EQ(fp.WaitForChildExit(), 0);
+  fp.WaitForChildExit();
 }
 
 TEST_F(EdfTest, BusyRunFor) {
@@ -291,7 +293,7 @@ TEST_F(EdfTest, BusyRunFor) {
 
     return 0;
   });
-  ASSERT_EQ(fp.WaitForChildExit(), 0);
+  fp.WaitForChildExit();
 }
 
 }  // namespace
