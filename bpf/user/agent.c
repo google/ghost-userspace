@@ -43,11 +43,11 @@ static struct bpf_registration {
 
 static size_t map_mmap_sz(struct bpf_map *map)
 {
-	const struct bpf_map_def *def = bpf_map__def(map);
 	size_t mmap_sz;
 
-	mmap_sz = (size_t)roundup(def->value_size, 8) * def->max_entries;
-	mmap_sz = roundup(mmap_sz, sysconf(_SC_PAGE_SIZE));
+  mmap_sz = (size_t)roundup(bpf_map__value_size(map), 8) *
+      bpf_map__max_entries(map);
+  mmap_sz = roundup(mmap_sz, sysconf(_SC_PAGE_SIZE));
 
 	return mmap_sz;
 }
