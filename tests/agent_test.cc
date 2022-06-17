@@ -542,8 +542,6 @@ TEST(AgentTest, MsgTimerExpired) {
     ASSERT_THAT(payload->type, Eq(fd));
     ASSERT_THAT(payload->cookie, Eq(fd));
 
-    msgs[cpu.id()]++;
-
     // Got one message but it may have accrued more than one tick
     // if agent execution was delayed (e.g. by hwintr or softirq).
     //
@@ -552,11 +550,16 @@ TEST(AgentTest, MsgTimerExpired) {
     uint64_t t = 0;
     int nbytes = read(fd, &t, sizeof(t));
     if (nbytes != sizeof(t)) {
+      // This can happen due to a race with 'close(fd)' below done by the
+      // main thread. Since we don't have a good way to figure out how many
+      // 'ticks' would have been read from the timerfd (at least one but
+      // could be more) let's just pretend we never got the msg.
       EXPECT_THAT(nbytes, Eq(-1));
-      EXPECT_THAT(errno, Eq(EAGAIN));
+      EXPECT_THAT(errno, Eq(EBADF));
     } else {
       EXPECT_THAT(t, Ge(1));
       ticks[cpu.id()] += t;
+      msgs[cpu.id()]++;
     }
   };
 
@@ -607,12 +610,14 @@ TEST(AgentTest, MsgTimerExpired) {
   const absl::Duration kDelay = absl::Milliseconds(50);
   absl::SleepFor(kDelay);
 
-  // Stop timer and disassociate from ghost before terminating agent.
-  struct itimerspec itimerzero = {
-      .it_interval = {0},
-      .it_value = {0},
-  };
-  ASSERT_THAT(Ghost::TimerFdSettime(fd, /*flags=*/0, &itimerzero), Eq(0));
+  // Stop the timer:
+  // - this can race with a concurrent read(fd) in 'timer_callback' and
+  //   cause it to fail with an EBADF.
+  // - we could eliminate the race by doing this _after_ terminating the
+  //   agents but that pushes the race down into the kernel where the
+  //   timerfd callback doesn't find an agent to deliver the msg (this
+  //   race is benign but does result in a WARNING which is not ideal).
+  close(fd);
 
   // Terminate all agents.
   for (auto& a : agents) a->Terminate();
@@ -621,7 +626,6 @@ TEST(AgentTest, MsgTimerExpired) {
     if (cpu == target_cpu) {
       // Each 'msg' accounts for one or more 'ticks'.
       EXPECT_THAT(ticks[cpu.id()], Ge(msgs[cpu.id()]));
-      EXPECT_THAT(ticks[cpu.id()], Ge(kDelay / kPeriod));
     } else {
       EXPECT_THAT(ticks[cpu.id()], Eq(0));
       EXPECT_THAT(msgs[cpu.id()], Eq(0));
