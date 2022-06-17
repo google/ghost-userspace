@@ -104,7 +104,17 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   void DumpState(const Cpu& cpu, int flags) final;
   std::atomic<bool> debug_runqueue_ = false;
 
+  int CountAllTasks() {
+    int num_tasks = 0;
+    allocator()->ForEachTask([&num_tasks](Gtid gtid, const FifoTask* task) {
+      ++num_tasks;
+      return true;
+    });
+    return num_tasks;
+  }
+
   static constexpr int kDebugRunqueue = 1;
+  static constexpr int kCountAllTasks = 2;
 
  protected:
   void TaskNew(FifoTask* task, const Message& msg) final;
@@ -182,6 +192,9 @@ class FullFifoAgent : public FullAgent<EnclaveType> {
       case FifoScheduler::kDebugRunqueue:
         scheduler_->debug_runqueue_ = true;
         response.response_code = 0;
+        return;
+      case FifoScheduler::kCountAllTasks:
+        response.response_code = scheduler_->CountAllTasks();
         return;
       default:
         response.response_code = -1;

@@ -1881,5 +1881,42 @@ TEST(ApiTest, DepartedRace) {
   Ghost::CloseGlobalEnclaveFds();
 }
 
+TEST(ApiTest, GhostCloneGhost) {
+  // Arbitrary but safe because there must be at least one CPU.
+  constexpr int kCpuNum = 0;
+  Topology* topology = MachineTopology();
+
+  auto ap = AgentProcess<FullFifoAgent<LocalEnclave>, AgentConfig>(
+      AgentConfig(topology, topology->ToCpuList(std::vector<int>{kCpuNum})));
+
+  // Verify that a ghost thread implicitly clones itself in the ghost
+  // scheduling class.
+  GhostThread t1(GhostThread::KernelScheduler::kGhost, [] {
+    EXPECT_THAT(sched_getscheduler(/*pid=*/0), Eq(SCHED_GHOST));
+    // A bare std::thread is used here intentionally so nothing is going to
+    // move t2 into ghost artificially (compare to GhostThread above).
+    std::thread t2([] {
+      EXPECT_THAT(sched_getscheduler(/*pid=*/0), Eq(SCHED_GHOST));
+    });
+    t2.join();
+  });
+  t1.Join();
+
+  // Even though the threads have joined it does not mean they are dead.
+  // pthread_join() can return before the dying task has made its way to
+  // TASK_DEAD (CLONE_CHILD_CLEARTID sync via do_exit->exit_mm->mm_release).
+  //
+  // In this case FifoScheduler::ValidatePreExitState() can trigger a CHECK
+  // because if the runqueue is not empty. We avoid this by spinning here
+  // until there are no more tasks remaining.
+  int num_tasks;
+  do {
+    num_tasks = ap.Rpc(FifoScheduler::kCountAllTasks);
+    EXPECT_THAT(num_tasks, Ge(0));
+  } while (num_tasks);
+
+  Ghost::CloseGlobalEnclaveFds();
+}
+
 }  // namespace
 }  // namespace ghost
