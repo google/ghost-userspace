@@ -364,11 +364,14 @@ TEST_F(EnclaveTest, DestroyAndSetsched) {
             break;
           case EBADF:
           case EXDEV:
+          case ENODEV:
             // The destroyer won the race and the enclave is dying.
             // - EBADF is when the enclave died and was removed from kernfs
             // before we could call kernfs_get_active().
             // - EXDEV is when we got the reference and were able to get the
             // struct ghost_enclave pointer, but it was already is_dying.
+            // - ENODEV is when the kernfs_get_active() fails to get an active
+            // ref
             destroyer_won = true;
             break;
           default:
