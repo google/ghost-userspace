@@ -68,7 +68,9 @@ class Scheduler {
   static constexpr int kDumpAllTasks = 0x2;
 
   Scheduler(Enclave* enclave, CpuList cpus) : enclave_(enclave), cpus_(cpus) {
-    enclave_->AttachScheduler(this);
+    if (enclave_) {
+      enclave_->AttachScheduler(this);
+    }
   }
   virtual ~Scheduler() {}
 
