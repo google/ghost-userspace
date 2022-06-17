@@ -199,11 +199,23 @@ void ShinjukuScheduler::TaskRunnable(ShinjukuTask* task, const Message& msg) {
   Enqueue(task, /* back = */ false);
 }
 
-void ShinjukuScheduler::TaskDeparted(ShinjukuTask* task, const Message& msg) {}
+void ShinjukuScheduler::TaskDeparted(ShinjukuTask* task, const Message& msg) {
+  if (task->oncpu()) {
+    CpuState* cs = cpu_state_of(task);
+    CHECK_EQ(cs->current, task);
+    cs->current = nullptr;
+  } else if (task->queued()) {
+    RemoveFromRunqueue(task);
+  } else {
+    CHECK(task->blocked());
+  }
+
+  allocator()->FreeTask(task);
+  num_tasks_--;
+}
 
 void ShinjukuScheduler::TaskDead(ShinjukuTask* task, const Message& msg) {
-  CHECK_EQ(task->run_state,
-           ShinjukuTask::RunState::kBlocked);  // Need to schedule to exit.
+  CHECK_EQ(task->run_state, ShinjukuTask::RunState::kBlocked);
   allocator()->FreeTask(task);
 
   num_tasks_--;

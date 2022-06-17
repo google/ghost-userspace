@@ -247,11 +247,23 @@ void EdfScheduler::TaskRunnable(EdfTask* task, const Message& msg) {
   Enqueue(task);
 }
 
-void EdfScheduler::TaskDeparted(EdfTask* task, const Message& msg) {}
+void EdfScheduler::TaskDeparted(EdfTask* task, const Message& msg) {
+  if (task->oncpu()) {
+    CpuState* cs = cpu_state_of(task);
+    CHECK_EQ(cs->current, task);
+    cs->current = nullptr;
+  } else if (task->queued()) {
+    RemoveFromRunqueue(task);
+  } else {
+    CHECK(task->blocked());
+  }
+
+  allocator()->FreeTask(task);
+  num_tasks_--;
+}
 
 void EdfScheduler::TaskDead(EdfTask* task, const Message& msg) {
-  CHECK_EQ(task->run_state,
-           EdfTask::RunState::kBlocked);  // Need to schedule to exit.
+  CHECK_EQ(task->run_state, EdfTask::RunState::kBlocked);
   allocator()->FreeTask(task);
 
   num_tasks_--;
