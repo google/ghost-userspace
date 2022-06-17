@@ -415,8 +415,6 @@ class CpuList {
   static constexpr size_t kIntsBits = CHAR_BIT * sizeof(uint64_t);
   // The number of "slots" in the bitmap array `bitmap_`.
   static constexpr size_t kMapSize = MAX_CPUS / kIntsBits;
-  // The number of bits in the bitmap.
-  static constexpr size_t kNumBits = kIntsBits * kMapSize;
 
   // Returns number of set bits in the bitmap.
   uint32_t CountSetBits() const {
