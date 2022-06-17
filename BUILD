@@ -443,6 +443,19 @@ cc_library(
 )
 
 cc_binary(
+    name = "enclave_watcher",
+    srcs = [
+        "util/enclave_watcher.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        "//:agent",
+        "//third_party/ghost",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+cc_binary(
     name = "pushtosched",
     srcs = [
         "util/pushtosched.cc",
