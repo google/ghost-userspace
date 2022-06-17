@@ -28,6 +28,32 @@ class EnclaveTest : public ::testing::Test {
   static void SetUpTestSuite() { Ghost::InitCore(); }
 };
 
+bool WriteEnclaveCpus(int fd, const std::string& data) {
+  constexpr int kMaxRetries = 10;
+  int retries = 0;
+
+  do {
+    int ret = write(fd, data.c_str(), data.length());
+    if (ret == data.length()) {
+      return true;
+    }
+    // go/kcl/466292 always defers enclave destruction to a CFS task.
+    // This sometimes causes failures in unit tests because enclave
+    // destruction from a prior test races with enclave creation in
+    // the next one.
+    //
+    // Fix this by retrying a finite number of times as long as the
+    // reason for failure matches the race described above (EBUSY).
+    CHECK_EQ(ret, -1);
+    if (errno != EBUSY) {
+      break;
+    }
+    absl::SleepFor(absl::Milliseconds(50));
+  } while (++retries < kMaxRetries);
+
+  return false;
+}
+
 TEST_F(EnclaveTest, TxnRegionFree) {
   Topology* topology = MachineTopology();
   const AgentConfig config(topology, topology->all_cpus());
@@ -92,14 +118,14 @@ static void CheckSet(int cpumask_fd, std::string mask, int cpulist_fd,
 // Sets the cpus and tests that they were set, by both cpumask and cpulist.
 static void TestSetCpus(int cpumask_fd, std::string mask, int cpulist_fd,
                         std::string list) {
-  CHECK_EQ(write(cpumask_fd, mask.c_str(), mask.length()), mask.length());
+  CHECK(WriteEnclaveCpus(cpumask_fd, mask));
   CheckSet(cpumask_fd, mask, cpulist_fd, list);
 
   // Reset in between.
-  CHECK_EQ(write(cpulist_fd, "", 0), 0);
+  CHECK(WriteEnclaveCpus(cpulist_fd, ""));
   CheckSet(cpumask_fd, "", cpulist_fd, "");
 
-  CHECK_EQ(write(cpulist_fd, list.c_str(), list.length()), list.length());
+  CHECK(WriteEnclaveCpus(cpulist_fd, list));
   CheckSet(cpumask_fd, mask, cpulist_fd, list);
 }
 
@@ -145,9 +171,9 @@ TEST_F(EnclaveTest, BadCpus) {
   int cpulist_fd = openat(enclave_fd, "cpulist", O_RDWR);
   CHECK_GE(cpulist_fd, 0);
 
-  CHECK_EQ(write(cpumask_fd, "hello", 5), -1);
-  CHECK_EQ(write(cpulist_fd, "-2", 2), -1);
-  CHECK_EQ(write(cpulist_fd, "9999999999", 10), -1);
+  CHECK(!WriteEnclaveCpus(cpumask_fd, "hello"));
+  CHECK(!WriteEnclaveCpus(cpulist_fd, "-2"));
+  CHECK(!WriteEnclaveCpus(cpulist_fd, "9999999999"));
 
   close(cpulist_fd);
   close(cpumask_fd);
@@ -160,7 +186,7 @@ TEST_F(EnclaveTest, BadCpus) {
 static void AddCpu(int enclave_fd, std::string cpu) {
   int cpulist_fd = openat(enclave_fd, "cpulist", O_RDWR);
   CHECK_GE(cpulist_fd, 0);
-  CHECK_EQ(write(cpulist_fd, cpu.c_str(), cpu.length()), cpu.length());
+  CHECK(WriteEnclaveCpus(cpulist_fd, cpu));
   close(cpulist_fd);
 }
 
@@ -242,13 +268,10 @@ TEST_F(EnclaveTest, CpuListComma) {
       std::vector<int>{0, 5, 10, 15, 16, 21, 26, 31, 32});
   std::string comma_str = comma_list.CpuMaskStr();
 
-  ssize_t ret = write(cpumask_fd, comma_str.c_str(), comma_str.length());
-  if (ret < 0) {
+  if (!WriteEnclaveCpus(cpumask_fd, comma_str)) {
     // We can legitimately fail if we're on a machine with too few cpus, but
     // EOVERFLOW means our cpumask wasn't parsed by the kernel.
     CHECK_NE(errno, EOVERFLOW);
-  } else {
-    CHECK_EQ(ret, comma_str.length());
   }
 
   close(cpumask_fd);
@@ -415,7 +438,7 @@ TEST_F(EnclaveTest, KillActiveEnclave) {
   int cpulist_fd = openat(enclave_fd, "cpulist", O_RDWR);
   ASSERT_GE(cpulist_fd, 0);
   std::string cpus = "0-3";
-  ASSERT_EQ(write(cpulist_fd, cpus.c_str(), cpus.length()), cpus.length());
+  ASSERT_TRUE(WriteEnclaveCpus(cpulist_fd, cpus));
   EXPECT_EQ(close(cpulist_fd), 0);
 
   FifoConfig config;
