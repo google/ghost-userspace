@@ -235,6 +235,61 @@ cc_test(
     ],
 )
 
+cc_binary(
+    name = "agent_biff",
+    srcs = [
+        "schedulers/biff/agent_biff.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        ":biff_scheduler",
+        "@com_google_absl//absl/debugging:symbolize",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+bpf_skeleton(
+    name = "biff_bpf_skel",
+    bpf_object = "//third_party/bpf:biff_bpf",
+    skel_hdr = "schedulers/biff/biff_bpf.skel.h",
+)
+
+cc_library(
+    name = "biff_scheduler",
+    srcs = [
+        "schedulers/biff/biff_scheduler.cc",
+    ],
+    hdrs = [
+        "schedulers/biff/biff_bpf.skel.h",
+        "schedulers/biff/biff_scheduler.h",
+        "//third_party/bpf:biff_bpf.h",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        ":ghost",
+        ":shared",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_absl//absl/strings:str_format",
+        "@linux//:libbpf",
+    ],
+)
+
+cc_test(
+    name = "biff_test",
+    size = "small",
+    srcs = [
+        "tests/biff_test.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":biff_scheduler",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
 cc_test(
     name = "capabilities_test",
     size = "small",

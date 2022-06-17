@@ -12,12 +12,24 @@ package(default_visibility = ["//:__pkg__"])
 licenses(["restricted"])
 
 exports_files([
+    "biff_bpf.h",
     "common.bpf.h",
     "edf.h",
     "schedfair.h",
     "schedlat.h",
     "schedrun.h",
 ])
+
+bpf_program(
+    name = "biff_bpf",
+    src = "biff.bpf.c",
+    hdrs = [
+        "biff_bpf.h",
+        "common.bpf.h",
+        "//:kernel/vmlinux_ghost_5_11.h",
+    ],
+    bpf_object = "biff_bpf.o",
+)
 
 bpf_program(
     name = "edf_bpf",
