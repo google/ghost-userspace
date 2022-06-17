@@ -132,7 +132,7 @@ class Cpu {
 //  optimizations as needed.
 class CpuList {
  public:
-  explicit CpuList(const Topology& topology) : topology_(&topology) {}
+  explicit CpuList(const Topology& topology);
 
   // Returns true if `this` and `other` have identical bitmaps, false
   // otherwise.
@@ -199,7 +199,7 @@ class CpuList {
   // ...
   // a.Intersection(b);  // Mutates `a`.
   void Intersection(const CpuList& src) {
-    std::transform(bitmap_, bitmap_ + kMapSize, src.bitmap_, bitmap_,
+    std::transform(bitmap_, bitmap_ + map_size_, src.bitmap_, bitmap_,
                    [](uint64_t a, uint64_t b) { return a & b; });
   }
 
@@ -212,7 +212,7 @@ class CpuList {
   // ...
   // a.Union(b);  // Mutates `a`.
   void Union(const CpuList& src) {
-    std::transform(bitmap_, bitmap_ + kMapSize, src.bitmap_, bitmap_,
+    std::transform(bitmap_, bitmap_ + map_size_, src.bitmap_, bitmap_,
                    [](uint64_t a, uint64_t b) { return a | b; });
   }
 
@@ -226,7 +226,7 @@ class CpuList {
   // ...
   // a.Subtract(b);  // Mutates `a`.
   void Subtract(const CpuList& src) {
-    std::transform(bitmap_, bitmap_ + kMapSize, src.bitmap_, bitmap_,
+    std::transform(bitmap_, bitmap_ + map_size_, src.bitmap_, bitmap_,
                    [](uint64_t a, uint64_t b) { return a & ~b; });
   }
 
@@ -306,8 +306,9 @@ class CpuList {
     using reference = const CpuList&;
     using iterator_category = std::input_iterator_tag;
 
-    explicit Iter(const Topology& topology, const uint64_t* bitmap, size_t id)
-        : topology_(&topology), bitmap_(bitmap), id_(id) {
+    explicit Iter(const Topology& topology, const uint64_t* bitmap,
+                  size_t map_size, size_t id)
+        : topology_(&topology), bitmap_(bitmap), map_size_(map_size), id_(id) {
       CHECK_NE(bitmap, nullptr);
       // Initialize the iterator to the first set bit.
       FindNextSetBit();
@@ -350,6 +351,8 @@ class CpuList {
     const Topology* topology_;
     // Pointer to backing bitmap of CpuList.
     const uint64_t* bitmap_;
+    // The number of used slots in `bitmap_`.
+    size_t map_size_;
     // `id` is maintained as an internal cursor while iterating over range
     // loops.
     size_t id_ = 0;
@@ -368,7 +371,7 @@ class CpuList {
     std::string s;
     bool emitted_nibble = false;
     const uint8_t* bitmap_bytes = reinterpret_cast<const uint8_t*>(bitmap_);
-    size_t len = kMapSize * sizeof(bitmap_[0]);
+    size_t len = map_size_ * sizeof(bitmap_[0]);
     // The bitmap is stored with the lowest bits at the beginning of the map.
     // Print the MSB first, both backwards and the upper nibble first.
     for (int i = len - 1; i >= 0; --i) {
@@ -414,19 +417,22 @@ class CpuList {
   // The number of bits in the `uint64_t` type.
   static constexpr size_t kIntsBits = CHAR_BIT * sizeof(uint64_t);
   // The number of "slots" in the bitmap array `bitmap_`.
-  static constexpr size_t kMapSize = MAX_CPUS / kIntsBits;
+  static constexpr size_t kMapCapacity = MAX_CPUS / kIntsBits;
 
   // Returns number of set bits in the bitmap.
   uint32_t CountSetBits() const {
     uint32_t ret = 0;
-    for (uint32_t i = 0; i < kMapSize; ++i) {
+    for (uint32_t i = 0; i < map_size_; ++i) {
       ret += absl::popcount(bitmap_[i]);
     }
     return ret;
   }
 
   const Topology* topology_ = nullptr;
-  uint64_t bitmap_[kMapSize] = {0};
+  uint64_t bitmap_[kMapCapacity] = {0};
+  // The number of used "slots" in the bitmap array `bitmap_`. It is never
+  // larger than kMapCapacity. Not marked const to allow assignment of CpuLists.
+  size_t map_size_;
 };
 
 // This represents the topology of the machine, including the CPUs, cores, and

@@ -28,8 +28,15 @@
 
 namespace ghost {
 
+CpuList::CpuList(const Topology& topology)
+    : topology_(&topology),
+      map_size_((topology_->num_cpus() + kIntsBits - 1) / kIntsBits) {
+  static_assert(MAX_CPUS % kIntsBits == 0);
+  CHECK_LE(map_size_, kMapCapacity);
+}
+
 Cpu CpuList::GetNthCpu(uint32_t n) const {
-  for (uint32_t i = 0; i < kMapSize; i++) {
+  for (uint32_t i = 0; i < map_size_; i++) {
     uint64_t word = bitmap_[i];
     int count = absl::popcount(word);
     // `n` is zero-indexed, so if `count` == `n`, then the `n`th bit set is
@@ -54,7 +61,7 @@ void CpuList::Iter::FindNextSetBit() {
   const size_t bit_offset = id_ & (kIntsBits - 1);
   uint64_t word = 0;
 
-  if (map_idx >= kMapSize) {
+  if (map_idx >= map_size_) {
     // We are already past the end of the bitmap, so skip to the end to
     // avoid an out-of-bounds access to `bitmap_` below.
     goto end;
@@ -63,13 +70,13 @@ void CpuList::Iter::FindNextSetBit() {
   // 2, the AND operation below is equivalent to `id_ % kIntsBits`.
   word = bitmap_[map_idx];
   word &= ~0ULL << bit_offset;
-  while (map_idx < kMapSize) {
+  while (map_idx < map_size_) {
     if (word) {
       id_ = map_idx * kIntsBits + __builtin_ctzll(word);
       cpu_ = topology_->cpu(id_);
       return;
     }
-    if (++map_idx < kMapSize) {
+    if (++map_idx < map_size_) {
       word = bitmap_[map_idx];
     }
   }
@@ -82,11 +89,11 @@ end:
 }
 
 CpuList::Iter CpuList::begin() const {
-  return Iter(*topology_, bitmap_, /*id=*/0);
+  return Iter(*topology_, bitmap_, map_size_, /*id=*/0);
 }
 
 CpuList::Iter CpuList::end() const {
-  return Iter(*topology_, bitmap_, /*id=*/topology_->num_cpus());
+  return Iter(*topology_, bitmap_, map_size_, /*id=*/topology_->num_cpus());
 }
 
 absl::flat_hash_map<int, CpuList> Topology::GetAllSiblings(
