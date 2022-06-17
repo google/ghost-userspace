@@ -442,6 +442,19 @@ cc_library(
     ],
 )
 
+cc_binary(
+    name = "pushtosched",
+    srcs = [
+        "util/pushtosched.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":base",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
 cc_test(
     name = "topology_test",
     size = "small",
