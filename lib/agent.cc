@@ -43,6 +43,8 @@ void LocalAgent::ThreadBody() {
     queue_fd = s->GetDefaultChannel().GetFd();
   }
 
+  CHECK_EQ(prctl(PR_SET_NAME, absl::StrCat("ap_task_", cpu().id()).c_str()), 0);
+
   gtid_ = Gtid::Current();
   CHECK_EQ(Ghost::SchedSetAffinity(Gtid::Current(),
                                    MachineTopology()->ToCpuList({cpu_})),

@@ -21,6 +21,7 @@
 
 // C++ headers
 #include <sys/mman.h>
+#include <sys/prctl.h>
 
 #include <atomic>
 #include <cstddef>
@@ -443,6 +444,7 @@ class AgentProcess {
     }
 
     full_agent_ = absl::make_unique<FullAgentType>(config);
+    CHECK_EQ(prctl(PR_SET_NAME, "ap_child"), 0);
 
     GhostSignals::IgnoreCommon();
 
@@ -454,6 +456,7 @@ class AgentProcess {
     // thread for the RPCs for our derived class FullAgents and let this thread
     // handle ready/kill for the AgentProcess.
     auto rpc_handler = std::thread([this]() {
+      CHECK_EQ(prctl(PR_SET_NAME, "ap_rpc"), 0);
       for (;;) {
         sb_->rpc_pending_.WaitForNotification();
         sb_->rpc_pending_.Reset();
