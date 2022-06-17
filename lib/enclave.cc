@@ -54,6 +54,9 @@ void Enclave::Ready() {
     CHECK(schedulers_.front()->GetDefaultChannel().SetEnclaveDefault());
   }
 
+  InsertBpfPrograms();
+  DisableMyBpfProgLoad();
+
   // On the topic of multithreaded Discovery: the main issue is that global
   // schedulers can't handle concurrent discovery and scheduling.  For instance,
   // they use the SingleThreadMallocTaskAllocator and probably have other
@@ -86,14 +89,12 @@ void Enclave::Ready() {
   // like a kref and RCU too.
   //
   // Right now we're single threaded.  All Agents are in WaitForEnclaveReady,
-  // which is triggered by EnclaveReady below.  That means we can't schedule
-  // until Discovery is complete, which may take time.
+  // which is triggered by agent->EnclaveReady() below (not
+  // scheduler->EnclaveReady()).  That means we can't schedule until Discovery
+  // is complete, which may take time.
   for (auto scheduler : schedulers_) scheduler->DiscoverTasks();
 
   for (auto scheduler : schedulers_) scheduler->EnclaveReady();
-
-  InsertBpfPrograms();
-  DisableMyBpfProgLoad();
 
   // We could use agents_ here, but this allows extra checking.
   for (const Cpu& cpu : enclave_cpus_) {
