@@ -376,6 +376,19 @@ inline To agent_down_cast(From* f) {
 // the actual FullAgent.  The parent can communicate with the child via a shared
 // memory region.  The primary mechanism for communication is a hand-rolled RPC
 // system, built on top of Notifications.
+//
+// We fork a separate process for the FullAgent in order to keep the agent
+// process as slim as possible, isolating it from any random threads that may be
+// in the current process. This reduces (but does not completely eliminate) the
+// chance of an agent thread becoming blocked on a resource held by a non-agent
+// thread. In most cases that will simply lead to scheduling delays. However,
+// if the thread being waited on is a ghost-client thread, then deadlock may
+// occur. So, the rules of thumb are:
+// - ghost-client threads should never exist in the same process as the ghost
+// agents
+// - Use of non-agents in the agent process should be minimized if possible.
+// - If non-agents do exist in the same process as agents, then care should be
+// taken to minimize resource dependencies between them, such as shared mutexes.
 template <class FullAgentType, class AgentConfigType>
 class AgentProcess {
  public:
