@@ -123,6 +123,8 @@ class PrioTable {
   void MarkUpdatedIndex(int idx, int num_retries);
   int NextUpdatedIndex();
 
+  pid_t Owner() const { return shmem_ ? shmem_->Owner() : 0; }
+
   PrioTable(const PrioTable&) = delete;
   PrioTable(PrioTable&&) = delete;
 

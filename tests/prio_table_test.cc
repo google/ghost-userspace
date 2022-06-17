@@ -18,6 +18,24 @@
 
 namespace {
 
+TEST(PrioTableTest, Owner) {
+  ghost::PrioTable _client_table(/*num_items=*/10, /*num_classes=*/4,
+                           ghost::PrioTable::StreamCapacity::kStreamCapacity19);
+  EXPECT_EQ(_client_table.Owner(), getpid());
+
+  // Uninitialized PrioTable does not have an owner.
+  ghost::PrioTable table;
+  EXPECT_EQ(table.Owner(), 0);
+
+  // PrioTable does not have an owner after failing to attach.
+  EXPECT_EQ(table.Attach(/*remote=*/0), false);
+  EXPECT_EQ(table.Owner(), 0);
+
+  // PrioTable must have an expected owner after a successful attach.
+  EXPECT_EQ(table.Attach(getpid()), true);
+  EXPECT_EQ(table.Owner(), getpid());
+}
+
 TEST(PrioTableTest, SimpleEnqueueThenDeqeue) {
   static const int kIdx = 5;
   ghost::PrioTable table(10, 4,
