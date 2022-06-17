@@ -275,10 +275,10 @@ struct AgentRpcResponse {
 //
 // Most agents operate on a LocalEnclave (i.e. the kernel ABI), but you can
 // replace that with any Enclave
-template <class EnclaveType = LocalEnclave>
+template <class EnclaveType = LocalEnclave, class AgentConfigType = AgentConfig>
 class FullAgent {
  public:
-  explicit FullAgent(AgentConfig config) : enclave_(config) {
+  explicit FullAgent(AgentConfigType config) : enclave_(config) {
     Ghost::InitCore();
   }
   virtual ~FullAgent() {
