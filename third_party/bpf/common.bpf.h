@@ -29,9 +29,11 @@
  * The function ID numbers come from the ghost kernel's bpf.h header's.  The
  * format is the same as what bpf_doc.py would auto-generate.
  */
+#ifndef GHOST_BPF
 static long (*bpf_ghost_wake_agent)(__u32 cpu) = (void *) 3000;
 static long (*bpf_ghost_run_gtid)(__s64 gtid, __u32 task_barrier, __s32 run_flags) = (void *) 3001;
 static long (*bpf_ghost_resched_cpu)(__u32 cpu, __u64 cpu_seqnum) = (void *) 3002;
+#endif
 
 #define MAX_PIDS 102400
 #define SCHED_GHOST 18
