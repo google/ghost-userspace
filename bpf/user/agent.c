@@ -39,7 +39,7 @@ static struct bpf_registration {
 	struct bpf_program *prog;
 	bool inserted;
 	int fd;
-} bpf_registry [BPF_GHOST_MAX_ATTACH_TYPE];
+} bpf_registry [__MAX_BPF_GHOST_ATTACH_TYPE];
 
 static size_t map_mmap_sz(struct bpf_map *map)
 {
@@ -68,7 +68,7 @@ int bpf_map__munmap(struct bpf_map *map, void *addr)
 void bpf_program__set_types(struct bpf_program *prog, int prog_type,
 			    int expected_attach_type)
 {
-	BUILD_BUG_ON(BPF_GHOST_MAX_ATTACH_TYPE > 0xFFFF);
+	BUILD_BUG_ON(__MAX_BPF_GHOST_ATTACH_TYPE > 0xFFFF);
 	BUILD_BUG_ON(GHOST_VERSION > 0xFFFF);
 
 	expected_attach_type |= GHOST_VERSION << 16;
@@ -133,7 +133,7 @@ int agent_bpf_init(void)
 // They are in the kernel repo.  We keep them in sync in bpf/user/agent.h.
 int agent_bpf_register(struct bpf_program *prog, int eat)
 {
-	if (eat >= BPF_GHOST_MAX_ATTACH_TYPE) {
+	if (eat >= __MAX_BPF_GHOST_ATTACH_TYPE) {
 		errno = ERANGE;
 		return -1;
 	}
@@ -154,7 +154,7 @@ int agent_bpf_insert_registered(int ctl_fd)
 	int fd;
 	struct bpf_registration *r;
 
-	for (int i = 0; i < BPF_GHOST_MAX_ATTACH_TYPE; i++) {
+	for (int i = 0; i < __MAX_BPF_GHOST_ATTACH_TYPE; i++) {
 		r = &bpf_registry[i];
 		if (!r->prog)
 			continue;
@@ -177,7 +177,7 @@ void agent_bpf_destroy(void)
 {
 	struct bpf_registration *r;
 
-	for (int i = 0; i < BPF_GHOST_MAX_ATTACH_TYPE; ++i) {
+	for (int i = 0; i < __MAX_BPF_GHOST_ATTACH_TYPE; ++i) {
 		r = &bpf_registry[i];
 		if (r->inserted) {
 			close(r->fd);

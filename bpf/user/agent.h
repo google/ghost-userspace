@@ -39,14 +39,10 @@ enum {
 
   BPF_GHOST_SCHED_PNT = 2000,
   BPF_GHOST_MSG_SEND,
-  BPF_GHOST_MAX_ATTACH_TYPE,  // __MAX_BPF_ATTACH_TYPE
+  __MAX_BPF_GHOST_ATTACH_TYPE
 };
 
 // end include/uapi/linux/bpf.h
-
-#else
-
-#define BPF_GHOST_MAX_ATTACH_TYPE __MAX_BPF_ATTACH_TYPE
 
 #endif
 
