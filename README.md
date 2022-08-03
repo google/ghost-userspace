@@ -22,6 +22,8 @@ This is not an officially supported Google product.
 
 ---
 
+### Compilation
+
 The ghOSt userspace component can be compiled on Ubuntu 20.04 or newer.
 
 1\. We use the Google Bazel build system to compile the userspace components of
@@ -52,3 +54,48 @@ the unit tests, the experiments, and the scripts to run the experiments, along
 with all of the dependencies for those targets. If you prefer to build
 individual targets rather than all of them to save compile time, replace `...`
 with an individual target name, such as `agent_shinjuku`.
+
+---
+
+### ghOSt Project Layout
+
+- `bpf/user/`
+  - ghOSt contains a suite of BPF tools to assist with debugging and performance
+    optimization. The userspace components of these tools are in this directory.
+- `experiments/`
+  - The RocksDB and antagonist Shinjuku experiments (from our SOSP paper) and
+    microbenchmarks. Use the Python scripts in `experiments/scripts/` to run the
+    Shinjuku experiments.
+- `kernel/`
+  - Headers that have shared data structures used by both the kernel and
+    userspace.
+- `lib/`
+  - The core ghOSt userspace library.
+- `schedulers/`
+  - ghOSt schedulers. These schedulers include:
+    - `biff/`, Biff (bare-bones FIFO scheduler that schedules everything with
+      BPF code)
+    - `cfs/` CFS (ghOSt implementation of Linux Completely Fair Scheduler
+      policy)
+    - `edf/`, EDF (Earliest Deadline First)
+    - `fifo/centralized/`, Centralized FIFO
+    - `fifo/per_cpu/`, Per-CPU FIFO
+    - `shinjuku/`, Shinjuku
+    - `sol/`, Speed-of-Light (bare-bones centralized FIFO scheduler that runs as
+      fast as possible)
+- `shared/`
+  - Classes to support shared-memory communication between a scheduler and
+    another application(s). Generally, this communication is useful for the
+    application to send scheduling hints to the scheduler.
+- `tests/`
+  - ghOSt unit tests.
+- `third_party/`
+  - `bpf/`
+    - Contains the kernel BPF code for our suite of BPF tools (mentioned above).
+      This kernel BPF code is licensed under GPLv2, so we must keep it in
+      `third_party/`.
+  - The rest of `third_party/` contains code from third-party developers and
+    `BUILD` files to compile the code.
+- `util/`
+  -  Helper utilities for ghOSt. For example, `pushtosched` can be used to move
+     a batch of kernel threads to the ghOSt scheduling class.
