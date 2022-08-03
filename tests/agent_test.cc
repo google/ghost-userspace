@@ -255,6 +255,15 @@ TEST(AgentTest, RpcSerializationSimpleVector) {
   }
 }
 
+TEST(AgentTest, RpcSerializationString) {
+  std::vector<std::string> strings = {"Hello World", "World", "", "Hello"};
+  AgentRpcResponse response;
+  for (const std::string& s : strings) {
+    response.buffer.SerializeString(s);
+    EXPECT_EQ(response.buffer.DeserializeString(), s);
+  }
+}
+
 // Tests the serialization mechanism over the RPC interface.
 TEST(AgentTest, RpcSerialization) {
   auto ap = AgentProcess<FullSimpleAgent<>, AgentConfig>(
