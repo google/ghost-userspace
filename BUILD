@@ -182,6 +182,31 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "simple_exp",
+    srcs = [
+        "tests/simple_exp.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":base",
+        ":ghost",
+    ],
+)
+
+cc_binary(
+    name = "simple_edf",
+    srcs = [
+        "tests/simple_edf.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":ghost",
+        ":shared",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
 cc_test(
     name = "agent_test",
     size = "small",
