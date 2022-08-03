@@ -153,6 +153,17 @@ class Ghost {
     return fd;
   }
 
+  // Remove the associated queue notifier for the provided queue. Use this API
+  // when the agent wants to poll on the queue instead of being woken up by the
+  // kernel.
+  //
+  // Returns 0 on success and -1 on failure ('errno' is set on failure).
+  static int RemoveQueueWakeup(const int queue_fd) {
+	  cpu_set_t cpuset;
+	  CPU_ZERO(&cpuset);
+	  return ConfigQueueWakeup(queue_fd, cpuset, /*flags=*/0);
+  }
+
   // Configure the set of candidate cpus to wake up when a message is produced
   // into the queue denoted by 'queue_fd'.
   //
