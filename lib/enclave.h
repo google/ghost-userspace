@@ -165,6 +165,7 @@ class Enclave {
   virtual void SetCommitAtTick(bool enabled) {}
   virtual void SetDeliverTicks(bool enabled) {}
   virtual void SetWakeOnWakerCpu(bool enabled) {}
+  virtual void SetLiveDangerously(bool enabled) {}
   virtual void DiscoverTasks() {}
 
   // REQUIRES: Must be called by an implementation when all Schedulers and
@@ -465,6 +466,11 @@ class LocalEnclave final : public Enclave {
   void SetWakeOnWakerCpu(bool enabled) final {
     const char* val = enabled ? "1" : "0";
     WriteEnclaveTunable(dir_fd_, "wake_on_waker_cpu", val);
+  }
+
+  void SetLiveDangerously(bool enabled) final {
+    const char* val = enabled ? "1" : "0";
+    WriteEnclaveTunable(dir_fd_, "live_dangerously", val);
   }
 
   // The kernel will send a task_new for every task in the enclave
