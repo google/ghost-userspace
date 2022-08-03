@@ -159,37 +159,30 @@ class Ghost {
   //
   // Returns 0 on success and -1 on failure ('errno' is set on failure).
   static int RemoveQueueWakeup(const int queue_fd) {
-	  cpu_set_t cpuset;
-	  CPU_ZERO(&cpuset);
-	  return ConfigQueueWakeup(queue_fd, cpuset, /*flags=*/0);
+    return ConfigQueueWakeup(queue_fd, MachineTopology()->EmptyCpuList(),
+                             /*flags=*/0);
   }
 
   // Configure the set of candidate cpus to wake up when a message is produced
   // into the queue denoted by 'queue_fd'.
   //
   // Returns 0 on success and -1 on failure ('errno' is set on failure).
-  static int ConfigQueueWakeup(const int queue_fd, const cpu_set_t& cpuset,
+  static int ConfigQueueWakeup(const int queue_fd, const CpuList& cpulist,
                                const int flags) {
     std::vector<ghost_agent_wakeup> wakeup;
-
-    for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
-      if (CPU_ISSET(cpu, &cpuset)) {
-        wakeup.push_back({
-            .cpu = cpu,
-            .prio = 0,
-        });
-      }
+    for (const Cpu& cpu : cpulist) {
+      wakeup.push_back({
+          .cpu = cpu.id(),
+          .prio = 0,
+      });
     }
-
-    int ninfo = wakeup.size();
 
     ghost_ioc_config_queue_wakeup data = {
         .qfd = queue_fd,
         .w = wakeup.data(),
-        .ninfo = ninfo,
+        .ninfo = static_cast<int>(wakeup.size()),
         .flags = flags,
     };
-
     return ioctl(gbl_ctl_fd_, GHOST_IOC_CONFIG_QUEUE_WAKEUP, &data);
   }
 

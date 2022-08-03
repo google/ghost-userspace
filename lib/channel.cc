@@ -42,8 +42,7 @@ LocalChannel::LocalChannel(int elems, int node, CpuList cpulist)
   elems_ = header_->nelems;
 
   if (!cpulist.Empty()) {
-    cpu_set_t cpuset = Topology::ToCpuSet(cpulist);
-    CHECK_ZERO(Ghost::ConfigQueueWakeup(fd_, cpuset, /*flags=*/0));
+    CHECK_ZERO(Ghost::ConfigQueueWakeup(fd_, cpulist, /*flags=*/0));
   }
 };
 
