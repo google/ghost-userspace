@@ -154,7 +154,7 @@ void FifoScheduler::TaskDeparted(FifoTask* task, const Message& msg) {
 
   if (task->oncpu() || payload->from_switchto) {
     TaskOffCpu(task, /*blocked=*/false, payload->from_switchto);
-  } else if (task->runnable()) {
+  } else if (task->queued()) {
     CpuState* cs = cpu_state_of(task);
     CHECK(cs->run_queue.Erase(task));
   } else {
