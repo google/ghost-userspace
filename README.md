@@ -99,3 +99,42 @@ with an individual target name, such as `agent_shinjuku`.
 - `util/`
   -  Helper utilities for ghOSt. For example, `pushtosched` can be used to move
      a batch of kernel threads to the ghOSt scheduling class.
+
+---
+
+### Running a ghOSt Scheduler
+
+We will run the per-CPU FIFO ghOSt scheduler and use it to schedule Linux
+pthreads.
+
+1. Build the per-CPU FIFO scheduler:
+```
+bazel build -c opt fifo_per_cpu_agent
+```
+
+2. Build `simple_exp`, which launches a series of pthreads that run in ghOSt.
+`simple_exp` is a collection of tests.
+```
+bazel build -c opt simple_exp
+```
+
+3. Launch the per-CPU FIFO ghOSt scheduler:
+```
+bazel-bin/fifo_per_cpu_agent --ghost_cpus 0-1
+```
+The scheduler launches ghOSt agents on CPUs (i.e., logical cores) 0 and 1 and
+will therefore schedule ghOSt tasks onto CPUs 0 and 1. Adjust the `--ghost_cpus`
+command line argument value as necessary. For example, if you have an 8-core
+machine and you wish to schedule ghOSt tasks on all cores, then pass `0-7` to
+`--ghost_cpus`.
+
+4. Launch `simple_exp`:
+```
+bazel-bin/simple_exp
+```
+`simple_exp` will launch pthreads. These pthreads in turn will move themselves
+into the ghOSt scheduling class and thus will be scheduled by the ghOSt
+scheduler. When `simple_exp` has finished running all tests, it will exit.
+
+5. Use `Ctrl-C` to send a `SIGINT` signal to `fifo_per_cpu_agent` to get it to
+stop.
