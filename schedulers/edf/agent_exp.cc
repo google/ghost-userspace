@@ -24,46 +24,35 @@
 #include "lib/topology.h"
 #include "schedulers/edf/edf_scheduler.h"
 
-ABSL_FLAG(int32_t, firstcpu, 1, "First cpu to start scheduling from.");
-ABSL_FLAG(int32_t, globalcpu, -1,
-          "Global cpu. If -1, then defaults to <firstcpu>)");
-ABSL_FLAG(int32_t, ncpus, 5, "Schedule on <ncpus> starting from <firstcpu>");
+ABSL_FLAG(std::string, ghost_cpus, "1-5", "cpulist");
+ABSL_FLAG(
+    int32_t, globalcpu, -1,
+    "Global cpu. If -1, then defaults to the lowest CPU in <ghost_cpus>)");
 ABSL_FLAG(bool, ticks, false, "Generate cpu tick messages");
 ABSL_FLAG(std::string, enclave, "", "Connect to preexisting enclave directory");
 
 namespace ghost {
 
 void ParseGlobalConfig(GlobalConfig* config) {
-  int firstcpu = absl::GetFlag(FLAGS_firstcpu);
+  CpuList ghost_cpus =
+      ghost::MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
+  // One CPU for the spinning global agent and at least one other for running
+  // scheduled ghOSt tasks.
+  CHECK_GE(ghost_cpus.Size(), 2);
+
   int globalcpu = absl::GetFlag(FLAGS_globalcpu);
-  int ncpus = absl::GetFlag(FLAGS_ncpus);
-  int lastcpu = firstcpu + ncpus - 1;
-
-  CHECK_GT(ncpus, 1);
-  CHECK_GE(firstcpu, 0);
-  CHECK_LT(lastcpu, ghost::MachineTopology()->num_cpus());
-
   if (globalcpu < 0) {
     CHECK_EQ(globalcpu, -1);
-    absl::SetFlag(&FLAGS_globalcpu, firstcpu);
-    globalcpu = firstcpu;
+    globalcpu = ghost_cpus.Front().id();
   }
-
-  CHECK_GE(globalcpu, firstcpu);
-  CHECK_LE(globalcpu, lastcpu);
-
-  std::vector<int> all_cpus_v;
-  for (int c = firstcpu; c <= lastcpu; c++) {
-    all_cpus_v.push_back(c);
-  }
+  CHECK(ghost_cpus.IsSet(globalcpu));
 
   Topology* topology = MachineTopology();
   config->topology_ = topology;
-  config->cpus_ = topology->ToCpuList(std::move(all_cpus_v));
-
+  config->cpus_ = ghost_cpus;
+  config->global_cpu_ = topology->cpu(globalcpu);
   config->edf_ticks_ = absl::GetFlag(FLAGS_ticks) ? CpuTickConfig::kAllTicks
                                                   : CpuTickConfig::kNoTicks;
-  config->global_cpu_ = topology->cpu(globalcpu);
 
   std::string enclave = absl::GetFlag(FLAGS_enclave);
   if (!enclave.empty()) {
