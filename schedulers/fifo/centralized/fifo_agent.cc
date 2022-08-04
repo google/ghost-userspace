@@ -33,17 +33,19 @@ ABSL_FLAG(int32_t, globalcpu, -1,
 namespace ghost {
 
 void ParseFifoConfig(FifoConfig* config) {
-  int globalcpu = absl::GetFlag(FLAGS_globalcpu);
   CpuList ghost_cpus =
       ghost::MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
+  // One CPU for the spinning global agent and at least one other for running
+  // scheduled ghOSt tasks.
+  CHECK_GE(ghost_cpus.Size(), 2);
 
-  CHECK_GT(ghost_cpus.Size(), 1);
-
+  int globalcpu = absl::GetFlag(FLAGS_globalcpu);
   if (globalcpu < 0) {
     CHECK_EQ(globalcpu, -1);
     globalcpu = ghost_cpus.Front().id();
     absl::SetFlag(&FLAGS_globalcpu, globalcpu);
   }
+  CHECK(ghost_cpus.IsSet(globalcpu));
 
   Topology* topology = MachineTopology();
   config->topology_ = topology;
