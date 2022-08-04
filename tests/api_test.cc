@@ -447,7 +447,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
       cs->current = nullptr;
     } else {
       ASSERT_THAT(task->run_state, Eq(FifoTaskState::kQueued));
-      ASSERT_THAT(rq_.Erase(task), IsTrue());
+      rq_.Erase(task);
     }
 
     task->run_state =
@@ -1705,7 +1705,7 @@ class DepartedRaceAgent : public LocalAgent {
               ASSERT_FALSE(avail_cpus.IsSet(payload->cpu));
               avail_cpus.Set(payload->cpu);
             } else if (task->queued()) {
-              ASSERT_TRUE(run_queue.Erase(task));
+              run_queue.Erase(task);
             } else {
               ASSERT_TRUE(task->blocked());
             }

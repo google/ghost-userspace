@@ -156,7 +156,7 @@ void FifoScheduler::TaskDeparted(FifoTask* task, const Message& msg) {
     TaskOffCpu(task, /*blocked=*/false, payload->from_switchto);
   } else if (task->queued()) {
     CpuState* cs = cpu_state_of(task);
-    CHECK(cs->run_queue.Erase(task));
+    cs->run_queue.Erase(task);
   } else {
     CHECK(task->blocked());
   }
@@ -363,7 +363,7 @@ FifoTask* FifoRq::Dequeue() {
   return task;
 }
 
-bool FifoRq::Erase(const FifoTask* task) {
+void FifoRq::Erase(FifoTask* task) {
   CHECK_EQ(task->run_state, FifoTaskState::kQueued);
   absl::MutexLock lock(&mu_);
   size_t size = rq_.size();
@@ -372,18 +372,20 @@ bool FifoRq::Erase(const FifoTask* task) {
     size_t pos = size - 1;
     if (rq_[pos] == task) {
       rq_.erase(rq_.cbegin() + pos);
-      return true;
+      task->run_state = FifoTaskState::kRunnable;
+      return;
     }
 
     // Now search for 'task' from the beginning of the runqueue.
     for (pos = 0; pos < size - 1; pos++) {
       if (rq_[pos] == task) {
         rq_.erase(rq_.cbegin() + pos);
-        return true;
+        task->run_state =  FifoTaskState::kRunnable;
+        return;
       }
     }
   }
-  return false;
+  CHECK(false);
 }
 
 std::unique_ptr<FifoScheduler> MultiThreadedFifoScheduler(Enclave* enclave,

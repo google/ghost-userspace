@@ -42,9 +42,17 @@ struct FifoTask : public Task<> {
   ~FifoTask() override {}
 
   inline bool blocked() const { return run_state == FifoTaskState::kBlocked; }
-  inline bool runnable() const { return run_state == FifoTaskState::kRunnable; }
   inline bool queued() const { return run_state == FifoTaskState::kQueued; }
   inline bool oncpu() const { return run_state == FifoTaskState::kOnCpu; }
+
+  // N.B. _runnable() is a transitory state typically used during runqueue
+  // manipulation. It is not expected to be used from task msg callbacks.
+  //
+  // If you are reading this then you probably want to take a closer look
+  // at queued() instead.
+  inline bool _runnable() const {
+    return run_state == FifoTaskState::kRunnable;
+  }
 
   FifoTaskState run_state = FifoTaskState::kBlocked;
   int cpu = -1;
@@ -67,9 +75,11 @@ class FifoRq {
   FifoTask* Dequeue();
   void Enqueue(FifoTask* task);
 
-  // Returns true if 'task' was found and erased from the runqueue and false
-  // otherwise.
-  bool Erase(const FifoTask* task);
+  // Erase 'task' from the runqueue.
+  //
+  // Caller must ensure that 'task' is on the runqueue in the first place
+  // (e.g. via task->queued()).
+  void Erase(FifoTask* task);
 
   size_t Size() const {
     absl::MutexLock lock(&mu_);
