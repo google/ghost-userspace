@@ -23,31 +23,19 @@
 #include "lib/enclave.h"
 #include "schedulers/cfs/cfs_scheduler.h"
 
-ABSL_FLAG(int32_t, firstcpu, 1, "First cpu to start scheduling from.");
-ABSL_FLAG(int32_t, ncpus, 3, "Schedule on <ncpus> starting from <firstcpu>");
+ABSL_FLAG(std::string, ghost_cpus, "1-5", "cpulist");
 ABSL_FLAG(std::string, enclave, "", "Connect to preexisting enclave directory");
 
 namespace ghost {
 
 static void ParseAgentConfig(AgentConfig* config) {
-  int firstcpu = absl::GetFlag(FLAGS_firstcpu);
-  int ncpus = absl::GetFlag(FLAGS_ncpus);
-
-  CHECK_GT(ncpus, 0);
-  CHECK_LE(ncpus, ghost::MachineTopology()->num_cpus());
-  CHECK_GE(firstcpu, 0);
-
-  int lastcpu = firstcpu + ncpus - 1;
-  CHECK_LT(lastcpu, ghost::MachineTopology()->num_cpus());
-
-  std::vector<int> all_cpus_v;
-  for (int c = firstcpu; c <= lastcpu; c++) {
-    all_cpus_v.push_back(c);
-  }
+  CpuList ghost_cpus =
+      ghost::MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
+  CHECK(!ghost_cpus.Empty());
 
   Topology* topology = MachineTopology();
   config->topology_ = topology;
-  config->cpus_ = topology->ToCpuList(std::move(all_cpus_v));
+  config->cpus_ = ghost_cpus;
   std::string enclave = absl::GetFlag(FLAGS_enclave);
   if (!enclave.empty()) {
     int fd = open(enclave.c_str(), O_PATH);
