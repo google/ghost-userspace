@@ -35,7 +35,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	68
+#define GHOST_VERSION	69
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -79,7 +79,6 @@ struct ghost_msg_src {
 	enum ghost_type type;
 	uint64_t arg;
 };
-#define GHOST_THIS_CPU	-1
 
 /* GHOST_TIMERFD_SETTIME */
 struct timerfd_ghost {
