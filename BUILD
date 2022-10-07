@@ -191,6 +191,7 @@ cc_binary(
     deps = [
         ":base",
         ":ghost",
+        "@com_google_absl//absl/synchronization",
     ],
 )
 
