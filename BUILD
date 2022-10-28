@@ -314,8 +314,6 @@ cc_library(
     copts = compiler_flags,
     deps = [
         ":agent",
-        ":ghost",
-        ":shared",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/strings:str_format",

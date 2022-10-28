@@ -351,6 +351,7 @@ class RunRequest {
     return txn_->state.load(std::memory_order_acquire);
   }
   bool open() const { return is_open(state()); }
+  bool claimed() const { return is_claimed(state()); }
   bool committed() const { return is_committed(state()); }
   bool failed() const { return is_failed(state()); }
   bool succeeded() const { return is_succeeded(state()); }
@@ -404,6 +405,9 @@ class RunRequest {
   // that function does an atomic read and its value may change between
   // successive calls (e.g., in `is_failed()`).
   bool is_open(ghost_txn_state state) const { return state == GHOST_TXN_READY; }
+  bool is_claimed(ghost_txn_state state) const {
+    return state >= 0 && state < MAX_CPUS;
+  }
   bool is_committed(ghost_txn_state state) const { return state < 0; }
   bool is_failed(ghost_txn_state state) const {
     return is_committed(state) && state != GHOST_TXN_COMPLETE;
