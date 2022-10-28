@@ -66,9 +66,6 @@ void ParseGlobalConfig(GlobalConfig* config) {
 
 int main(int argc, char* argv[]) {
   absl::InitializeSymbolizer(argv[0]);
-
-  // Override default value of the verbose flag while in active development.
-  ghost::set_verbose(1);
   absl::ParseCommandLine(argc, argv);
 
   ghost::GlobalConfig config;
