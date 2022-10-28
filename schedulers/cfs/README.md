@@ -9,9 +9,6 @@ it simply plucks the one with the lowest vruntime.
 To bring this agent to parity with CFS in the kernel, some items left to
 implement are:
 
--   add a sched_latency knob/listen for sched_tick: right now tasks will run
-    until they voluntarily yield (up to preemption by another sched class)
-
 -   load balancing
 
 -   nice values

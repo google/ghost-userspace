@@ -27,19 +27,30 @@
 #include <vector>
 
 #include "absl/strings/match.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "lib/agent.h"
 #include "lib/logging.h"
 #include "lib/topology.h"
 
 namespace ghost {
 
 CfsScheduler::CfsScheduler(Enclave* enclave, CpuList cpulist,
-                           std::shared_ptr<TaskAllocator<CfsTask>> allocator)
-    : BasicDispatchScheduler(enclave, std::move(cpulist),
-                             std::move(allocator)) {
+                           std::shared_ptr<TaskAllocator<CfsTask>> allocator,
+                           absl::Duration min_granularity,
+                           absl::Duration latency)
+    : BasicDispatchScheduler(enclave, std::move(cpulist), std::move(allocator)),
+      min_granularity_(min_granularity),
+      latency_(latency) {
   for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
+
+    // CfsRq has a default constructor, meaning these parameters will initially
+    // be set to 0, so set them to the correct value.
+    cs->run_queue.SetMinGranularity(min_granularity_);
+    cs->run_queue.SetLatency(latency_);
+
     cs->channel = std::make_unique<ghost::LocalChannel>(
         GHOST_MAX_QUEUE_ELEMS, cpu.numa_node(),
         MachineTopology()->ToCpuList({cpu}));
@@ -193,7 +204,7 @@ void CfsScheduler::TaskYield(CfsTask* task, const Message& msg) {
   // is valid w.r.t. the vruntimes in the tree currently.
   // We call PutPrevTask so we don't mess with its current accounting,
   // unlike EnqueueTask().
-  cs->run_queue.PutPrevTask(task);
+  cs->run_queue.PutPrevTask(task, /*can_elide=*/false);
 
   if (payload->from_switchto) {
     Cpu cpu = topology()->cpu(payload->cpu);
@@ -221,7 +232,7 @@ void CfsScheduler::TaskPreempted(CfsTask* task, const Message& msg) {
 
   task->preempted = true;
   CpuState* cs = cpu_state_of(task);
-  cs->run_queue.PutPrevTask(task);
+  cs->run_queue.PutPrevTask(task, /*can_elide=*/true);
 
   if (payload->from_switchto) {
     Cpu cpu = topology()->cpu(payload->cpu);
@@ -256,6 +267,14 @@ void CfsScheduler::TaskOffCpu(CfsTask* task, bool blocked, bool from_switchto) {
   task->run_state = blocked ? CfsTaskState::kBlocked : CfsTaskState::kRunnable;
 }
 
+void CfsScheduler::CpuTick(const Message& msg) {
+  // We do not actually need any logic in CpuTick for preemption. Since CpuTick
+  // messages wake up the agent, CfsSchedule will eventually be called, which
+  // contains the logic for figuring out if we should run the task that
+  // was running before we got preempted the agent or if we should reach into
+  // our rb tree.
+}
+
 void CfsScheduler::CfsSchedule(const Cpu& cpu,
                                StatusWord::BarrierToken agent_barrier,
                                bool prio_boost) {
@@ -265,10 +284,7 @@ void CfsScheduler::CfsSchedule(const Cpu& cpu,
   CHECK_EQ(cs->current, nullptr);
 
   if (!prio_boost) {
-    next = cs->current;
-    // Tell the runqueue to give us a pointer to our next task
-    // and remove it from its backing data structure.
-    if (!next) next = cs->run_queue.PickNextTask();
+    next = cs->run_queue.PickNextTask();
   }
 
   GHOST_DPRINT(3, stderr, "CfsSchedule %s on %s cpu %d ",
@@ -300,7 +316,7 @@ void CfsScheduler::CfsSchedule(const Cpu& cpu,
         .commit_flags = COMMIT_AT_TXN_COMMIT,
     });
 
-    uint64_t previous_runtime_ns = next->status_word.runtime();
+    uint64_t before_runtime = next->status_word.runtime();
     if (req->Commit()) {
       // Txn commit succeeded and 'next' is oncpu.
       cs->current = next;
@@ -312,12 +328,12 @@ void CfsScheduler::CfsSchedule(const Cpu& cpu,
       next->cpu = cpu.id();
       next->preempted = false;
       next->vruntime +=
-          absl::Nanoseconds(next->status_word.runtime() - previous_runtime_ns);
+          absl::Nanoseconds(next->status_word.runtime() - before_runtime);
     } else {
       GHOST_DPRINT(3, stderr, "CfsSchedule: commit failed (state=%d)",
                    req->state());
 
-      cs->run_queue.PutPrevTask(next);
+      cs->run_queue.PutPrevTask(next, /*can_elide=*/true);
     }
   } else {
     // If LocalYield is due to 'prio_boost' then instruct the kernel to
@@ -346,6 +362,11 @@ void CfsScheduler::Schedule(const Cpu& cpu, const StatusWord& agent_sw) {
   CfsSchedule(cpu, agent_barrier, agent_sw.boosted_priority());
 }
 
+CfsRq::CfsRq()
+    : rq_(&CfsTask::Less),
+      min_vruntime_(absl::ZeroDuration()),
+      put_prev_task_elision_(nullptr) {}
+
 void CfsRq::EnqueueTask(CfsTask* task) {
   absl::MutexLock lock(&mu_);
 
@@ -359,12 +380,19 @@ void CfsRq::EnqueueTask(CfsTask* task) {
   // so we take the max of our current min vruntime and the tasks current one.
   // Until load balancing is implented, this should just evaluate to
   // min_vruntime_.
+  // TODO: come up with more logical way of handling new tasks with
+  // existing vruntimes (e.g. migration from another rq).
   task->vruntime = std::max(min_vruntime_, task->vruntime);
-
-  rq_.insert(task);
+  InsertTaskIntoRq(task);
 }
 
-void CfsRq::PutPrevTask(CfsTask* task) {
+void CfsRq::PutPrevTask(CfsTask* task, bool can_elide) {
+  if (!can_elide) {
+    absl::MutexLock lock(&mu_);
+    NonElidedPutPrevTask(task);
+    return;
+  }
+
   CHECK_GE(task->cpu, 0);
   CHECK_EQ(task->run_state, CfsTaskState::kRunnable);
 
@@ -372,12 +400,46 @@ void CfsRq::PutPrevTask(CfsTask* task) {
 
   absl::MutexLock lock(&mu_);
 
-  rq_.insert(task);
-  min_vruntime_ = (*rq_.begin())->vruntime;
+  // Failing this check would imply that two PutPrevTasks were called
+  // in succession.
+  CHECK_EQ(put_prev_task_elision_, nullptr);
+  put_prev_task_elision_ = task;
+}
+
+void CfsRq::NonElidedPutPrevTask(CfsTask* task)
+    ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+  CHECK_GE(task->cpu, 0);
+
+  task->run_state = CfsTaskState::kQueued;
+
+  InsertTaskIntoRq(task);
 }
 
 CfsTask* CfsRq::PickNextTask() {
   absl::MutexLock lock(&mu_);
+
+  // First check the previous put task to see if it got enough runtime.
+  if (put_prev_task_elision_) {
+    uint64_t runtime = put_prev_task_elision_->status_word.runtime() -
+                       put_prev_task_elision_->runtime_at_first_pick_ns;
+
+    if (absl::Nanoseconds(runtime) < Granularity()) {
+      // put_prev_task_elision_ didn't run enough, so pick it.
+      CfsTask* res = put_prev_task_elision_;
+      put_prev_task_elision_ = nullptr;
+
+      CHECK(res->queued());
+      res->run_state = CfsTaskState::kRunnable;
+      return res;
+    }
+
+    // If we get here then we want to do two things:
+    // - put the task back in the rq
+    // - pull our next task from the rq
+    NonElidedPutPrevTask(put_prev_task_elision_);
+    put_prev_task_elision_ = nullptr;
+  }
+
   if (rq_.empty()) return nullptr;
 
   // Get a pointer to the first task. std::{set, multiset} orders by the ::Less
@@ -388,6 +450,7 @@ CfsTask* CfsRq::PickNextTask() {
 
   CHECK(task->queued());
   task->run_state = CfsTaskState::kRunnable;
+  task->runtime_at_first_pick_ns = task->status_word.runtime();
 
   // Remove the task from the timeline.
   rq_.erase(start_it);
@@ -398,25 +461,79 @@ CfsTask* CfsRq::PickNextTask() {
   // need to catch up to other tasks that have accummulated a large runtime.
   // For easy access, we cache the value.
   if (!rq_.empty()) {
+    // Assert that our min_vruntime_ is moving forward and that
+    // our old vruntime is equal to the vruntime of the task we just dequeued,
+    // implying that this is the task with the largest deficit.
+    CHECK_EQ(min_vruntime_, task->vruntime);
     CHECK_GE((*rq_.begin())->vruntime, min_vruntime_);
     min_vruntime_ = (*rq_.begin())->vruntime;
   } else {
     min_vruntime_ = absl::ZeroDuration();
   }
+
   return task;
 }
 
 void CfsRq::Erase(CfsTask* task) {
   CHECK_EQ(task->run_state, CfsTaskState::kQueued);
   absl::MutexLock lock(&mu_);
-  rq_.erase(task);
+
+  if (put_prev_task_elision_ == task) {
+    put_prev_task_elision_ = nullptr;
+  } else {
+    rq_.erase(task);
+
+    // Make sure our min_vruntime is up to date.
+    if (!rq_.empty()) {
+      min_vruntime_ = (*rq_.begin())->vruntime;
+    } else {
+      min_vruntime_ = absl::ZeroDuration();
+    }
+  }
 }
 
-std::unique_ptr<CfsScheduler> MultiThreadedCfsScheduler(Enclave* enclave,
-                                                        CpuList cpulist) {
+void CfsRq::SetMinGranularity(absl::Duration t) {
+  absl::MutexLock l(&mu_);
+  min_granularity_ = t;
+}
+
+void CfsRq::SetLatency(absl::Duration t) {
+  absl::MutexLock l(&mu_);
+  latency_ = t;
+}
+
+absl::Duration CfsRq::Granularity() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+  // Get the number of tasks our cpu is handling (elided + rq_ size)
+  std::multiset<ghost::CfsTask*,
+                bool (*)(ghost::CfsTask*, ghost::CfsTask*)>::size_type tasks =
+      rq_.size() + (put_prev_task_elision_ ? 1 : 0);
+  // We shouldn't get here, because that would imply put_prev_task_elision_ == 0
+  // which means the if branch that calls this function will not execute.
+  if (tasks == 0) return latency_;
+  if (tasks * min_granularity_ > latency_) {
+    // If we target latency_, each task will run for less than min_granularity
+    // so we just return min_granularity_.
+    return min_granularity_;
+  }
+
+  // We want ceil(latency_/num_tasks) here. If we take the floor (normal
+  // integer division), then we might go below min_granularity in the edge
+  // case.
+  return (latency_ + absl::Nanoseconds(tasks - 1)) / tasks;
+}
+
+void CfsRq::InsertTaskIntoRq(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+  rq_.insert(task);
+  min_vruntime_ = (*rq_.begin())->vruntime;
+}
+
+std::unique_ptr<CfsScheduler> MultiThreadedCfsScheduler(
+    Enclave* enclave, CpuList cpulist, absl::Duration min_granularity,
+    absl::Duration latency) {
   auto allocator = std::make_shared<ThreadSafeMallocTaskAllocator<CfsTask>>();
   auto scheduler = std::make_unique<CfsScheduler>(enclave, std::move(cpulist),
-                                                  std::move(allocator));
+                                                  std::move(allocator),
+                                                  min_granularity, latency);
   return scheduler;
 }
 

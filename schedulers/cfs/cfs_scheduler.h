@@ -24,10 +24,11 @@
 #include <set>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "lib/agent.h"
+#include "lib/base.h"
 #include "lib/scheduler.h"
-#include "shared/prio_table.h"
 
 namespace ghost {
 
@@ -75,17 +76,44 @@ struct CfsTask : public Task<> {
   // Cfs sorts tasks by runtime, so we need to keep track of how long a task has
   // been running during this period.
   absl::Duration vruntime;
+
+  // runtime_at_first_pick is how much runtime this task had at its initial
+  // picking. This timestamp does not change unless we are put back in the
+  // runqueue. IOW, if we bounce between oncpu and put_prev_task_elision_,
+  // the timestamp is not reset. The timestamp is used to figure out
+  // if a task has run for granularity_ yet.
+  uint64_t runtime_at_first_pick_ns;
 };
 
 class CfsRq {
  public:
-  CfsRq() = default;
+  explicit CfsRq();
   CfsRq(const CfsRq&) = delete;
   CfsRq& operator=(CfsRq&) = delete;
+
+  // See CfsRq::granularity_ for a description of how these parameters work.
+  void SetMinGranularity(absl::Duration t);
+  void SetLatency(absl::Duration t);
+
+  // Returns the length of time that the task should run in real time before it
+  // is preempted. This value is equivalent to:
+  // IF min_granularity * num_tasks > latency THEN min_granularity
+  // ELSE latency / num_tasks
+  // The purpose of having granularity is so that even if a task has a lot
+  // of vruntime to makeup, it doesn't hog all the cputime.
+  // TODO: update this when we introduce nice values.
+  // NOTE: This needs to be updated everytime we change the number of tasks
+  // associated with the runqueue changes. e.g. simply pulling a task out of
+  // rq to give it time on the cpu doesn't require a change as we still manage
+  // the same number of tasks. But a task blocking, departing, or adding
+  // a new task, does require an update.
+  absl::Duration Granularity();
 
   // Removes and returns the task with the smallest vruntime from the
   // underlying container. It is the responsibility of the caller to ensure
   // PutPrevTask is called to re-enque the task.
+  // NOTE: If PickNextTask observes that the task in put_prev_task_elision_
+  // has not run for granularity_ yet, then it will return that task.
   CfsTask* PickNextTask();
 
   // Enqueues a new task or a task that is transitioning to RUNNABLE from
@@ -93,7 +121,11 @@ class CfsRq {
   void EnqueueTask(CfsTask* task);
 
   // Enqueue a task that is transitioning from being on the cpu to off the cpu.
-  void PutPrevTask(CfsTask* task);
+  // The task might have its requeuing into the tree delayed.
+  void PutPrevTask(CfsTask* task, bool can_elide);
+
+  // Same as PutPrevTask, but force putting the task into the tree.
+  void NonElidedPutPrevTask(CfsTask* task);
 
   // Erase 'task' from the runqueue.
   //
@@ -109,20 +141,40 @@ class CfsRq {
   bool Empty() const { return Size() == 0; }
 
  private:
+  // Inserts a task into the backing runqueue.
+  // Preconditons: task->vruntime has been set to a logical value.
+  void InsertTaskIntoRq(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
   mutable absl::Mutex mu_;
   // We use a multiset as the backing data structure as, according to the
   // C++ standard, it is backed by a red-black tree, which is the backing
   // data structure in CFS in the the kernel. While opaque, using an std::
   // container is easiest way to use a red-black tree short of writing or
   // importing our own.
-  std::multiset<CfsTask*> rq_ ABSL_GUARDED_BY(mu_);
-  absl::Duration min_vruntime_;
+  std::multiset<CfsTask*, decltype(&CfsTask::Less)> rq_ ABSL_GUARDED_BY(mu_);
+  absl::Duration min_vruntime_ ABSL_GUARDED_BY(mu_);
+
+  // When PutPrevTask is called, there is a non-zero chance that we want the
+  // subsequent PickNextTask to evaluate to the task we just Put. The
+  // canonical example of this is when the agent preempts the task
+  // to consume a CpuTick, which causes PutPrevTask to be called on the task.
+  // After consuming the messages, we will reach Schedule(), which calls
+  // PickNextTask. If the previously running task (put_prev_task_elision_)
+  // has not run for granularity_ yet, then we put it back on the cpu,
+  // regardless of where it is in the rb-tree. Given this, we defer placing
+  // a task that had PutPrevTask on it, back in the rb-tree, until we are sure
+  // the subsequent PickNextTask will not pick it.
+  CfsTask* put_prev_task_elision_ ABSL_GUARDED_BY(mu_);
+
+  absl::Duration min_granularity_ ABSL_GUARDED_BY(mu_);
+  absl::Duration latency_ ABSL_GUARDED_BY(mu_);
 };
 
 class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
  public:
   explicit CfsScheduler(Enclave* enclave, CpuList cpulist,
-                        std::shared_ptr<TaskAllocator<CfsTask>> allocator);
+                        std::shared_ptr<TaskAllocator<CfsTask>> allocator,
+                        absl::Duration min_granularity, absl::Duration latency);
   ~CfsScheduler() final {}
 
   void Schedule(const Cpu& cpu, const StatusWord& sw);
@@ -161,6 +213,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   void TaskBlocked(CfsTask* task, const Message& msg) final;
   void TaskPreempted(CfsTask* task, const Message& msg) final;
   void TaskSwitchto(CfsTask* task, const Message& msg) final;
+  void CpuTick(const Message& msg) final;
 
  private:
   void CfsSchedule(const Cpu& cpu, StatusWord::BarrierToken agent_barrier,
@@ -187,10 +240,14 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
 
   CpuState cpu_states_[MAX_CPUS];
   LocalChannel* default_channel_ = nullptr;
+
+  absl::Duration min_granularity_;
+  absl::Duration latency_;
 };
 
-std::unique_ptr<CfsScheduler> MultiThreadedCfsScheduler(Enclave* enclave,
-                                                        CpuList cpulist);
+std::unique_ptr<CfsScheduler> MultiThreadedCfsScheduler(
+    Enclave* enclave, CpuList cpulist, absl::Duration min_granularity,
+    absl::Duration latency);
 class CfsAgent : public LocalAgent {
  public:
   CfsAgent(Enclave* enclave, Cpu cpu, CfsScheduler* scheduler)
@@ -203,12 +260,28 @@ class CfsAgent : public LocalAgent {
   CfsScheduler* scheduler_;
 };
 
+class CfsConfig : public AgentConfig {
+ public:
+  CfsConfig() {}
+  CfsConfig(Topology* topology, CpuList cpulist, absl::Duration min_granularity,
+            absl::Duration latency)
+      : AgentConfig(topology, std::move(cpulist)),
+        min_granularity_(min_granularity),
+        latency_(latency) {
+    tick_config_ = CpuTickConfig::kAllTicks;
+  }
+
+  absl::Duration min_granularity_;
+  absl::Duration latency_;
+};
+
 template <class EnclaveType>
 class FullCfsAgent : public FullAgent<EnclaveType> {
  public:
-  explicit FullCfsAgent(AgentConfig config) : FullAgent<EnclaveType>(config) {
+  explicit FullCfsAgent(CfsConfig config) : FullAgent<EnclaveType>(config) {
     scheduler_ =
-        MultiThreadedCfsScheduler(&this->enclave_, *this->enclave_.cpus());
+        MultiThreadedCfsScheduler(&this->enclave_, *this->enclave_.cpus(),
+                                  config.min_granularity_, config.latency_);
     this->StartAgentTasks();
     this->enclave_.Ready();
   }

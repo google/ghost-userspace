@@ -26,9 +26,16 @@
 ABSL_FLAG(std::string, ghost_cpus, "1-5", "cpulist");
 ABSL_FLAG(std::string, enclave, "", "Connect to preexisting enclave directory");
 
+// Scheduling tuneables
+ABSL_FLAG(
+    absl::Duration, min_granularity, absl::Milliseconds(1),
+    "The minimum time a task will run before being preempted by another task");
+ABSL_FLAG(absl::Duration, latency, absl::Milliseconds(10),
+          "The target time period in which all tasks will run at least once");
+
 namespace ghost {
 
-static void ParseAgentConfig(AgentConfig* config) {
+static void ParseAgentConfig(CfsConfig* config) {
   CpuList ghost_cpus =
       ghost::MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
   CHECK(!ghost_cpus.Empty());
@@ -42,6 +49,9 @@ static void ParseAgentConfig(AgentConfig* config) {
     CHECK_GE(fd, 0);
     config->enclave_fd_ = fd;
   }
+
+  config->min_granularity_ = absl::GetFlag(FLAGS_min_granularity);
+  config->latency_ = absl::GetFlag(FLAGS_latency);
 }
 
 }  // namespace ghost
@@ -50,14 +60,14 @@ int main(int argc, char* argv[]) {
   absl::InitializeSymbolizer(argv[0]);
   absl::ParseCommandLine(argc, argv);
 
-  ghost::AgentConfig config;
+  ghost::CfsConfig config;
   ghost::ParseAgentConfig(&config);
 
   printf("Initializing...\n");
 
   // Using new so we can destruct the object before printing Done
   auto uap = new ghost::AgentProcess<ghost::FullCfsAgent<ghost::LocalEnclave>,
-                                     ghost::AgentConfig>(config);
+                                     ghost::CfsConfig>(config);
 
   ghost::Ghost::InitCore();
   printf("Initialization complete, ghOSt active.\n");
