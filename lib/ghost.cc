@@ -312,7 +312,6 @@ GhostThread::GhostThread(KernelScheduler ksched, std::function<void()> work)
     tid_ = GetTID();
     gtid_ = Gtid::Current();
 
-    // TODO: Consider moving after SchedEnterGhost.
     started_.Notify();
 
     if (ksched_ == KernelScheduler::kGhost) {
