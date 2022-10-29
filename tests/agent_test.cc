@@ -84,6 +84,7 @@ constexpr int kWaitForIdle = 1;
 constexpr int kPingAgents = 2;
 constexpr int kRpcSerialize = 3;
 constexpr int kRpcDeserializeArgs = 4;
+constexpr int kGetStatusWordInfo = 5;
 
 template <size_t MAX_NOTIFICATIONS = 1, class EnclaveType = LocalEnclave>
 class FullSimpleAgent : public FullAgent<EnclaveType> {
@@ -152,6 +153,14 @@ class FullSimpleAgent : public FullAgent<EnclaveType> {
         break;
       case kRpcDeserializeArgs:
         response_code = args.buffer.Deserialize<RpcTestData>().three;
+        break;
+      case kGetStatusWordInfo:
+        ghost_sw_info info;
+        response_code = 0;
+        if (Ghost::GetStatusWordInfo(static_cast<ghost_type>(args.arg0),
+                                     args.arg1, &info) != 0) {
+          response_code = errno;
+        }
         break;
       default:
         response_code = -1;
@@ -794,6 +803,36 @@ TEST(AgentTest, SetSched) {
   enclave->Ready();
 
   agent.Terminate();
+}
+
+TEST(AgentTest, GetStatusWordInfo) {
+  Ghost::InitCore();
+
+  Topology* topology = MachineTopology();
+  const CpuList agent_cpus = topology->all_cpus();
+
+  auto ap = AgentProcess<FullSimpleAgent<>, AgentConfig>(
+      AgentConfig(topology, agent_cpus));
+
+  ASSERT_THAT(ap.Rpc(kWaitForIdle), Eq(0));
+
+  AgentRpcArgs rpc_args = {
+    .arg0 = GHOST_AGENT,
+  };
+
+  for (const Cpu& cpu : agent_cpus) {
+    // We should be able to retrieve status_word info for all agent cpus.
+    rpc_args.arg1 = cpu.id();
+    EXPECT_THAT(ap.Rpc(kGetStatusWordInfo, rpc_args), Eq(0));
+  }
+
+  // Bogus (negative) cpu.
+  rpc_args.arg1 = -55;
+  EXPECT_THAT(ap.Rpc(kGetStatusWordInfo, rpc_args), Eq(EINVAL));
+
+  // Bogus (impossible) cpu.
+  rpc_args.arg1 = topology->num_cpus();
+  EXPECT_THAT(ap.Rpc(kGetStatusWordInfo, rpc_args), Eq(EINVAL));
 }
 
 }  // namespace
