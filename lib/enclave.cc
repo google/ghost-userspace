@@ -471,6 +471,7 @@ LocalEnclave::LocalEnclave(AgentConfig config)
 }
 
 LocalEnclave::~LocalEnclave() {
+  PrepareToExit();
   (void)munmap(data_region_, data_region_size_);
   if (destroy_when_destructed_) {
     LocalEnclave::DestroyEnclave(ctl_fd_);
@@ -669,6 +670,9 @@ void LocalEnclave::AdvertiseOnline() {
 // any inserted BPF programs.  The next agent taking over the enclave needs to
 // wait until these FDs are closed, so it behooves us to close the FDs early
 // instead of waiting on the kernel to close them, which takes O(nr_cpus) ms.
+//
+// Make sure this is idempotent: TerminateAgentTasks() calls this as an
+// optimization, but ~LocalEnclave does too to ensure destruction.
 void LocalEnclave::PrepareToExit() {
   close(agent_online_fd_);
   agent_online_fd_ = -1;

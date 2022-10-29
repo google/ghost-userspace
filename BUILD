@@ -334,17 +334,26 @@ cc_test(
     ],
 )
 
+bpf_skeleton(
+    name = "test_bpf_skel",
+    bpf_object = "//third_party/bpf:test_bpf",
+    skel_hdr = "bpf/user/test_bpf.skel.h",
+)
+
 cc_test(
     name = "capabilities_test",
     size = "small",
     srcs = [
+        "bpf/user/test_bpf.skel.h",
         "tests/capabilities_test.cc",
     ],
     copts = compiler_flags,
+    linkopts = bpf_linkopts,
     deps = [
         ":agent",
         ":capabilities_test_lib",
         ":ghost",
+        "@linux//:libbpf",
     ],
 )
 

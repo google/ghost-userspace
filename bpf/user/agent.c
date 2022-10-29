@@ -173,6 +173,8 @@ int agent_bpf_insert_registered(int ctl_fd)
 // Gracefully unlinks and unloads the BPF programs.  When agents call this, they
 // explicitly close (and thus unlink/detach) BPF programs from the enclave,
 // which will speed up agent upgrade/handoff.
+//
+// Idempotent.
 void agent_bpf_destroy(void)
 {
 	struct bpf_registration *r;
@@ -183,6 +185,7 @@ void agent_bpf_destroy(void)
 			close(r->fd);
 			r->inserted = false;
 		}
+		r->prog = NULL;
 	}
 }
 

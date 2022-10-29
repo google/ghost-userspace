@@ -21,6 +21,9 @@
 #include "lib/channel.h"
 #include "lib/ghost.h"
 
+#include "bpf/user/agent.h"
+#include "bpf/user/test_bpf.skel.h"
+
 // These tests check that ghOSt properly accepts/rejects syscalls based on the
 // capabilities that the calling thread holds.
 
@@ -91,30 +94,38 @@ class CapabilitiesAgent : public LocalAgent {
 // Tests that this thread can make another thread an agent when the
 // `CAP_SYS_NICE` capability is set.
 TEST(CapabilitiesTest, AgentNice) {
-  Ghost::InitCore();
+  // We call enclave->Ready() and that will disable our ability to load bpf
+  // programs.  Do this in another process so we can run other gunit tests.
+  ForkedProcess fp([]() {
+    Ghost::InitCore();
 
-  AssertNiceCapabilitySet();
+    AssertNiceCapabilitySet();
 
-  // Put the agent on CPU 0. This is an arbitrary choice but is safe because a
-  // computer must have at least one CPU.
-  constexpr int kAgentCpu = 0;
-  Topology* topology = MachineTopology();
-  auto enclave = absl::make_unique<LocalEnclave>(
-      AgentConfig(topology, topology->ToCpuList(std::vector<int>{kAgentCpu})));
-  LocalChannel default_channel(GHOST_MAX_QUEUE_ELEMS, /*node=*/0);
-  default_channel.SetEnclaveDefault();
+    // Put the agent on CPU 0. This is an arbitrary choice but is safe because a
+    // computer must have at least one CPU.
+    constexpr int kAgentCpu = 0;
+    Topology* topology = MachineTopology();
+    auto enclave = absl::make_unique<LocalEnclave>(
+        AgentConfig(topology, topology->ToCpuList(std::vector<int>{kAgentCpu})));
+    LocalChannel default_channel(GHOST_MAX_QUEUE_ELEMS, /*node=*/0);
+    default_channel.SetEnclaveDefault();
 
-  Notification notification;
-  CapabilitiesAgent agent(enclave.get(), topology->cpu(kAgentCpu),
-                          &notification);
-  agent.Start();
-  enclave->Ready();
+    Notification notification;
+    CapabilitiesAgent agent(enclave.get(), topology->cpu(kAgentCpu),
+                            &notification);
+    agent.Start();
+    enclave->Ready();
 
-  // Wait for the notification to be notified. Once it is, the test knows that
-  // the agent actually ran.
-  notification.WaitForNotification();
+    // Wait for the notification to be notified. Once it is, the test knows that
+    // the agent actually ran.
+    notification.WaitForNotification();
 
-  agent.Terminate();
+    agent.Terminate();
+
+    return 0;
+  });
+
+  fp.WaitForChildExit();
 }
 
 // Drops the `CAP_SYS_NICE` capability and tests that the `Run` ghOSt ioctl
@@ -156,6 +167,33 @@ TEST(CapabilitiesTest, AgentNoNice) {
     EXPECT_THAT(errno, Eq(EPERM));
   });
   thread.join();
+}
+
+void TestBpfProgLoad(void) {
+  LocalEnclave enclave(AgentConfig{MachineTopology()});
+
+  struct test_bpf* bpf_obj = test_bpf__open();
+  CHECK_NE(bpf_obj, nullptr);
+
+  bpf_program__set_types(bpf_obj->progs.test_pnt,
+                         BPF_PROG_TYPE_GHOST_SCHED, BPF_GHOST_SCHED_PNT);
+  CHECK_EQ(test_bpf__load(bpf_obj), 0);
+  CHECK_EQ(agent_bpf_register(bpf_obj->progs.test_pnt, BPF_GHOST_SCHED_PNT),
+           0);
+
+  // Normally called from Enclave::Ready();
+  enclave.InsertBpfPrograms();
+
+  test_bpf__destroy(bpf_obj);
+}
+
+TEST(CapabilitiesTest, BpfProgLoad) {
+  TestBpfProgLoad();
+}
+
+TEST(CapabilitiesTest, BpfProgLoadTwice) {
+  TestBpfProgLoad();
+  TestBpfProgLoad();
 }
 
 }  // namespace
