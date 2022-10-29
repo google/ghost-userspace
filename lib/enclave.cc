@@ -721,7 +721,8 @@ bool RunRequest::Abort() {
     }
     return aborted;
   }
-  // This transaction has already committed.
+  // This transaction has either been claimed (on its way to being committed)
+  // or committed.
   return false;
 }
 
