@@ -256,10 +256,10 @@ struct RunRequestOptions {
   // how a transaction is committed.
   int commit_flags = 0;
 
-  // `run_flags` is copied directly into txn->run_flags to control a variety
-  // of side-effects when the task either gets oncpu (e.g. `NEED_L1D_FLUSH`
-  // or offcpu (e.g. `RTLA_ON_IDLE`). The specific values and their effects
-  // are defined in the ghost uapi header.
+  // `run_flags` is copied directly into txn->run_flags to control a variety of
+  // side-effects when the task either gets oncpu (e.g. `NEED_L1D_FLUSH`) or
+  // offcpu (e.g. `RTLA_ON_IDLE`). The specific values and their effects are
+  // defined in the ghost uapi header.
   int run_flags = 0;
 
   // If `sync_group_owner` != `kSyncGroupNotOwned` then caller wants
