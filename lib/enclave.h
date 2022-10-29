@@ -344,12 +344,30 @@ class RunRequest {
   Cpu cpu() const { return cpu_; }
 
   virtual ghost_txn_state state() const = 0;
-  virtual bool open() const = 0;
-  virtual bool claimed() const = 0;
-  virtual bool committed() const = 0;
-  virtual bool failed() const = 0;
-  virtual bool succeeded() const = 0;
+  virtual bool open() const { return is_open(state()); }
+  virtual bool claimed() const { return is_claimed(state()); }
+  virtual bool committed() const { return is_committed(state()); }
+  virtual bool failed() const { return is_failed(state()); }
+  virtual bool succeeded() const { return is_succeeded(state()); }
   virtual absl::Time commit_time() const = 0;
+
+  // These are helper functions for the state-checking functions above. These
+  // are useful because the caller may only want to call `state()` once since
+  // that function does an atomic read and its value may change between
+  // successive calls (e.g., in `is_failed()`).
+  static bool is_open(ghost_txn_state state) {
+    return state == GHOST_TXN_READY;
+  }
+  static bool is_claimed(ghost_txn_state state) {
+    return state >= 0 && state < MAX_CPUS;
+  }
+  static bool is_committed(ghost_txn_state state) { return state < 0; }
+  static bool is_failed(ghost_txn_state state) {
+    return is_committed(state) && state != GHOST_TXN_COMPLETE;
+  }
+  static bool is_succeeded(ghost_txn_state state) {
+    return state == GHOST_TXN_COMPLETE;
+  }
 
   // Returns the owner of the sync_group from the associated txn.
   virtual int32_t sync_group_owner_get() const = 0;
@@ -409,11 +427,6 @@ class LocalRunRequest : public RunRequest {
   ghost_txn_state state() const override {
     return txn_->state.load(std::memory_order_acquire);
   }
-  bool open() const override { return is_open(state()); }
-  bool claimed() const override { return is_claimed(state()); }
-  bool committed() const override { return is_committed(state()); }
-  bool failed() const override { return is_failed(state()); }
-  bool succeeded() const override { return is_succeeded(state()); }
   absl::Time commit_time() const override {
     // Do a relaxed load of `txn_->commit_time` since this should be done after
     // the acquire load to the txn state.
@@ -463,22 +476,6 @@ class LocalRunRequest : public RunRequest {
   ghost_txn* txn() { return txn_; }
 
  private:
-  // These are helper functions for the state-checking functions above. These
-  // are useful because the caller may only want to call `state()` once since
-  // that function does an atomic read and its value may change between
-  // successive calls (e.g., in `is_failed()`).
-  bool is_open(ghost_txn_state state) const { return state == GHOST_TXN_READY; }
-  bool is_claimed(ghost_txn_state state) const {
-    return state >= 0 && state < MAX_CPUS;
-  }
-  bool is_committed(ghost_txn_state state) const { return state < 0; }
-  bool is_failed(ghost_txn_state state) const {
-    return is_committed(state) && state != GHOST_TXN_COMPLETE;
-  }
-  bool is_succeeded(ghost_txn_state state) const {
-    return state == GHOST_TXN_COMPLETE;
-  }
-
   ghost_txn* txn_ = nullptr;
   bool allow_txn_target_on_cpu_ = false;
 };
