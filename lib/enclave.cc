@@ -679,53 +679,6 @@ void LocalEnclave::WaitForOldAgent() {
   WaitForAgentOnlineValue(dir_fd_, /*until=*/0);
 }
 
-void RunRequest::Open(const RunRequestOptions& options) {
-  // Wait for current owner to relinquish ownership of the sync_group txn.
-  if (options.sync_group_owner != kSyncGroupNotOwned) {
-    while (sync_group_owned()) {
-      Pause();
-    }
-  } else {
-    CHECK(!sync_group_owned());
-  }
-
-  // We do not allow transaction clobbering.
-  //
-  // Once a transaction is opened it must be committed (sync or async) before
-  // opening it again. We rely on the caller doing a Submit() which guarantees a
-  // commit-barrier on the transaction.
-  CHECK(committed());
-
-  txn_->agent_barrier = options.agent_barrier;
-  txn_->gtid = options.target.id();
-  txn_->task_barrier = options.target_barrier;
-  txn_->run_flags = options.run_flags;
-  txn_->commit_flags = options.commit_flags;
-  if (options.sync_group_owner != kSyncGroupNotOwned) {
-    sync_group_owner_set(options.sync_group_owner);
-  }
-  allow_txn_target_on_cpu_ = options.allow_txn_target_on_cpu;
-  if (allow_txn_target_on_cpu_) CHECK(sync_group_owned());
-  txn_->state.store(GHOST_TXN_READY, std::memory_order_release);
-}
-
-bool RunRequest::Abort() {
-  ghost_txn_state expected = txn_->state.load(std::memory_order_relaxed);
-  if (expected == GHOST_TXN_READY) {
-    // We do a compare exchange since we may race with the kernel trying to
-    // commit this transaction.
-    const bool aborted = txn_->state.compare_exchange_strong(
-        expected, GHOST_TXN_ABORTED, std::memory_order_release);
-    if (aborted && sync_group_owned()) {
-      sync_group_owner_set(kSyncGroupNotOwned);
-    }
-    return aborted;
-  }
-  // This transaction has either been claimed (on its way to being committed)
-  // or committed.
-  return false;
-}
-
 // static
 std::string RunRequest::StateToString(ghost_txn_state state) {
   switch (state) {
@@ -776,6 +729,53 @@ std::string RunRequest::StateToString(ghost_txn_state state) {
       }
     }
   }
+}
+
+void LocalRunRequest::Open(const RunRequestOptions& options) {
+  // Wait for current owner to relinquish ownership of the sync_group txn.
+  if (options.sync_group_owner != kSyncGroupNotOwned) {
+    while (sync_group_owned()) {
+      Pause();
+    }
+  } else {
+    CHECK(!sync_group_owned());
+  }
+
+  // We do not allow transaction clobbering.
+  //
+  // Once a transaction is opened it must be committed (sync or async) before
+  // opening it again. We rely on the caller doing a Submit() which guarantees a
+  // commit-barrier on the transaction.
+  CHECK(committed());
+
+  txn_->agent_barrier = options.agent_barrier;
+  txn_->gtid = options.target.id();
+  txn_->task_barrier = options.target_barrier;
+  txn_->run_flags = options.run_flags;
+  txn_->commit_flags = options.commit_flags;
+  if (options.sync_group_owner != kSyncGroupNotOwned) {
+    sync_group_owner_set(options.sync_group_owner);
+  }
+  allow_txn_target_on_cpu_ = options.allow_txn_target_on_cpu;
+  if (allow_txn_target_on_cpu_) CHECK(sync_group_owned());
+  txn_->state.store(GHOST_TXN_READY, std::memory_order_release);
+}
+
+bool LocalRunRequest::Abort() {
+  ghost_txn_state expected = txn_->state.load(std::memory_order_relaxed);
+  if (expected == GHOST_TXN_READY) {
+    // We do a compare exchange since we may race with the kernel trying to
+    // commit this transaction.
+    const bool aborted = txn_->state.compare_exchange_strong(
+        expected, GHOST_TXN_ABORTED, std::memory_order_release);
+    if (aborted && sync_group_owned()) {
+      sync_group_owner_set(kSyncGroupNotOwned);
+    }
+    return aborted;
+  }
+  // This transaction has either been claimed (on its way to being committed)
+  // or committed.
+  return false;
 }
 
 }  // namespace ghost

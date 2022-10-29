@@ -283,12 +283,11 @@ struct RunRequestOptions {
 class RunRequest {
  public:
   RunRequest() : cpu_(Cpu::UninitializedType::kUninitialized) {}
-  void Init(Enclave* enclave, Cpu cpu, ghost_txn* txn) {
+  virtual ~RunRequest() {}
+
+  void Init(Enclave* enclave, const Cpu& cpu) {
     enclave_ = enclave;
     cpu_ = cpu;
-
-    CHECK_EQ(txn->cpu, cpu.id());
-    txn_ = txn;
   }
 
   // Opens a transaction for later commit (sync or async depending on the
@@ -297,7 +296,7 @@ class RunRequest {
   // N.B. when used to assert sync_group ownership the caller must ensure
   // that no other agent will try to simultaneously grab ownership of the
   // transaction (for e.g. serializing via a lock).
-  void Open(const RunRequestOptions& options);
+  virtual void Open(const RunRequestOptions& options) = 0;
 
   // A specialization for the Run(0) case.  Please prefer this versus Open() as
   // we reserve the right to change how these requests are structured.
@@ -308,15 +307,11 @@ class RunRequest {
   // tick or sched IPI handlers.
   //
   // Note that this is a no-op if remote cpu is running a non-ghost task.
-  void OpenUnschedule() {
-    // Make sure agent is preempting a remote cpu.
-    CHECK_NE(cpu_.id(), sched_getcpu());
-    Open(RunRequestOptions());
-  }
+  virtual void OpenUnschedule() = 0;
 
   // Returns true and releases ownership if the transaction was aborted.
   // Returns false otherwise.
-  bool Abort();
+  virtual bool Abort() = 0;
 
   // Agent must call LocalYield when it has nothing to do.
   //
@@ -347,57 +342,125 @@ class RunRequest {
   void Submit() { return enclave_->SubmitRunRequest(this); }
 
   Cpu cpu() const { return cpu_; }
-  ghost_txn_state state() const {
+
+  virtual ghost_txn_state state() const = 0;
+  virtual bool open() const = 0;
+  virtual bool claimed() const = 0;
+  virtual bool committed() const = 0;
+  virtual bool failed() const = 0;
+  virtual bool succeeded() const = 0;
+  virtual absl::Time commit_time() const = 0;
+
+  // Returns the owner of the sync_group from the associated txn.
+  virtual int32_t sync_group_owner_get() const = 0;
+
+  // Updates owner of the sync_group in the associated txn.
+  virtual void sync_group_owner_set(int32_t owner) = 0;
+
+  // Returns true if the txn has a valid sync_group owner and false otherwise.
+  virtual bool sync_group_owned() const = 0;
+
+  // Returns the transaction's agent_barrier field.
+  virtual StatusWord::BarrierToken agent_barrier() const = 0;
+
+  // Returns the transaction's gtid field.
+  virtual Gtid target() const = 0;
+
+  // Returns the transaction's task_barrier field.
+  virtual StatusWord::BarrierToken target_barrier() const = 0;
+
+  // Returns the transaction's commit_flags field.
+  virtual int commit_flags() const = 0;
+
+  // Returns the transaction's run_flags field.
+  virtual int run_flags() const = 0;
+
+  virtual bool allow_txn_target_on_cpu() const = 0;
+
+  virtual uint64_t cpu_seqnum() const = 0;
+
+  static std::string StateToString(ghost_txn_state state);
+
+ protected:
+  Enclave* enclave_ = nullptr;
+  Cpu cpu_;
+};
+
+class LocalRunRequest : public RunRequest {
+ public:
+  LocalRunRequest() : RunRequest() {}
+
+  void Init(Enclave* enclave, const Cpu& cpu, ghost_txn* txn) {
+    RunRequest::Init(enclave, cpu);
+
+    CHECK_EQ(txn->cpu, cpu_.id());
+    txn_ = txn;
+  }
+
+  void Open(const RunRequestOptions& options) override;
+  void OpenUnschedule() override {
+    // Make sure agent is preempting a remote cpu.
+    CHECK_NE(cpu_.id(), sched_getcpu());
+    Open(RunRequestOptions());
+  }
+
+  bool Abort() override;
+
+  ghost_txn_state state() const override {
     return txn_->state.load(std::memory_order_acquire);
   }
-  bool open() const { return is_open(state()); }
-  bool claimed() const { return is_claimed(state()); }
-  bool committed() const { return is_committed(state()); }
-  bool failed() const { return is_failed(state()); }
-  bool succeeded() const { return is_succeeded(state()); }
-  absl::Time commit_time() const {
+  bool open() const override { return is_open(state()); }
+  bool claimed() const override { return is_claimed(state()); }
+  bool committed() const override { return is_committed(state()); }
+  bool failed() const override { return is_failed(state()); }
+  bool succeeded() const override { return is_succeeded(state()); }
+  absl::Time commit_time() const override {
     // Do a relaxed load of `txn_->commit_time` since this should be done after
     // the acquire load to the txn state.
     return absl::FromUnixNanos(READ_ONCE(txn_->commit_time));
   }
 
   // Returns the owner of the sync_group from the associated txn.
-  int32_t sync_group_owner_get() const {
+  int32_t sync_group_owner_get() const override {
     return txn_->u.sync_group_owner.load(std::memory_order_acquire);
   }
 
   // Updates owner of the sync_group in the associated txn.
-  void sync_group_owner_set(int32_t owner) {
+  void sync_group_owner_set(int32_t owner) override {
     txn_->u.sync_group_owner.store(owner, std::memory_order_release);
   }
 
   // Returns true if the txn has a valid sync_group owner and false otherwise.
-  bool sync_group_owned() const {
+  bool sync_group_owned() const override {
     return sync_group_owner_get() != kSyncGroupNotOwned;
   }
 
   // Returns the transaction's agent_barrier field.
-  StatusWord::BarrierToken agent_barrier() const { return txn_->agent_barrier; }
+  StatusWord::BarrierToken agent_barrier() const override {
+    return txn_->agent_barrier;
+  }
 
   // Returns the transaction's gtid field.
-  Gtid target() const { return Gtid(txn_->gtid); }
+  Gtid target() const override { return Gtid(txn_->gtid); }
 
   // Returns the transaction's task_barrier field.
-  StatusWord::BarrierToken target_barrier() const { return txn_->task_barrier; }
+  StatusWord::BarrierToken target_barrier() const override {
+    return txn_->task_barrier;
+  }
 
   // Returns the transaction's commit_flags field.
-  int commit_flags() const { return txn_->commit_flags; }
+  int commit_flags() const override { return txn_->commit_flags; }
 
   // Returns the transaction's run_flags field.
-  int run_flags() const { return txn_->run_flags; }
+  int run_flags() const override { return txn_->run_flags; }
 
-  bool allow_txn_target_on_cpu() const { return allow_txn_target_on_cpu_; }
+  bool allow_txn_target_on_cpu() const override {
+    return allow_txn_target_on_cpu_;
+  }
 
-  uint64_t cpu_seqnum() const { return txn_->cpu_seqnum; }
+  uint64_t cpu_seqnum() const override { return txn_->cpu_seqnum; }
 
   ghost_txn* txn() { return txn_; }
-
-  static std::string StateToString(ghost_txn_state state);
 
  private:
   // These are helper functions for the state-checking functions above. These
@@ -416,8 +479,6 @@ class RunRequest {
     return state == GHOST_TXN_COMPLETE;
   }
 
-  Cpu cpu_;
-  Enclave* enclave_ = nullptr;
   ghost_txn* txn_ = nullptr;
   bool allow_txn_target_on_cpu_ = false;
 };
@@ -428,7 +489,7 @@ class LocalEnclave final : public Enclave {
   LocalEnclave(AgentConfig config);
   ~LocalEnclave() final;
 
-  RunRequest* GetRunRequest(const Cpu& cpu) final {
+  LocalRunRequest* GetRunRequest(const Cpu& cpu) final {
     return &cpus_[cpu.id()].req;
   }
 
@@ -528,7 +589,7 @@ class LocalEnclave final : public Enclave {
 
   struct CpuRep {
     Agent* agent;
-    RunRequest req;
+    LocalRunRequest req;
   } ABSL_CACHELINE_ALIGNED;
 
   CpuRep* rep(const Cpu& cpu) { return &cpus_[cpu.id()]; }
