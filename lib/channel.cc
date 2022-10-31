@@ -182,6 +182,7 @@ std::string Message::stringify() const {
       const ghost_msg_payload_task_preempt* preempt =
           static_cast<const ghost_msg_payload_task_preempt*>(payload());
       absl::StrAppend(&result, " on cpu ", preempt->cpu);
+      if (preempt->was_latched) absl::StrAppend(&result, " (was_latched)");
       if (preempt->from_switchto) absl::StrAppend(&result, " (from_switchto)");
       break;
     }
