@@ -196,5 +196,72 @@ TEST(CapabilitiesTest, BpfProgLoadTwice) {
   TestBpfProgLoad();
 }
 
+int libbpf_print_none(enum libbpf_print_level, const char *, va_list ap)
+{
+  return 0;
+}
+
+TEST(CapabilitiesTest, DisableBpfProgLoad) {
+  // We disable our ability to load bpf programs, so we must do this in another
+  // process so we can keep running tests from this process.
+  ForkedProcess fp([]() {
+    LocalEnclave enclave(AgentConfig{MachineTopology()});
+
+    enclave.DisableMyBpfProgLoad();
+
+    struct test_bpf* bpf_obj = test_bpf__open();
+    CHECK_NE(bpf_obj, nullptr);
+
+    bpf_program__set_types(bpf_obj->progs.test_pnt,
+                           BPF_PROG_TYPE_GHOST_SCHED, BPF_GHOST_SCHED_PNT);
+
+    // libbpf will loudly complain when we fail to load
+    libbpf_set_print(libbpf_print_none);
+
+    CHECK_EQ(test_bpf__load(bpf_obj), -1);
+    CHECK_EQ(errno, EPERM);
+
+    test_bpf__destroy(bpf_obj);
+
+    return 0;
+  });
+
+  fp.WaitForChildExit();
+}
+
+// Had a bug where the Disable didn't follow certain operations that changed the
+// group_leader, e.g. fork.
+TEST(CapabilitiesTest, DisableBpfProgLoadFork) {
+  // One fork so Disable doesn't taint our testing process
+  ForkedProcess fp([]() {
+    LocalEnclave enclave(AgentConfig{MachineTopology()});
+
+    enclave.DisableMyBpfProgLoad();
+
+    // Second fork that should inherit the Disable.
+    ForkedProcess fp2([]() {
+      struct test_bpf* bpf_obj = test_bpf__open();
+      CHECK_NE(bpf_obj, nullptr);
+
+      bpf_program__set_types(bpf_obj->progs.test_pnt,
+                             BPF_PROG_TYPE_GHOST_SCHED, BPF_GHOST_SCHED_PNT);
+
+      libbpf_set_print(libbpf_print_none);
+
+      CHECK_EQ(test_bpf__load(bpf_obj), -1);
+      CHECK_EQ(errno, EPERM);
+
+      test_bpf__destroy(bpf_obj);
+
+      return 0;
+    });
+
+    fp2.WaitForChildExit();
+    return 0;
+  });
+
+  fp.WaitForChildExit();
+}
+
 }  // namespace
 }  // namespace ghost
