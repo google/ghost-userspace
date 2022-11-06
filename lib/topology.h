@@ -116,23 +116,144 @@ class Cpu {
   friend Topology;
 };
 
-// This class implements a bitmap to represent CPUs. Each bit in the bitmap
-// corresponds to an index into the global topology backing store of all
-// CPUs. It also includes a custom iterator to implement range-based
-// for-loops.
+// This class represents an interface for a generic bitmap type structure that
+// can be used to represent cpus.
+//
+// Derived classes are expected to maintain a bitmap of the form
+// $TYPE bitmap_[kMapCapacity]
+// where $TYPE is a 64-bit type.
+//
+// It also includes a custom iterator to implement range-based for-loops.
 // e.g
 //  for (const Cpu& cpu : cpus())
 //  ..
-//  where cpus() returns a CpuList object. The loop will travese the bitmap
-//  for each set bit beginning from the LSB. A corresponding Cpu
-//  object is returned for each set bit which maps into the global backing
-//  store for all Cpus, thus providing immediate access to its siblings, cores
-//  etc. Common bitwise operations such as Intersection, Set/Clear, FindNext
-//  etc. are implemented with room for further extensions and arch specific
-//  optimizations as needed.
-class CpuList {
+class CpuMap {
  public:
-  explicit CpuList(const Topology& topology);
+  explicit CpuMap(const Topology& topology);
+
+  virtual ~CpuMap() = default;
+
+  // Custom iterator to implement range based for-loops. Loops over the set of
+  // cpus and returns the corresponding `Cpu` object.
+  //
+  // Example:
+  // for (const Cpu& cpu : map) {
+  //   ...
+  // }
+  class Iter {
+   public:
+    // Iterator traits.
+    using difference_type = CpuMap;
+    using value_type = CpuMap;
+    using pointer = const CpuMap*;
+    using reference = const CpuMap&;
+    using iterator_category = std::input_iterator_tag;
+
+    explicit Iter(const CpuMap* map, size_t id) : map_(map), id_(id) {
+      CHECK_NE(map, nullptr);
+      // Initialize the iterator to the first set bit.
+      FindNextSetBit();
+    }
+
+    bool operator==(const Iter& other) const { return id_ == other.id_; }
+    bool operator!=(const Iter& other) const { return !(id_ == other.id_); }
+
+    const Cpu* operator->() const { return &cpu_; }
+    Cpu operator*() const { return cpu_; }
+
+    // Pre-increment op.
+    Cpu operator++() {
+      ++id_;
+      FindNextSetBit();
+      return cpu_;
+    }
+
+    // Post-increment op.
+    Cpu operator++(int) {
+      // Stash away the old `cpu_` to return.
+      Cpu old_cpu = cpu_;
+      // Post-increment `id_` and `cpu_`.
+      id_++;
+      FindNextSetBit();
+      return old_cpu;
+    }
+
+   private:
+    // Find the next set bit in the bitmap (starting the search at the bit at
+    // index `id_`) and set `id_` and the corresponding `cpu` object to this
+    // bit accordingly.
+    void FindNextSetBit();
+
+    // The CPU corresponding to the bit that the iterator is currently
+    // pointing at. When the iterator is at the end of the range, `cpu_` is
+    // set to an uninitialized CPU.
+    Cpu cpu_{Cpu::UninitializedType::kUninitialized};
+
+    // Pointer to backing CpuMap.
+    const CpuMap* map_;
+
+    // `id` is maintained as an internal cursor while iterating over range
+    // loops.
+    size_t id_ = 0;
+  };
+  Iter begin() const;
+  Iter end() const;
+
+  // Sets the bit at index `id`.
+  virtual void Set(uint32_t id) = 0;
+  void Set(const Cpu& cpu) { Set(cpu.id()); }
+
+  // Clears the bit at index `id`.
+  virtual void Clear(uint32_t id) = 0;
+  void Clear(const Cpu& cpu) { Clear(cpu.id()); }
+
+  // Returns true if the bit at index `id` is set, returns false otherwise.
+  virtual bool IsSet(uint32_t id) const = 0;
+  bool IsSet(const Cpu& cpu) const { return IsSet(cpu.id()); }
+
+  const Topology& topology() const { return *topology_; }
+
+  // Returns true if bitmap is all 0s, otherwise returns false.
+  // TODO: Bail early if this needs to be efficient.
+  bool Empty() const { return CountSetCpus() == 0; }
+
+  // Returns number of set bits in the bitmap.
+  uint32_t Size() const { return CountSetCpus(); }
+
+ protected:
+  // The number of bits in the `uint64_t` type.
+  static constexpr size_t kIntsBits = CHAR_BIT * sizeof(uint64_t);
+
+  // The number of "slots" allocated to the bitmap.
+  static constexpr size_t kMapCapacity = MAX_CPUS / kIntsBits;
+
+  // Returns number of set cpus in the map.
+  uint32_t CountSetCpus() const {
+    uint32_t ret = 0;
+    for (uint32_t i = 0; i < map_size_; ++i) {
+      ret += absl::popcount(GetNthMap(i));
+    }
+    return ret;
+  }
+
+  // Returns the 64-bit value of the nth slot in the bitmap.
+  virtual uint64_t GetNthMap(int n) const = 0;
+
+  // The underlying topology.
+  const Topology* topology_ = nullptr;
+
+  // The actual number of used "slots" in the bitmap. It is never larger than
+  // kMapCapacity. Not marked const to allow assignment.
+  size_t map_size_;
+};
+
+// This class extends the generic bitmap class with a simple uint64_t backed
+// bitmap. Common bitwise operations such as Intersection, Set/Clear, FindNext
+// etc. are implemented with room for further extensions and arch specific
+// optimizations as needed.
+class CpuList : public CpuMap {
+ public:
+  explicit CpuList(const Topology& topology) : CpuMap(topology) {}
 
   // Returns true if `this` and `other` have identical bitmaps, false
   // otherwise.
@@ -231,37 +352,31 @@ class CpuList {
   }
 
   // Sets the bit at index `id`.
-  void Set(uint32_t id) {
+  void Set(uint32_t id) override {
     DCHECK_GE(id, 0);
     DCHECK_LT(id, MAX_CPUS);
 
     bitmap_[id / kIntsBits] |= (1ULL << (id % kIntsBits));
   }
-
-  // Sets the bit for CPU `cpu`.
-  void Set(const Cpu& cpu) { Set(cpu.id()); }
+  using CpuMap::Set;
 
   // Clears the bit at index `id`.
-  void Clear(uint32_t id) {
+  void Clear(uint32_t id) override {
     DCHECK_GE(id, 0);
     DCHECK_LT(id, MAX_CPUS);
 
     bitmap_[id / kIntsBits] &= ~(1ULL << (id % kIntsBits));
   }
-
-  // Clears the bit for CPU `cpu`.
-  void Clear(const Cpu& cpu) { Clear(cpu.id()); }
+  using CpuMap::Clear;
 
   // Returns true if the bit at index `id` is set, returns false otherwise.
-  bool IsSet(uint32_t id) const {
+  bool IsSet(uint32_t id) const override {
     DCHECK_GE(id, 0);
     DCHECK_LT(id, MAX_CPUS);
 
     return bitmap_[id / kIntsBits] & (1ULL << (id % kIntsBits));
   }
-
-  // Returns true if the bit for CPU `cpu` is set, returns false otherwise.
-  bool IsSet(const Cpu& cpu) const { return IsSet(cpu.id()); }
+  using CpuMap::IsSet;
 
   // Returns the nth CPU set in the bitmap (where `n` is zero-indexed), from
   // low CPU ID to high CPU ID. If fewer than `n + 1` CPUs are set, returns an
@@ -279,87 +394,6 @@ class CpuList {
     Cpu back = GetNthCpu(Size() - 1);
     return back;
   }
-
-  // Returns true if bitmap is all 0s, otherwise returns false.
-  // TODO: Bail early if this needs to be efficient.
-  bool Empty() const { return CountSetBits() == 0; }
-
-  // Returns number of set bits in the bitmap.
-  uint32_t Size() const { return CountSetBits(); }
-
-  const Topology& topology() const { return *topology_; }
-
-  // Custom iterator to implement range based for-loops. Loops over set bits
-  // in the bitmap and returns corresponding `Cpu` object.
-  //
-  // Example:
-  // CpuList list = ...;
-  // for (const Cpu& cpu : list) {
-  //   ...
-  // }
-  class Iter {
-   public:
-    // Iterator traits.
-    using difference_type = CpuList;
-    using value_type = CpuList;
-    using pointer = const CpuList*;
-    using reference = const CpuList&;
-    using iterator_category = std::input_iterator_tag;
-
-    explicit Iter(const Topology& topology, const uint64_t* bitmap,
-                  size_t map_size, size_t id)
-        : topology_(&topology), bitmap_(bitmap), map_size_(map_size), id_(id) {
-      CHECK_NE(bitmap, nullptr);
-      // Initialize the iterator to the first set bit.
-      FindNextSetBit();
-    }
-
-    bool operator==(const Iter& other) const { return id_ == other.id_; }
-    bool operator!=(const Iter& other) const { return !(id_ == other.id_); }
-
-    const Cpu* operator->() const { return &cpu_; }
-    Cpu operator*() const { return cpu_; }
-
-    // Pre-increment op.
-    Cpu operator++() {
-      ++id_;
-      FindNextSetBit();
-      return cpu_;
-    }
-
-    // Post-increment op.
-    Cpu operator++(int) {
-      // Stash away the old `cpu_` to return.
-      Cpu old_cpu = cpu_;
-      // Post-increment `id_` and `cpu_`.
-      id_++;
-      FindNextSetBit();
-      return old_cpu;
-    }
-
-   private:
-    // Find the next set bit in the bitmap (starting the search at the bit at
-    // index `id_`) and set `id_` and the corresponding `cpu` object to this
-    // bit accordingly.
-    void FindNextSetBit();
-
-    // The CPU corresponding to the bit that the iterator is currently
-    // pointing at. When the iterator is at the end of the range, `cpu_` is
-    // set to an uninitialized CPU.
-    Cpu cpu_{Cpu::UninitializedType::kUninitialized};
-    // Pointer to the topology used by the `CpuList`.
-    const Topology* topology_;
-    // Pointer to backing bitmap of CpuList.
-    const uint64_t* bitmap_;
-    // The number of used slots in `bitmap_`.
-    size_t map_size_;
-    // `id` is maintained as an internal cursor while iterating over range
-    // loops.
-    size_t id_ = 0;
-  };
-
-  Iter begin() const;
-  Iter end() const;
 
   // Returns the bitmap as a hexadecimal string, suitable to be passed to Linux
   // as a cpumask.
@@ -414,25 +448,13 @@ class CpuList {
   }
 
  private:
-  // The number of bits in the `uint64_t` type.
-  static constexpr size_t kIntsBits = CHAR_BIT * sizeof(uint64_t);
-  // The number of "slots" in the bitmap array `bitmap_`.
-  static constexpr size_t kMapCapacity = MAX_CPUS / kIntsBits;
-
-  // Returns number of set bits in the bitmap.
-  uint32_t CountSetBits() const {
-    uint32_t ret = 0;
-    for (uint32_t i = 0; i < map_size_; ++i) {
-      ret += absl::popcount(bitmap_[i]);
-    }
-    return ret;
+  uint64_t GetNthMap(int n) const override {
+    DCHECK_GE(n, 0);
+    DCHECK_LT(n, kMapCapacity);
+    return bitmap_[n];
   }
 
-  const Topology* topology_ = nullptr;
   uint64_t bitmap_[kMapCapacity] = {0};
-  // The number of used "slots" in the bitmap array `bitmap_`. It is never
-  // larger than kMapCapacity. Not marked const to allow assignment of CpuLists.
-  size_t map_size_;
 };
 
 // This represents the topology of the machine, including the CPUs, cores, and
