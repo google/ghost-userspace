@@ -147,7 +147,7 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
 
   struct CpuState {
     FifoTask* current = nullptr;
-    std::unique_ptr<ghost::LocalChannel> channel = nullptr;
+    std::unique_ptr<Channel> channel = nullptr;
     FifoRq run_queue;
   } ABSL_CACHELINE_ALIGNED;
 
@@ -160,7 +160,7 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   }
 
   CpuState cpu_states_[MAX_CPUS];
-  LocalChannel* default_channel_ = nullptr;
+  Channel* default_channel_ = nullptr;
 };
 
 std::unique_ptr<FifoScheduler> MultiThreadedFifoScheduler(Enclave* enclave,

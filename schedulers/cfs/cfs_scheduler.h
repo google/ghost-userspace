@@ -218,7 +218,7 @@ struct CpuState {
   // current pointing to a task that is not currently on cpu.
   CfsTask* current = nullptr;
   // pointer to the kernel ipc queue.
-  std::unique_ptr<ghost::LocalChannel> channel = nullptr;
+  std::unique_ptr<Channel> channel = nullptr;
   // the run queue responsible from scheduling tasks on this cpu.
   CfsRq run_queue;
   // Should we keep running the current task.
@@ -303,7 +303,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   }
 
   CpuState cpu_states_[MAX_CPUS];
-  LocalChannel* default_channel_ = nullptr;
+  Channel* default_channel_ = nullptr;
 
   absl::Duration min_granularity_;
   absl::Duration latency_;

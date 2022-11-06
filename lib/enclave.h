@@ -32,6 +32,7 @@
 #include <list>
 
 #include "absl/synchronization/mutex.h"
+#include "lib/channel.h"
 #include "lib/ghost.h"
 #include "lib/topology.h"
 
@@ -197,6 +198,8 @@ class Enclave {
 
   Topology* topology() const { return topology_; }
   const CpuList* cpus() const { return &enclave_cpus_; }
+  virtual std::unique_ptr<Channel> MakeChannel(int elems, int node,
+                                               const CpuList& cpulist) = 0;
 
   // Specializations for Attach and Detach must invoke the base method.
   // Note: Invoked by the actual thread associated with the Agent, prior to
@@ -502,6 +505,11 @@ class LocalEnclave final : public Enclave {
   void SubmitRunRequests(const CpuList& cpu_list) final;
   bool CommitSyncRequests(const CpuList& cpu_list) final;
   bool SubmitSyncRequests(const CpuList& cpu_list) final;
+
+  std::unique_ptr<Channel> MakeChannel(int elems, int node,
+                                       const CpuList& cpulist) {
+    return std::make_unique<LocalChannel>(elems, node, cpulist);
+  }
 
   Agent* GetAgent(const Cpu& cpu) final { return rep(cpu)->agent; }
   void AttachAgent(const Cpu& cpu, Agent* agent) final;

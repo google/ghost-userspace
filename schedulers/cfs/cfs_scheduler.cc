@@ -75,9 +75,8 @@ CfsScheduler::CfsScheduler(Enclave* enclave, CpuList cpulist,
       cs->run_queue.SetLatency(latency_);
     }
 
-    cs->channel = std::make_unique<ghost::LocalChannel>(
-        GHOST_MAX_QUEUE_ELEMS, cpu.numa_node(),
-        MachineTopology()->ToCpuList({cpu}));
+    cs->channel = enclave->MakeChannel(GHOST_MAX_QUEUE_ELEMS, cpu.numa_node(),
+                                       MachineTopology()->ToCpuList({cpu}));
     // This channel pointer is valid for the lifetime of CfsScheduler
     if (!default_channel_) {
       default_channel_ = cs->channel.get();
