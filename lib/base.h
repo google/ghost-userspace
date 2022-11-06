@@ -165,7 +165,7 @@ class Gtid {
 
   // Returns the GTID for the calling thread.
   static inline Gtid Current() {
-    static thread_local int64_t gtid = GetGtid().ValueOrDie();
+    static thread_local int64_t gtid = GetGtid().value_or(-1);
     return Gtid(gtid);
   }
 
