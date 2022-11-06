@@ -35,13 +35,21 @@
 
 #include "absl/base/call_once.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/flags/declare.h"
+#include "absl/flags/flag.h"
 #include "absl/memory/memory.h"
 #include "absl/status/statusor.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "lib/logging.h"
 
+ABSL_DECLARE_FLAG(std::string, ghost_procfs_prefix);
+
 namespace ghost {
+
+// Returns the path to access the requested procfs file (eg. since proc may not
+// be mounted at root).
+std::string GetProc(const std::string& procfs_path);
 
 inline pid_t GetTID();
 void Exit(int code);

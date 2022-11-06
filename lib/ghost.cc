@@ -125,7 +125,7 @@ void LocalStatusWord::Free() {
 // static
 bool Ghost::GhostIsMountedAt(const char* path) {
   bool ret = false;
-  FILE* mounts = setmntent("/proc/self/mounts", "r");
+  FILE* mounts = setmntent(GetProc("self/mounts").c_str(), "r");
   CHECK_NE(mounts, nullptr);
 
   mntent* ent;

@@ -37,7 +37,16 @@
 #include "kernel/ghost_uapi.h"
 #include "lib/logging.h"
 
+// procfs may have been mounted somewhere other than root (eg. for testing
+// purposes).
+ABSL_FLAG(std::string, ghost_procfs_prefix, "", "procfs prefix");
+
 namespace ghost {
+
+std::string GetProc(const std::string& procfs_path) {
+  static std::string procfs_prefix = absl::GetFlag(FLAGS_ghost_procfs_prefix);
+  return absl::StrCat(procfs_prefix, "/proc/", procfs_path);
+}
 
 Notification::~Notification() {
   CHECK_NE(notified_.load(std::memory_order_relaxed), NotifiedState::kWaiter);
@@ -87,7 +96,7 @@ void Notification::WaitForNotification() {
 int ghost_tid_seqnum_bits() {
   static const int num_bits = [] {
     int pid_max_max;
-    std::ifstream ifs("/proc/sys/kernel/pid_max_max");
+    std::ifstream ifs(GetProc("sys/kernel/pid_max_max"));
     if (!ifs) {
       // We must be running on a kernel that predates 'kernel.pid_max_max'
       // in which case we assume that PID_MAX_LIMIT is 4194304.
@@ -113,7 +122,7 @@ int64_t GetGtidFromFile(FILE *stream) {
 }
 
 absl::StatusOr<int64_t> gtid(int64_t pid) {
-  FILE* stream = fopen(absl::StrCat("/proc/", pid, "/ghost/gtid").c_str(), "r");
+  FILE* stream = fopen(GetProc(absl::StrCat(pid, "/ghost/gtid")).c_str(), "r");
   if (stream) {
     int64_t gtid = GetGtidFromFile(stream);
     fclose(stream);
@@ -151,7 +160,7 @@ pid_t Gtid::tgid() const {
   int statusfd = -1, gtidfd = -1;
   FILE *status_stream = NULL, *gtid_stream = NULL;
 
-  int dirfd = open(absl::StrCat("/proc/", pid).c_str(), O_RDONLY);
+  int dirfd = open(GetProc(std::to_string(pid)).c_str(), O_RDONLY);
   if (dirfd < 0) {
     goto done;
   }
