@@ -40,8 +40,8 @@ TEST(CapabilitiesTest, RunNice) {
   Topology* topology = MachineTopology();
   LocalEnclave enclave(AgentConfig(topology, topology->EmptyCpuList()));
 
-  EXPECT_THAT(Ghost::Run(Gtid::Current(), /*agent_barrier=*/0,
-                         /*task_barrier=*/0, /*cpu=*/-1, /*flags=*/0),
+  EXPECT_THAT(GhostHelper()->Run(Gtid::Current(), /*agent_barrier=*/0,
+                                 /*task_barrier=*/0, /*cpu=*/-1, /*flags=*/0),
               Eq(-1));
   EXPECT_THAT(errno, Eq(EINVAL));
 }
@@ -97,7 +97,7 @@ TEST(CapabilitiesTest, AgentNice) {
   // We call enclave->Ready() and that will disable our ability to load bpf
   // programs.  Do this in another process so we can run other gunit tests.
   ForkedProcess fp([]() {
-    Ghost::InitCore();
+    GhostHelper()->InitCore();
 
     AssertNiceCapabilitySet();
 
@@ -139,8 +139,8 @@ TEST(CapabilitiesTest, RunNoNice) {
     Topology* topology = MachineTopology();
     LocalEnclave enclave(AgentConfig(topology, topology->EmptyCpuList()));
 
-    EXPECT_THAT(Ghost::Run(Gtid::Current(), /*agent_barrier=*/0,
-                           /*task_barrier=*/0, /*cpu=*/-1, /*flags=*/0),
+    EXPECT_THAT(GhostHelper()->Run(Gtid::Current(), /*agent_barrier=*/0,
+                                   /*task_barrier=*/0, /*cpu=*/-1, /*flags=*/0),
                 Eq(-1));
     EXPECT_THAT(errno, Eq(EPERM));
   });
@@ -163,7 +163,9 @@ TEST(CapabilitiesTest, AgentNoNice) {
     DropNiceCapability();
     // We do not need initialize an enclave, a channel, etc., for the agent
     // since the call below will fail before these are needed.
-    EXPECT_THAT(SchedAgentEnterGhost(enclave.GetCtlFd(), chan.GetFd()), Eq(-1));
+    EXPECT_THAT(
+        GhostHelper()->SchedAgentEnterGhost(enclave.GetCtlFd(), chan.GetFd()),
+        Eq(-1));
     EXPECT_THAT(errno, Eq(EPERM));
   });
   thread.join();

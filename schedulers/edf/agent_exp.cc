@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) {
   auto uap = new ghost::AgentProcess<ghost::GlobalEdfAgent<ghost::LocalEnclave>,
                                      ghost::GlobalConfig>(config);
 
-  ghost::Ghost::InitCore();
+  ghost::GhostHelper()->InitCore();
 
   printf("Initialization complete, ghOSt active.\n");
   // When `stdout` is directed to a terminal, it is newline-buffered. When

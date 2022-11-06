@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) {
       new ghost::AgentProcess<ghost::FullShinjukuAgent<ghost::LocalEnclave>,
                               ghost::ShinjukuConfig>(config);
 
-  ghost::Ghost::InitCore();
+  ghost::GhostHelper()->InitCore();
   printf("Initialization complete, ghOSt active.\n");
 
   // When `stdout` is directed to a terminal, it is newline-buffered. When

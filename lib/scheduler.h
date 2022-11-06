@@ -234,7 +234,7 @@ class BasicDispatchScheduler : public Scheduler {
             // an approach where each incarnation allocates a new gtid then we
             // can drop this special case.
             if (sw_flags & GHOST_SW_F_CANFREE) {
-              CHECK_EQ(Ghost::FreeStatusWordInfo(&swi), 0);
+              CHECK_EQ(GhostHelper()->FreeStatusWordInfo(&swi), 0);
               return;
             }
 

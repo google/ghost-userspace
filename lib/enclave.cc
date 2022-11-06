@@ -164,7 +164,7 @@ void LocalEnclave::ForEachTaskStatusWord(
                              uint32_t idx)>
         l) {
   // TODO: Need to support more than one SW region.
-  StatusWordTable* tbl = Ghost::GetGlobalStatusWordTable();
+  StatusWordTable* tbl = GhostHelper()->GetGlobalStatusWordTable();
   CHECK_NE(tbl, nullptr);
   tbl->ForEachTaskStatusWord(l);
 }
@@ -173,8 +173,8 @@ void LocalEnclave::ForEachTaskStatusWord(
 // file in whichever enclave directory we get.
 // static
 int LocalEnclave::MakeNextEnclave() {
-  int top_ctl =
-      open(absl::StrCat(Ghost::kGhostfsMount, "/ctl").c_str(), O_WRONLY);
+  int top_ctl = open(absl::StrCat(GhostHelper()->kGhostfsMount, "/ctl").c_str(),
+                     O_WRONLY);
   if (top_ctl < 0) {
     return -1;
   }
@@ -195,7 +195,8 @@ int LocalEnclave::MakeNextEnclave() {
   close(top_ctl);
 
   return open(
-      absl::StrCat(Ghost::kGhostfsMount, "/enclave_", id, "/ctl").c_str(),
+      absl::StrCat(GhostHelper()->kGhostfsMount, "/enclave_", id, "/ctl")
+          .c_str(),
       O_RDWR);
 }
 
@@ -211,8 +212,9 @@ int LocalEnclave::GetEnclaveDirectory(int ctl_fd) {
   CHECK_GT(read(ctl_fd, buf, sizeof(buf)), 0);
   uint64_t id;
   CHECK(absl::SimpleAtoi(buf, &id));
-  return open(absl::StrCat(Ghost::kGhostfsMount, "/enclave_", id).c_str(),
-              O_PATH);
+  return open(
+      absl::StrCat(GhostHelper()->kGhostfsMount, "/enclave_", id).c_str(),
+      O_PATH);
 }
 
 // static
@@ -334,7 +336,8 @@ void LocalEnclave::DestroyEnclave(int ctl_fd) {
 // static
 void LocalEnclave::DestroyAllEnclaves() {
   std::error_code ec;
-  auto f = std::filesystem::directory_iterator(Ghost::kGhostfsMount, ec);
+  auto f =
+      std::filesystem::directory_iterator(GhostHelper()->kGhostfsMount, ec);
   auto end = std::filesystem::directory_iterator();
   for (/* f */; !ec && f != end; f.increment(ec)) {
     if (std::regex_match(f->path().filename().string(),
@@ -354,9 +357,9 @@ void LocalEnclave::CommonInit() {
   // Bug out if we already have a non-default global enclave.  We shouldn't have
   // more than one enclave per process at a time, at least not until we have
   // fully moved away from default enclaves.
-  CHECK_EQ(Ghost::GetGlobalEnclaveCtlFd(), -1);
-  CHECK_EQ(Ghost::GetGlobalEnclaveDirFd(), -1);
-  Ghost::SetGlobalEnclaveFds(ctl_fd_, dir_fd_);
+  CHECK_EQ(GhostHelper()->GetGlobalEnclaveCtlFd(), -1);
+  CHECK_EQ(GhostHelper()->GetGlobalEnclaveDirFd(), -1);
+  GhostHelper()->SetGlobalEnclaveFds(ctl_fd_, dir_fd_);
 
   CHECK_EQ(GetAbiVersion(), GHOST_VERSION);
 
@@ -369,7 +372,8 @@ void LocalEnclave::CommonInit() {
   close(data_fd);
   CHECK_NE(data_region_, MAP_FAILED);
 
-  Ghost::SetGlobalStatusWordTable(new LocalStatusWordTable(dir_fd_, 0, 0));
+  GhostHelper()->SetGlobalStatusWordTable(
+      new LocalStatusWordTable(dir_fd_, 0, 0));
 }
 
 // Initialize a CpuRep for each cpu in enclaves_cpus_ (aka, cpus()).
@@ -480,9 +484,9 @@ LocalEnclave::~LocalEnclave() {
   close(dir_fd_);
   // agent_test has some cases where it creates new enclaves within the same
   // process, so reset the global enclave ghost variables
-  Ghost::SetGlobalEnclaveFds(-1, -1);
-  delete Ghost::GetGlobalStatusWordTable();
-  Ghost::SetGlobalStatusWordTable(nullptr);
+  GhostHelper()->SetGlobalEnclaveFds(-1, -1);
+  delete GhostHelper()->GetGlobalStatusWordTable();
+  GhostHelper()->SetGlobalStatusWordTable(nullptr);
 }
 
 void LocalEnclave::InsertBpfPrograms() {
@@ -506,7 +510,7 @@ bool LocalEnclave::CommitRunRequests(const CpuList& cpu_list) {
 
 void LocalEnclave::SubmitRunRequests(const CpuList& cpu_list) {
   cpu_set_t cpus = topology()->ToCpuSet(cpu_list);
-  CHECK_EQ(Ghost::Commit(&cpus), 0);
+  CHECK_EQ(GhostHelper()->Commit(&cpus), 0);
 }
 
 bool LocalEnclave::CommitSyncRequests(const CpuList& cpu_list) {
@@ -536,7 +540,7 @@ bool LocalEnclave::CommitSyncRequests(const CpuList& cpu_list) {
 
 bool LocalEnclave::SubmitSyncRequests(const CpuList& cpu_list) {
   cpu_set_t cpus = topology()->ToCpuSet(cpu_list);
-  int ret = Ghost::SyncCommit(&cpus);
+  int ret = GhostHelper()->SyncCommit(&cpus);
   CHECK(ret == 0 || ret == 1);
   return ret;
 }
@@ -560,7 +564,7 @@ void LocalEnclave::SubmitRunRequest(RunRequest* req) {
                req->target().describe(), req->target_barrier());
 
   if (req->open()) {
-    CHECK_EQ(Ghost::Commit(req->cpu().id()), 0);
+    CHECK_EQ(GhostHelper()->Commit(req->cpu().id()), 0);
   } else {
     // Request already picked up by target CPU for commit.
   }
@@ -569,7 +573,7 @@ void LocalEnclave::SubmitRunRequest(RunRequest* req) {
 bool LocalEnclave::CompleteRunRequest(RunRequest* req) {
   // If request was picked up asynchronously then wait for the commit.
   //
-  // N.B. we must do this even if we call Ghost::Commit() because the
+  // N.B. we must do this even if we call GhostHelper()->Commit() because the
   // the request could be committed asynchronously even in that case.
   while (!req->committed()) {
     Pause();
@@ -628,7 +632,8 @@ void LocalEnclave::LocalYieldRunRequest(
     const RunRequest* req, const StatusWord::BarrierToken agent_barrier,
     const int flags) {
   DCHECK_EQ(sched_getcpu(), req->cpu().id());
-  int error = Ghost::Run(Gtid(0), agent_barrier, StatusWord::NullBarrierToken(),
+  int error =
+      GhostHelper()->Run(Gtid(0), agent_barrier, StatusWord::NullBarrierToken(),
                          req->cpu().id(), flags);
   // Sanity check why we failed.
   //   ESTALE: old barrier / missed message
@@ -640,10 +645,10 @@ void LocalEnclave::LocalYieldRunRequest(
 
 bool LocalEnclave::PingRunRequest(const RunRequest* req) {
   const int run_flags = 0;
-  int rc = Ghost::Run(Gtid(GHOST_AGENT_GTID),
-                      StatusWord::NullBarrierToken(),  // agent_barrier
-                      StatusWord::NullBarrierToken(),  // task_barrier
-                      req->cpu().id(), run_flags);
+  int rc = GhostHelper()->Run(Gtid(GHOST_AGENT_GTID),
+                              StatusWord::NullBarrierToken(),  // agent_barrier
+                              StatusWord::NullBarrierToken(),  // task_barrier
+                              req->cpu().id(), run_flags);
   return rc == 0;
 }
 

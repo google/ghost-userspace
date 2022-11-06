@@ -97,10 +97,12 @@ class LocalStatusWordTable : public StatusWordTable {
 // TODO: Syscall definition needs fixing for any hope of 32-bit compat.
 class Ghost {
  public:
-  static void InitCore();
+  virtual ~Ghost() {}
 
-  static int Run(const Gtid gtid, const uint32_t agent_barrier,
-                 const uint32_t task_barrier, const int cpu, const int flags) {
+  virtual void InitCore();
+
+  virtual int Run(const Gtid gtid, const uint32_t agent_barrier,
+                  const uint32_t task_barrier, const int cpu, const int flags) {
     ghost_ioc_run data = {
       .gtid = gtid.id(),
       .agent_barrier = agent_barrier,
@@ -109,10 +111,9 @@ class Ghost {
       .run_flags = flags,
     };
     return ioctl(gbl_ctl_fd_, GHOST_IOC_RUN, &data);
-
   }
 
-  static int SyncCommit(cpu_set_t* const cpuset) {
+  virtual int SyncCommit(cpu_set_t* const cpuset) {
     ghost_ioc_commit_txn data = {
         .mask_ptr = cpuset,
         .mask_len = sizeof(cpu_set_t),
@@ -121,7 +122,7 @@ class Ghost {
     return ioctl(gbl_ctl_fd_, GHOST_IOC_SYNC_GROUP_TXN, &data);
   }
 
-  static int Commit(cpu_set_t* const cpuset) {
+  virtual int Commit(cpu_set_t* const cpuset) {
     ghost_ioc_commit_txn data = {
         .mask_ptr = cpuset,
         .mask_len = sizeof(cpu_set_t),
@@ -130,7 +131,7 @@ class Ghost {
     return ioctl(gbl_ctl_fd_, GHOST_IOC_COMMIT_TXN, &data);
   }
 
-  static int Commit(const int cpu) {
+  virtual int Commit(const int cpu) {
     cpu_set_t cpuset;
 
     CHECK_GE(cpu, 0);
@@ -141,8 +142,8 @@ class Ghost {
     return Commit(&cpuset);
   }
 
-  static int CreateQueue(const int elems, const int node, const int flags,
-                         uint64_t& mapsize) {
+  virtual int CreateQueue(const int elems, const int node, const int flags,
+                          uint64_t& mapsize) {
     ghost_ioc_create_queue data = {
         .elems = elems,
         .node = node,
@@ -158,7 +159,7 @@ class Ghost {
   // kernel.
   //
   // Returns 0 on success and -1 on failure ('errno' is set on failure).
-  static int RemoveQueueWakeup(const int queue_fd) {
+  virtual int RemoveQueueWakeup(const int queue_fd) {
     return ConfigQueueWakeup(queue_fd, MachineTopology()->EmptyCpuList(),
                              /*flags=*/0);
   }
@@ -167,8 +168,8 @@ class Ghost {
   // into the queue denoted by 'queue_fd'.
   //
   // Returns 0 on success and -1 on failure ('errno' is set on failure).
-  static int ConfigQueueWakeup(const int queue_fd, const CpuList& cpulist,
-                               const int flags) {
+  virtual int ConfigQueueWakeup(const int queue_fd, const CpuList& cpulist,
+                                const int flags) {
     std::vector<ghost_agent_wakeup> wakeup;
     for (const Cpu& cpu : cpulist) {
       wakeup.push_back({
@@ -186,9 +187,9 @@ class Ghost {
     return ioctl(gbl_ctl_fd_, GHOST_IOC_CONFIG_QUEUE_WAKEUP, &data);
   }
 
-  static int AssociateQueue(const int queue_fd, const ghost_type type,
-                            const uint64_t arg, const int barrier,
-                            const int flags, int* status) {
+  virtual int AssociateQueue(const int queue_fd, const ghost_type type,
+                             const uint64_t arg, const int barrier,
+                             const int flags) {
     ghost_msg_src msg_src = {
         .type = type,
         .arg = arg,
@@ -200,17 +201,10 @@ class Ghost {
         .barrier = barrier,
         .flags = flags,
     };
-
-    int assoc_status = ioctl(gbl_ctl_fd_, GHOST_IOC_ASSOC_QUEUE, &data);
-    int err = (assoc_status < 0) ? assoc_status : 0;
-
-    if (status != nullptr) {
-      *status = err ? 0 : assoc_status;
-    }
-    return err;
+    return ioctl(gbl_ctl_fd_, GHOST_IOC_ASSOC_QUEUE, &data);
   }
 
-  static int SetDefaultQueue(const int queue_fd) {
+  virtual int SetDefaultQueue(const int queue_fd) {
     ghost_ioc_set_default_queue data = {
         .fd = queue_fd,
     };
@@ -218,8 +212,8 @@ class Ghost {
     return ioctl(gbl_ctl_fd_, GHOST_IOC_SET_DEFAULT_QUEUE, &data);
   }
 
-  static int GetStatusWordInfo(const ghost_type type, const uint64_t arg,
-                               ghost_sw_info* const info) {
+  virtual int GetStatusWordInfo(const ghost_type type, const uint64_t arg,
+                                ghost_sw_info* const info) {
     ghost_ioc_sw_get_info data;
     data.request.type = type;
     data.request.arg = arg;
@@ -229,7 +223,7 @@ class Ghost {
     return 0;
   }
 
-  static int FreeStatusWordInfo(ghost_sw_info* const info) {
+  virtual int FreeStatusWordInfo(ghost_sw_info* const info) {
     return ioctl(gbl_ctl_fd_, GHOST_IOC_SW_FREE, info);
   }
 
@@ -237,7 +231,7 @@ class Ghost {
   // write to a sched item indicates that the sched item was updated for a new
   // closure. We want to update the runtime of the task so that we don't bill
   // the new closure for CPU time used by the old closure.
-  static int GetTaskRuntime(const Gtid gtid, absl::Duration* const cpu_time) {
+  virtual int GetTaskRuntime(const Gtid gtid, absl::Duration* const cpu_time) {
     ghost_ioc_get_cpu_time data = {
         .gtid = gtid.id(),
     };
@@ -255,11 +249,10 @@ class Ghost {
   // any msg.
   // - type: an opaque value that is reflected back in CPU_TIMER_EXPIRED msg.
   // - cookie: an opaque value that is reflected back in CPU_TIMER_EXPIRED msg.
-  static int TimerFdSettime(
+  virtual int TimerFdSettime(
       const int fd, const int flags, itimerspec* const itimerspec,
       const Cpu& cpu = Cpu(Cpu::UninitializedType::kUninitialized),
-      const uint64_t type = 0,
-      const uint64_t cookie = 0) {
+      const uint64_t type = 0, const uint64_t cookie = 0) {
     timerfd_ghost timerfd_ghost = {
         .cpu = cpu.valid() ? cpu.id() : -1,
         .flags = cpu.valid() ? TIMERFD_GHOST_ENABLED : 0,
@@ -307,23 +300,23 @@ class Ghost {
     return iter != versions.end();
   }
 
-  static void SetGlobalEnclaveFds(int ctl_fd, int dir_fd) {
+  virtual void SetGlobalEnclaveFds(int ctl_fd, int dir_fd) {
     gbl_ctl_fd_ = ctl_fd;
     gbl_dir_fd_ = dir_fd;
   }
-  static int GetGlobalEnclaveCtlFd() { return gbl_ctl_fd_; }
-  static int GetGlobalEnclaveDirFd() { return gbl_dir_fd_; }
-  static void CloseGlobalEnclaveFds() {
+  virtual int GetGlobalEnclaveCtlFd() { return gbl_ctl_fd_; }
+  virtual int GetGlobalEnclaveDirFd() { return gbl_dir_fd_; }
+  virtual void CloseGlobalEnclaveFds() {
     if (gbl_ctl_fd_ >= 0) close(gbl_ctl_fd_);
     gbl_ctl_fd_ = -1;
     if (gbl_dir_fd_ >= 0) close(gbl_dir_fd_);
     gbl_dir_fd_ = -1;
   }
 
-  static void SetGlobalStatusWordTable(StatusWordTable* swt) {
+  virtual void SetGlobalStatusWordTable(StatusWordTable* swt) {
     gbl_sw_table_ = swt;
   }
-  static StatusWordTable* GetGlobalStatusWordTable() {
+  StatusWordTable* GetGlobalStatusWordTable() {
     CHECK_NE(gbl_sw_table_, nullptr);
     return gbl_sw_table_;
   }
@@ -331,7 +324,7 @@ class Ghost {
   // Gets the CPU affinity for the task with the provided Gtid and writes the
   // result to the provided CpuList.
   // Returns 0 on success. Otherwise, returns -1 with errno set.
-  static int SchedGetAffinity(const Gtid& gtid, CpuList& cpulist) {
+  virtual int SchedGetAffinity(const Gtid& gtid, CpuList& cpulist) {
     cpu_set_t allowed_cpus;
     CPU_ZERO(&allowed_cpus);
     if (sched_getaffinity(gtid.tid(), sizeof(allowed_cpus), &allowed_cpus)) {
@@ -347,17 +340,25 @@ class Ghost {
   // Sets the CPU affinity for the task with the provided `gtid` from the
   // set of cpus in `cpulist`.
   // Returns 0 on success. Otherwise, returns -1 with errno set.
-  static int SchedSetAffinity(const Gtid& gtid, const CpuList& cpulist) {
+  virtual int SchedSetAffinity(const Gtid& gtid, const CpuList& cpulist) {
     cpu_set_t cpuset = Topology::ToCpuSet(cpulist);
     return sched_setaffinity(gtid.tid(), sizeof(cpuset), &cpuset);
   }
 
+  // Moves the thread with PID `pid` to the ghOSt scheduling class, using the
+  // enclave dir_fd.  If dir_fd is -1, this will use the enclave dir_fd
+  // previously set with SetGlobalEnclaveFds().
+  virtual int SchedTaskEnterGhost(pid_t pid, int dir_fd);
+  // Makes the calling thread an agent.  Note that the calling thread must have
+  // the `CAP_SYS_NICE` capability to make itself an agent.
+  virtual int SchedAgentEnterGhost(int ctl_fd, int queue_fd);
+
   static constexpr const char kGhostfsMount[] = "/sys/fs/ghost";
 
  private:
-  static int gbl_ctl_fd_;
-  static int gbl_dir_fd_;
-  static StatusWordTable* gbl_sw_table_;
+  int gbl_ctl_fd_ = -1;
+  int gbl_dir_fd_ = -1;
+  StatusWordTable* gbl_sw_table_;
 };
 
 class GhostSignals {
@@ -415,7 +416,9 @@ class StatusWord {
   bool on_cpu() const { return sw_flags() & GHOST_SW_TASK_ONCPU; }
   bool cpu_avail() const { return sw_flags() & GHOST_SW_CPU_AVAIL; }
   bool runnable() const { return sw_flags() & GHOST_SW_TASK_RUNNABLE; }
-  bool boosted_priority() const { return sw_flags() & GHOST_SW_BOOST_PRIO; }
+  virtual bool boosted_priority() const {
+    return sw_flags() & GHOST_SW_BOOST_PRIO;
+  }
 
   uint32_t id() const { return sw_info_.id; }
 
@@ -570,13 +573,18 @@ class GhostThread {
   std::thread thread_;
 };
 
-// Moves the thread with PID `pid` to the ghOSt scheduling class, using the
-// enclave dir_fd.  If dir_fd is -1, this will use the enclave dir_fd previously
-// set with SetGlobalEnclaveFds().
-int SchedTaskEnterGhost(pid_t pid, int dir_fd = -1);
-// Makes the calling thread an agent.  Note that the calling thread must have
-// the `CAP_SYS_NICE` capability to make itself an agent.
-int SchedAgentEnterGhost(int ctl_fd, int queue_fd);
+// Returns the Ghost helper instance for this machine. The pointer is never null
+// and is owned by the  `GhostHelper` function. The pointer lives until the
+// process dies.
+Ghost* GhostHelper();
+
+// Frees the current `GhostHelper()` pointer and updates it to `ghost_helper`.
+// This is useful for providing custom implementations of Ghost helper
+// functions.
+//
+// This function is not thread-safe. You should generally only call it once when
+// the process starts.
+void UpdateGhostHelper(Ghost* ghost_helper);
 
 }  // namespace ghost
 

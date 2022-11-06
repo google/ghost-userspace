@@ -30,18 +30,18 @@ void EdfTask::SetRuntime(absl::Duration new_runtime,
 
 void EdfTask::UpdateRuntime() {
   // We access the runtime from the status word rather than call
-  // `Ghost::GetTaskRuntime()` as that function does a system call that acquires
-  // a runqueue lock if the task is currently running. Acquiring this lock harms
-  // tail latency. Reading the runtime from the status word is just a memory
-  // access. However, the runtime in the status word may be stale if the task is
-  // currently running, as the runtime in the status word is updated on each
-  // call to `update_curr_ghost()` in the kernel. Thus, we accept some staleness
-  // in the runtime for improved performance.
+  // `GhostHelper()->GetTaskRuntime()` as that function does a system call that
+  // acquires a runqueue lock if the task is currently running. Acquiring this
+  // lock harms tail latency. Reading the runtime from the status word is just a
+  // memory access. However, the runtime in the status word may be stale if the
+  // task is currently running, as the runtime in the status word is updated on
+  // each call to `update_curr_ghost()` in the kernel. Thus, we accept some
+  // staleness in the runtime for improved performance.
   //
   // Note that the runtime in the status word is updated when the task is taken
   // off of the CPU (e.g., on a block, yield, preempt, etc.). Additionally,
-  // `Ghost::GetTaskRuntime()` does not need to acquire a runqueue lock when the
-  // task is off of the CPU.
+  // `GhostHelper()->GetTaskRuntime()` does not need to acquire a runqueue lock
+  // when the task is off of the CPU.
   SetRuntime(absl::Nanoseconds(status_word.runtime()),
              /*update_elapsed_runtime=*/true);
 }

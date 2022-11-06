@@ -154,7 +154,7 @@ class TestAgent : public LocalAgent {
 };
 
 TEST(ChannelTest, Wakeup) {
-  Ghost::InitCore();
+  GhostHelper()->InitCore();
 
   // arbitrary but safe because there must be at least one cpu.
   const int cpu_num = 0;
@@ -185,7 +185,7 @@ TEST(ChannelTest, Wakeup) {
 }
 
 TEST(ChannelTest, Associate) {
-  Ghost::InitCore();
+  GhostHelper()->InitCore();
 
   // arbitrary but safe because there must be at least one cpu.
   const int cpu_num = 0;

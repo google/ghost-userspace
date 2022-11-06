@@ -79,7 +79,7 @@ int main(int argc, char* argv[]) {
   auto uap = new ghost::AgentProcess<ghost::FullFifoAgent<ghost::LocalEnclave>,
                                      ghost::FifoConfig>(config);
 
-  ghost::Ghost::InitCore();
+  ghost::GhostHelper()->InitCore();
 
   printf("Initialization complete, ghOSt active.\n");
 

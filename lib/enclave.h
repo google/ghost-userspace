@@ -276,7 +276,8 @@ struct RunRequestOptions {
   bool allow_txn_target_on_cpu = false;
 };
 
-// RunRequest implements a transactional Ghost::Run() API.  This enables:
+// RunRequest implements a transactional GhostHelper()->Run() API.  This
+// enables:
 //  1. Asynchronous and Batch dispatch.  A RunRequest may be asynchronously
 //     invoked once opened.  Allowing amortization versus synchronous
 //     transmission.
@@ -332,7 +333,8 @@ class RunRequest {
   }
 
   // Ping() and queued-runs could interact with each other (when Ping clobbers
-  // the transaction) so use the Ghost::Run() based ping to sidestep the issue.
+  // the transaction) so use the GhostHelper()->Run() based ping to sidestep the
+  // issue.
   //
   // TODO: revisit when agent is able to to arbitrate txn ownership.
   bool Ping() { return enclave_->PingRunRequest(this); }

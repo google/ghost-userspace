@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
   auto uap = new ghost::AgentProcess<ghost::FullBiffAgent<ghost::LocalEnclave>,
                                      ghost::AgentConfig>(config);
 
-  ghost::Ghost::InitCore();
+  ghost::GhostHelper()->InitCore();
 
   printf("Initialization complete, ghOSt active.\n");
   fflush(stdout);

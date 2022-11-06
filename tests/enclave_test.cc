@@ -25,7 +25,7 @@ namespace {
 
 class EnclaveTest : public ::testing::Test {
  protected:
-  static void SetUpTestSuite() { Ghost::InitCore(); }
+  static void SetUpTestSuite() { GhostHelper()->InitCore(); }
 };
 
 bool WriteEnclaveCpus(int fd, const std::string& data) {
@@ -324,7 +324,7 @@ TEST_F(EnclaveTest, DestroyAndSetsched) {
 
       SpinFor(absl::Microseconds(kLoops) - absl::Microseconds(i));
 
-      int ret = SchedTaskEnterGhost(/*pid=*/0, enclave_fd);
+      int ret = GhostHelper()->SchedTaskEnterGhost(/*pid=*/0, enclave_fd);
       if (ret != 0) {
         switch (errno) {
           case ENXIO:

@@ -165,7 +165,7 @@ void GhostOrchestrator::GetIdleWorkerSIDs() {
 void GhostOrchestrator::LoadGenerator(uint32_t sid) {
   if (!first_run().Triggered(sid)) {
     CHECK(first_run().Trigger(sid));
-    CHECK_EQ(ghost::Ghost::SchedSetAffinity(
+    CHECK_EQ(ghost::GhostHelper()->SchedSetAffinity(
                  ghost::Gtid::Current(),
                  ghost::MachineTopology()->ToCpuList(
                      std::vector<int>{options().load_generator_cpu})),

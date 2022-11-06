@@ -145,7 +145,7 @@ int main(int argc, char* argv[]) {
   // main thread's affinity mask when they are spawned. Thus, the background
   // threads will automatically be affined to
   // 'ghost_test::Orchestrator::kBackgroundThreadCpu'.
-  CHECK_ZERO(ghost::Ghost::SchedSetAffinity(
+  CHECK_ZERO(ghost::GhostHelper()->SchedSetAffinity(
       ghost::Gtid::Current(),
       ghost::MachineTopology()->ToCpuList(
           std::vector<int>{ghost_test::Orchestrator::kBackgroundThreadCpu})));

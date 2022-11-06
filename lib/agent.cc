@@ -46,8 +46,8 @@ void LocalAgent::ThreadBody() {
   CHECK_EQ(prctl(PR_SET_NAME, absl::StrCat("ap_task_", cpu().id()).c_str()), 0);
 
   gtid_ = Gtid::Current();
-  CHECK_EQ(Ghost::SchedSetAffinity(Gtid::Current(),
-                                   MachineTopology()->ToCpuList({cpu_})),
+  CHECK_EQ(GhostHelper()->SchedSetAffinity(
+               Gtid::Current(), MachineTopology()->ToCpuList({cpu_})),
            0);
   enclave_->WaitForOldAgent();
 
@@ -58,7 +58,7 @@ void LocalAgent::ThreadBody() {
   // WaitForOldAgent.
   int ret;
   do {
-    ret = SchedAgentEnterGhost(enclave_->GetCtlFd(), queue_fd);
+    ret = GhostHelper()->SchedAgentEnterGhost(enclave_->GetCtlFd(), queue_fd);
   } while (ret && errno == EBUSY);
   CHECK_EQ(ret, 0);
 

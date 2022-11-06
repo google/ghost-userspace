@@ -41,7 +41,7 @@ CfsOrchestrator::CfsOrchestrator(Orchestrator::Options opts)
 void CfsOrchestrator::Worker(uint32_t sid) {
   if (!thread_triggers().Triggered(sid)) {
     thread_triggers().Trigger(sid);
-    CHECK_ZERO(ghost::Ghost::SchedSetAffinity(
+    CHECK_ZERO(ghost::GhostHelper()->SchedSetAffinity(
         ghost::Gtid::Current(), ghost::MachineTopology()->ToCpuList(
                                     std::vector<int>{options().cpus[sid]})));
     printf("Worker (SID %u, TID: %ld, affined to CPU %u)\n", sid,

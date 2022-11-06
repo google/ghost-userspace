@@ -33,7 +33,7 @@ ghost_msg Message::kEmpty = {
 
 LocalChannel::LocalChannel(int elems, int node, CpuList cpulist)
     : Channel(), elems_(elems), node_(node) {
-  fd_ = Ghost::CreateQueue(elems_, node_, 0, map_size_);
+  fd_ = GhostHelper()->CreateQueue(elems_, node_, 0, map_size_);
   CHECK_GT(fd_, 0);
 
   header_ = static_cast<ghost_queue_header*>(
@@ -42,7 +42,7 @@ LocalChannel::LocalChannel(int elems, int node, CpuList cpulist)
   elems_ = header_->nelems;
 
   if (!cpulist.Empty()) {
-    CHECK_ZERO(Ghost::ConfigQueueWakeup(fd_, cpulist, /*flags=*/0));
+    CHECK_ZERO(GhostHelper()->ConfigQueueWakeup(fd_, cpulist, /*flags=*/0));
   }
 };
 
@@ -52,8 +52,12 @@ LocalChannel::~LocalChannel() {
 }
 
 bool LocalChannel::AssociateTask(Gtid gtid, int barrier, int* status) const {
-  return Ghost::AssociateQueue(
-      fd_, GHOST_TASK, gtid.id(), barrier, 0, status) == 0;
+  int ret =
+      GhostHelper()->AssociateQueue(fd_, GHOST_TASK, gtid.id(), barrier, 0);
+  if (status) {
+    *status = ret;
+  }
+  return ret >= 0;
 }
 
 void LocalChannel::Consume(const Message& msg) {
@@ -90,7 +94,7 @@ Message LocalChannel::Peek() const {
 }
 
 bool LocalChannel::SetEnclaveDefault() const {
-  return Ghost::SetDefaultQueue(fd_) == 0;
+  return GhostHelper()->SetDefaultQueue(fd_) == 0;
 }
 
 absl::string_view Message::describe_type() const {

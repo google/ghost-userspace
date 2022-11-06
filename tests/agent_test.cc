@@ -157,8 +157,8 @@ class FullSimpleAgent : public FullAgent<EnclaveType> {
       case kGetStatusWordInfo:
         ghost_sw_info info;
         response_code = 0;
-        if (Ghost::GetStatusWordInfo(static_cast<ghost_type>(args.arg0),
-                                     args.arg1, &info) != 0) {
+        if (GhostHelper()->GetStatusWordInfo(static_cast<ghost_type>(args.arg0),
+                                             args.arg1, &info) != 0) {
           response_code = errno;
         }
         break;
@@ -524,7 +524,7 @@ class CallbackAgent : public LocalAgent {
 };
 
 TEST(AgentTest, MsgTimerExpired) {
-  Ghost::InitCore();
+  GhostHelper()->InitCore();
   Topology* topology = MachineTopology();
 
   const CpuList agent_cpus = topology->all_cpus();
@@ -620,8 +620,8 @@ TEST(AgentTest, MsgTimerExpired) {
 
   const uint64_t type = fd;
   const uint64_t cookie = fd;
-  ASSERT_THAT(Ghost::TimerFdSettime(fd, /*flags=*/0, &itimerspec, target_cpu,
-                                    type, cookie),
+  ASSERT_THAT(GhostHelper()->TimerFdSettime(fd, /*flags=*/0, &itimerspec,
+                                            target_cpu, type, cookie),
               Eq(0));
 
   // Sleep for 50 msec.
@@ -654,7 +654,7 @@ TEST(AgentTest, MsgTimerExpired) {
 // Verify that NEED_CPU_NOT_IDLE triggers MSG_CPU_NOT_IDLE when a non-idle
 // task is scheduled on the cpu.
 TEST(AgentTest, MsgCpuNotIdle) {
-  Ghost::InitCore();
+  GhostHelper()->InitCore();
   Topology* topology = MachineTopology();
 
   const CpuList agent_cpus = topology->all_cpus();
@@ -719,9 +719,9 @@ TEST(AgentTest, MsgCpuNotIdle) {
 
   // Schedule a CFS task on 'target_cpu' (this will trigger CPU_NOT_IDLE msg).
   std::thread thread([target_cpu] {
-    EXPECT_THAT(Ghost::SchedSetAffinity(Gtid::Current(),
-                                        MachineTopology()->ToCpuList(
-                                            std::vector<int>{target_cpu.id()})),
+    EXPECT_THAT(GhostHelper()->SchedSetAffinity(
+                    Gtid::Current(), MachineTopology()->ToCpuList(
+                                         std::vector<int>{target_cpu.id()})),
                 Eq(0));
     absl::SleepFor(absl::Milliseconds(100));
   });
@@ -788,7 +788,7 @@ class SetSchedAgent : public LocalAgent {
 
 // Test to validate sched_setscheduler() behavior for ghost agents.
 TEST(AgentTest, SetSched) {
-  Ghost::InitCore();
+  GhostHelper()->InitCore();
   // arbitrary but safe since there must be one cpu.
   constexpr int agent_cpu = 0;
   Topology* topology = MachineTopology();
@@ -806,7 +806,7 @@ TEST(AgentTest, SetSched) {
 }
 
 TEST(AgentTest, GetStatusWordInfo) {
-  Ghost::InitCore();
+  GhostHelper()->InitCore();
 
   Topology* topology = MachineTopology();
   const CpuList agent_cpus = topology->all_cpus();

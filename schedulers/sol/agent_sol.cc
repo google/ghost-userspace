@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
   auto uap = new ghost::AgentProcess<ghost::FullSolAgent<ghost::LocalEnclave>,
                                      ghost::SolConfig>(config);
 
-  ghost::Ghost::InitCore();
+  ghost::GhostHelper()->InitCore();
 
   printf("Initialization complete, ghOSt active.\n");
 

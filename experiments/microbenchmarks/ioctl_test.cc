@@ -22,10 +22,10 @@
 namespace ghost {
 
 void BM_ghost_null_ioctl(benchmark::State& state) {
-  Ghost::InitCore();
+  GhostHelper()->InitCore();
   Topology* topology = MachineTopology();
   LocalEnclave enclave(AgentConfig(topology, CpuList(*topology)));
-  int ctl = Ghost::GetGlobalEnclaveCtlFd();
+  int ctl = GhostHelper()->GetGlobalEnclaveCtlFd();
 
   for (auto _ : state) {
     CHECK_EQ(ioctl(ctl, GHOST_IOC_NULL), 0);

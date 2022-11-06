@@ -222,7 +222,7 @@ TEST(ApiTest, RunDeadTask) {
   // is over, we need to reset so we can get a fresh enclave later.  Note that
   // we used AgentProcess, so the only user of the gbl_enclave_fd_ is us, the
   // client.
-  Ghost::CloseGlobalEnclaveFds();
+  GhostHelper()->CloseGlobalEnclaveFds();
 }
 
 class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
@@ -567,7 +567,7 @@ TEST_P(SyncGroupTest, Commit) {
   // Wait for all threads to finish.
   for (auto& t : threads) t->Join();
 
-  Ghost::CloseGlobalEnclaveFds();
+  GhostHelper()->CloseGlobalEnclaveFds();
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -729,7 +729,7 @@ TEST(IdleTest, NeedCpuNotIdle) {
     // the agent sets NEED_CPU_NOT_IDLE in `run_flags`.
     threads.emplace_back(
         new GhostThread(GhostThread::KernelScheduler::kCfs, [cpu] {
-          EXPECT_THAT(Ghost::SchedSetAffinity(
+          EXPECT_THAT(GhostHelper()->SchedSetAffinity(
                           Gtid::Current(),
                           MachineTopology()->ToCpuList(std::vector<int>{cpu})),
                       Eq(0));
@@ -747,7 +747,7 @@ TEST(IdleTest, NeedCpuNotIdle) {
   // NEED_CPU_NOT_IDLE is set in `run_flags`.
   EXPECT_THAT(ap.Rpc(kNeedCpuNotIdle), 0);
 
-  Ghost::CloseGlobalEnclaveFds();
+  GhostHelper()->CloseGlobalEnclaveFds();
 }
 
 struct CoreSchedTask : public Task<> {
@@ -1065,10 +1065,11 @@ class CoreScheduler {
 };
 
 // This test ensures the version check functionality works properly.
-// 'Ghost::GetVersion' should return a version that matches 'GHOST_VERSION'.
+// 'GhostHelper()->GetVersion' should return a version that matches
+// 'GHOST_VERSION'.
 TEST(ApiTest, CheckVersion) {
   std::vector<uint32_t> kernel_abi_versions;
-  ASSERT_THAT(Ghost::GetSupportedVersions(kernel_abi_versions), Eq(0));
+  ASSERT_THAT(GhostHelper()->GetSupportedVersions(kernel_abi_versions), Eq(0));
 
   auto iter = std::find(kernel_abi_versions.begin(), kernel_abi_versions.end(),
                         GHOST_VERSION);
@@ -1240,7 +1241,7 @@ class TimeAgent : public LocalAgent {
 // Tests that the kernel writes plausible commit times to transactions and
 // plausible context switch times to task status words.
 TEST(ApiTest, KernelTimes) {
-  Ghost::InitCore();
+  GhostHelper()->InitCore();
 
   // Arbitrary but safe because there must be at least one CPU.
   constexpr int kCpuNum = 0;
@@ -1264,8 +1265,9 @@ TEST(ApiTest, KernelTimes) {
   agent.Terminate();
 }
 
-// Tests that `Ghost::SchedGetAffinity()` and `Ghost::SchedSetAffinity()`
-// returns/sets the affinity mask for a thread.
+// Tests that `GhostHelper()->SchedGetAffinity()` and
+// `GhostHelper()->SchedSetAffinity()` returns/sets the affinity mask for a
+// thread.
 //
 // It is possible for any CPU to be disallowed on a DevRez machine, such as when
 // this test is run inside a sys container via cpuset. Thus, to avoid this
@@ -1274,7 +1276,7 @@ TEST(ApiTest, KernelTimes) {
 // available.
 TEST(ApiTest, SchedGetAffinity) {
   CpuList cpus = MachineTopology()->EmptyCpuList();
-  ASSERT_THAT(Ghost::SchedGetAffinity(Gtid::Current(), cpus), Eq(0));
+  ASSERT_THAT(GhostHelper()->SchedGetAffinity(Gtid::Current(), cpus), Eq(0));
   // This test requires at least 2 CPUs.
   if (cpus.Size() < 2) {
     GTEST_SKIP() << "must have at least 2 cpus";
@@ -1282,10 +1284,11 @@ TEST(ApiTest, SchedGetAffinity) {
   }
 
   cpus.Clear(cpus.Front());
-  ASSERT_THAT(Ghost::SchedSetAffinity(Gtid::Current(), cpus), Eq(0));
+  ASSERT_THAT(GhostHelper()->SchedSetAffinity(Gtid::Current(), cpus), Eq(0));
 
   CpuList set_cpus = MachineTopology()->EmptyCpuList();
-  ASSERT_THAT(Ghost::SchedGetAffinity(Gtid::Current(), set_cpus), Eq(0));
+  ASSERT_THAT(GhostHelper()->SchedGetAffinity(Gtid::Current(), set_cpus),
+              Eq(0));
   EXPECT_THAT(set_cpus, Eq(cpus));
 }
 
@@ -1439,7 +1442,7 @@ class SchedAffinityAgent : public LocalAgent {
         if (req->Commit()) {
           CpuList new_cpulist = task_cpulist;
           new_cpulist.Clear(run_cpu);
-          if (Ghost::SchedSetAffinity(task->gtid, new_cpulist)) {
+          if (GhostHelper()->SchedSetAffinity(task->gtid, new_cpulist)) {
             ASSERT_THAT(errno, Eq(ESRCH));
           }
           oncpu = true;
@@ -1524,7 +1527,7 @@ TEST(ApiTest, SchedAffinityRace) {
   // is over, we need to reset so we can get a fresh enclave later.  Note that
   // we used AgentProcess, so the only user of the gbl_enclave_fd_ is us, the
   // client.
-  Ghost::CloseGlobalEnclaveFds();
+  GhostHelper()->CloseGlobalEnclaveFds();
 }
 
 // DepartedRaceAgent tries to induce a race in producing MSG_TASK_NEW
@@ -1837,7 +1840,8 @@ TEST(ApiTest, DepartedRace) {
       EXPECT_THAT(sched_setscheduler(/*pid=*/0, SCHED_OTHER, &param), Eq(0));
 
       // Try to induce a TASK_NEW and TASK_AFFINITY_CHANGED reordering.
-      EXPECT_THAT(Ghost::SchedSetAffinity(Gtid::Current(), new_cpulist), Eq(0));
+      EXPECT_THAT(GhostHelper()->SchedSetAffinity(Gtid::Current(), new_cpulist),
+                  Eq(0));
     }
   });
 
@@ -1845,7 +1849,7 @@ TEST(ApiTest, DepartedRace) {
   Notification done;
   GhostThread t2(GhostThread::KernelScheduler::kGhost, [t1_tid, &done] {
     while (!done.HasBeenNotified()) {
-      if (SchedTaskEnterGhost(t1_tid) != 0) {
+      if (GhostHelper()->SchedTaskEnterGhost(t1_tid, /*dir_fd=*/-1) != 0) {
         // EPERM: t1 was already in ghost.
         // ESRCH: t1 had already exited.
         EXPECT_THAT(errno, AnyOf(ESRCH, EPERM));
@@ -1865,7 +1869,7 @@ TEST(ApiTest, DepartedRace) {
   // is over, we need to reset so we can get a fresh enclave later.  Note that
   // we used AgentProcess, so the only user of the gbl_enclave_fd_ is us, the
   // client.
-  Ghost::CloseGlobalEnclaveFds();
+  GhostHelper()->CloseGlobalEnclaveFds();
 }
 
 TEST(ApiTest, GhostCloneGhost) {
@@ -1902,7 +1906,7 @@ TEST(ApiTest, GhostCloneGhost) {
     EXPECT_THAT(num_tasks, Ge(0));
   } while (num_tasks);
 
-  Ghost::CloseGlobalEnclaveFds();
+  GhostHelper()->CloseGlobalEnclaveFds();
 }
 
 }  // namespace

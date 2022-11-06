@@ -305,7 +305,7 @@ template <class EnclaveType = LocalEnclave, class AgentConfigType = AgentConfig>
 class FullAgent {
  public:
   explicit FullAgent(AgentConfigType config) : enclave_(config) {
-    Ghost::InitCore();
+    GhostHelper()->InitCore();
   }
   virtual ~FullAgent() {
     // Derived dtors should have called TerminateAgentTasks().
