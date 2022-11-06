@@ -36,6 +36,7 @@
 #include "absl/base/call_once.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/memory/memory.h"
+#include "absl/status/statusor.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "lib/logging.h"
@@ -127,7 +128,7 @@ inline pid_t GetTID() {
 //
 // Most callers should never need to call this function (preferring
 // Gtid::Current() since it caches the gtid in a thread-local var).
-int64_t GetGtid();
+absl::StatusOr<int64_t> GetGtid();
 
 // Issues the equivalent of an x86 `pause` instruction on the target
 // architecture. This is generally useful to call in the body of a spinlock loop
@@ -164,9 +165,12 @@ class Gtid {
 
   // Returns the GTID for the calling thread.
   static inline Gtid Current() {
-    static thread_local int64_t gtid = GetGtid();
+    static thread_local int64_t gtid = GetGtid().ValueOrDie();
     return Gtid(gtid);
   }
+
+  // Returns the GTID for a given thread.
+  static absl::StatusOr<Gtid> FromTid(int64_t tid);
 
   // Returns the raw GTID number.
   int64_t id() const { return gtid_raw_; }

@@ -32,6 +32,7 @@
 #include "absl/container/node_hash_map.h"
 #include "absl/debugging/stacktrace.h"
 #include "absl/debugging/symbolize.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_format.h"
 #include "kernel/ghost_uapi.h"
 #include "lib/logging.h"
@@ -111,18 +112,20 @@ int64_t GetGtidFromFile(FILE *stream) {
   return gtid;
 }
 
-int64_t gtid(int64_t pid) {
-  int64_t gtid = -1;
-  FILE *stream =
-      fopen(absl::StrCat("/proc/", pid, "/ghost/gtid").c_str(), "r");
+absl::StatusOr<int64_t> gtid(int64_t pid) {
+  FILE* stream = fopen(absl::StrCat("/proc/", pid, "/ghost/gtid").c_str(), "r");
   if (stream) {
-    gtid = GetGtidFromFile(stream);
+    int64_t gtid = GetGtidFromFile(stream);
     fclose(stream);
+    if (gtid < 0) {
+      return absl::InvalidArgumentError(
+          absl::StrFormat("Unable to extract gtid for %lld", pid));
+    }
+    return gtid;
+  } else {
+    return absl::InvalidArgumentError(
+        absl::StrFormat("Unable to open proc entry for %lld", pid));
   }
-  if (gtid < 0) {  // Fallback to syscall.
-    gtid = pid << ghost_tid_seqnum_bits();
-  }
-  return gtid;
 }
 
 int64_t GetTgidFromFile(FILE *stream) {
@@ -210,7 +213,7 @@ done:
 
 pid_t Gtid::tid() const { return gtid_raw_ >> ghost_tid_seqnum_bits(); }
 
-int64_t GetGtid() { return gtid(GetTID()); }
+absl::StatusOr<int64_t> GetGtid() { return gtid(GetTID()); }
 
 ABSL_CONST_INIT static absl::base_internal::SpinLock gtid_name_map_lock(
     absl::kConstInit, absl::base_internal::SCHEDULE_KERNEL_ONLY);
@@ -256,6 +259,14 @@ absl::string_view Gtid::describe() const {
   }
 
   return get_gtid_name(gtid);
+}
+
+absl::StatusOr<Gtid> Gtid::FromTid(int64_t tid) {
+  absl::StatusOr<int64_t> gtid_or = gtid(tid);
+  if (!gtid_or.ok()) {
+    return gtid_or.status();
+  }
+  return Gtid(gtid_or.value());
 }
 
 static std::string DecodeAddr(void* addr) {
