@@ -15,6 +15,8 @@ exports_files([
     "biff_bpf.h",
     "common.bpf.h",
     "edf.h",
+    "pntring.bpf.h",
+    "pntring_funcs.bpf.h",
     "schedfair.h",
     "schedlat.h",
     "schedrun.h",
