@@ -21,60 +21,116 @@
 #include <deque>
 #include <iostream>
 #include <memory>
+#include <ostream>
 #include <set>
 #include <vector>
 
-#include "absl/status/status.h"
+#include "absl/strings/str_format.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "lib/agent.h"
 #include "lib/base.h"
 #include "lib/scheduler.h"
 
+static const absl::Time start = absl::Now();
+
 namespace ghost {
 
-enum class CfsTaskState {
-  kBlocked,   // not on runqueue.
-  kRunnable,  // transitory state:
-              // 1. kBlocked->kRunnable->kQueued
-              // 2. kQueued->kRunnable->kOnCpu
-  kQueued,    // on runqueue.
-  kOnCpu,     // running on cpu.
+class CfsTaskState;
+std::ostream& operator<<(std::ostream& os, const CfsTaskState& state);
+
+// We could use just "enum class", but embedding an enum (which is implicitly
+// convertable to an int) makes a lot of the debugging code simpler. We could do
+// some hackery like static_cast<typename
+// std::underlying_type<CfsTaskState>::type>(s) to go to an int, but even so,
+// enum classes can't have member functions, which makes it very easy to embed
+// debugging asserts.
+class CfsTaskState {
+ public:
+  enum State {
+    kBlocked = 0,  // Task cannot run
+    kRunnable,     // Task can run
+    kRunning,      // Task is running (up to preemption by the agent itself)
+    kDone,         // Task is dead or departed
+    kNumStates,
+  };
+
+  explicit CfsTaskState(State state) : state_(state), task_name_("") {}
+  explicit CfsTaskState(State state, absl::string_view task_name)
+      : state_(state), task_name_(task_name) {}
+
+  // Make sure no one accidentally does something that'll mess up tracking like
+  // task.run_state = CfsTaskState::kBlocked.
+  CfsTaskState(const CfsTaskState&) = delete;
+  CfsTaskState& operator=(const CfsTaskState&) = delete;
+
+  State Get() const { return state_; }
+  void Set(State state) {
+#ifndef NDEBUG
+    // These assertions are expensive, relatively, so don't even try them unless
+    // we are in debug mode.
+    state_trace_.push_back(state);
+    AssertValidTransition(state);
+#endif
+    state_ = state;
+  }
+
+ private:
+#ifndef NDEBUG
+  void AssertValidTransition(State next);
+  const std::map<State, uint64_t>& GetTransitionMap() {
+    static const auto* map =
+        new std::map<State, uint64_t>{{kBlocked, kToBlocked},
+                                      {kRunnable, kToRunnable},
+                                      {kRunning, kToRunning},
+                                      {kDone, kToDone}};
+    return *map;
+  }
+#endif  // !NDEBUG
+
+  State state_;
+  absl::string_view task_name_;
+
+#ifndef NDEBUG
+  std::vector<State> state_trace_;
+  // State Transition Map. Each kToBlah encodes valid states such that we can
+  // transition to blah. To validate that we can go from kFoo to kBar, we check
+  // that the correct bit it set. e.g. (kToFoo & (1 << kBar)) == 1 iff kBar ->
+  // kFoo is valid.
+  constexpr static uint64_t kToBlocked =
+      (1 << CfsTaskState::kRunning) + (1 << CfsTaskState::kBlocked);
+  constexpr static uint64_t kToRunnable = (1 << kBlocked) + (1 << kRunning);
+  constexpr static uint64_t kToRunning = (1 << kRunnable) + (1 << kRunning);
+  constexpr static uint64_t kToDone =
+      (1 << kRunnable) + (1 << kBlocked) + (1 << kRunning);
+
+#endif
 };
 
-// For CHECK and friends.
-std::ostream& operator<<(std::ostream& os, const CfsTaskState& state);
+struct CpuState;
 
 struct CfsTask : public Task<> {
   explicit CfsTask(Gtid d_task_gtid, ghost_sw_info sw_info)
       : Task<>(d_task_gtid, sw_info), vruntime(absl::ZeroDuration()) {}
   ~CfsTask() override {}
 
-  inline bool blocked() const { return run_state == CfsTaskState::kBlocked; }
-  inline bool queued() const { return run_state == CfsTaskState::kQueued; }
-  inline bool oncpu() const { return run_state == CfsTaskState::kOnCpu; }
-
-  // N.B. _runnable() is a transitory state typically used during runqueue
-  // manipulation. It is not expected to be used from task msg callbacks.
-  //
-  // If you are reading this then you probably want to take a closer look
-  // at queued() instead.
-  inline bool _runnable() const { return run_state == CfsTaskState::kRunnable; }
-
   // std::multiset expects one to pass a strict (< not <=) weak ordering
   // function as a template parameter. Technically, this doesn't have to be
   // inside of the struct, but it seems logical to keep this here.
-  static inline bool Less(CfsTask* a, CfsTask* b) {
+  static bool Less(CfsTask* a, CfsTask* b) {
+    if (a->vruntime == b->vruntime) {
+      return (uintptr_t)a < (uintptr_t)b;
+    }
     return a->vruntime < b->vruntime;
   }
 
-  CfsTaskState run_state = CfsTaskState::kBlocked;
+  CfsTaskState run_state =
+      CfsTaskState(CfsTaskState::kBlocked, gtid.describe());
   int cpu = -1;
 
-  // Whether the last execution was preempted or not.
-  bool preempted = false;
-
-  // Cfs sorts tasks by runtime, so we need to keep track of how long a task has
-  // been running during this period.
+  // Cfs sorts tasks by vruntime, so we need to keep track of how long a task
+  // has been running.
   absl::Duration vruntime;
 
   // runtime_at_first_pick is how much runtime this task had at its initial
@@ -92,8 +148,8 @@ class CfsRq {
   CfsRq& operator=(CfsRq&) = delete;
 
   // See CfsRq::granularity_ for a description of how these parameters work.
-  void SetMinGranularity(absl::Duration t);
-  void SetLatency(absl::Duration t);
+  void SetMinGranularity(absl::Duration t) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+  void SetLatency(absl::Duration t) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Returns the length of time that the task should run in real time before it
   // is preempted. This value is equivalent to:
@@ -107,68 +163,67 @@ class CfsRq {
   // rq to give it time on the cpu doesn't require a change as we still manage
   // the same number of tasks. But a task blocking, departing, or adding
   // a new task, does require an update.
-  absl::Duration Granularity();
+  absl::Duration MinPreemptionGranularity() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
-  // Removes and returns the task with the smallest vruntime from the
-  // underlying container. It is the responsibility of the caller to ensure
-  // PutPrevTask is called to re-enque the task.
-  // NOTE: If PickNextTask observes that the task in put_prev_task_elision_
-  // has not run for granularity_ yet, then it will return that task.
-  CfsTask* PickNextTask();
+  // PickNextTask checks if prev should run again, and if so, returns prev.
+  // Otherwise, it picks the task with the smallest vruntime.
+  // PickNextTask also is the sync up point for processing state changes to
+  // prev. PickNextTask sets the state of its returned task to kOnCpu.
+  CfsTask* PickNextTask(CfsTask* prev, TaskAllocator<ghost::CfsTask>* allocator,
+                        CpuState* cs) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
-  // Enqueues a new task or a task that is transitioning to RUNNABLE from
-  // another state.
-  void EnqueueTask(CfsTask* task);
+  // Enqueues a new task or a task that is coming from being blocked.
+  void EnqueueTask(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Enqueue a task that is transitioning from being on the cpu to off the cpu.
-  // The task might have its requeuing into the tree delayed.
-  void PutPrevTask(CfsTask* task, bool can_elide);
+  void PutPrevTask(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
-  // Same as PutPrevTask, but force putting the task into the tree.
-  void NonElidedPutPrevTask(CfsTask* task);
+  // Erase 'task' from the runqueue. Task must be on rq.
+  void Erase(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
-  // Erase 'task' from the runqueue.
-  //
-  // Caller must ensure that 'task' is on the runqueue in the first place
-  // (e.g. via task->queued()).
-  void Erase(CfsTask* task);
+  size_t Size() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return rq_.size(); }
 
-  size_t Size() const {
-    absl::MutexLock lock(&mu_);
-    return rq_.size();
-  }
+  bool Empty() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return Size() == 0; }
 
-  bool Empty() const { return Size() == 0; }
+  // Needs to be called everytime we touch the rq or update a current task's
+  // vruntime.
+  void UpdateMinVruntime(CpuState* cs) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Protects this runqueue and the state of any task assoicated with the rq.
+  mutable absl::Mutex mu_;
 
  private:
   // Inserts a task into the backing runqueue.
   // Preconditons: task->vruntime has been set to a logical value.
   void InsertTaskIntoRq(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
-  mutable absl::Mutex mu_;
-  // We use a multiset as the backing data structure as, according to the
+  absl::Duration min_vruntime_ ABSL_GUARDED_BY(mu_);
+
+  // Unlike in-kernel CFS, we want to have this properties per run-queue instead
+  // of system wide.
+  absl::Duration min_preemption_granularity_ ABSL_GUARDED_BY(mu_);
+  absl::Duration latency_ ABSL_GUARDED_BY(mu_);
+
+  // We use a set as the backing data structure as, according to the
   // C++ standard, it is backed by a red-black tree, which is the backing
   // data structure in CFS in the the kernel. While opaque, using an std::
   // container is easiest way to use a red-black tree short of writing or
   // importing our own.
-  std::multiset<CfsTask*, decltype(&CfsTask::Less)> rq_ ABSL_GUARDED_BY(mu_);
-  absl::Duration min_vruntime_ ABSL_GUARDED_BY(mu_);
-
-  // When PutPrevTask is called, there is a non-zero chance that we want the
-  // subsequent PickNextTask to evaluate to the task we just Put. The
-  // canonical example of this is when the agent preempts the task
-  // to consume a CpuTick, which causes PutPrevTask to be called on the task.
-  // After consuming the messages, we will reach Schedule(), which calls
-  // PickNextTask. If the previously running task (put_prev_task_elision_)
-  // has not run for granularity_ yet, then we put it back on the cpu,
-  // regardless of where it is in the rb-tree. Given this, we defer placing
-  // a task that had PutPrevTask on it, back in the rb-tree, until we are sure
-  // the subsequent PickNextTask will not pick it.
-  CfsTask* put_prev_task_elision_ ABSL_GUARDED_BY(mu_);
-
-  absl::Duration min_granularity_ ABSL_GUARDED_BY(mu_);
-  absl::Duration latency_ ABSL_GUARDED_BY(mu_);
+  std::set<CfsTask*, decltype(&CfsTask::Less)> rq_ ABSL_GUARDED_BY(mu_);
 };
+
+struct CpuState {
+  // current points to the CfsTask that we most recently picked to run on the
+  // cpu. Note, we say most recently picked as a txn could fail leaving us with
+  // current pointing to a task that is not currently on cpu.
+  CfsTask* current = nullptr;
+  // pointer to the kernel ipc queue.
+  std::unique_ptr<ghost::LocalChannel> channel = nullptr;
+  // the run queue responsible from scheduling tasks on this cpu.
+  CfsRq run_queue;
+  // Should we keep running the current task.
+  bool preempt_curr = false;
+} ABSL_CACHELINE_ALIGNED;
 
 class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
  public:
@@ -184,7 +239,9 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
 
   bool Empty(const Cpu& cpu) {
     CpuState* cs = cpu_state(cpu);
-    return cs->run_queue.Empty();
+    absl::MutexLock l(&cs->run_queue.mu_);
+    bool res = cs->run_queue.Empty();
+    return res;
   }
 
   void ValidatePreExitState();
@@ -216,23 +273,30 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   void CpuTick(const Message& msg) final;
 
  private:
+  // Checks if we should preempt the current task. If so, sets preempt_curr_.
+  void CheckPreemptTick(const Cpu& cpu);
+
+  // CfsSchedule looks at the current cpu state and its run_queue, decides what
+  // to run next, and then commits a txn. REQUIRES: Called after all messages
+  // have been ack'ed otherwise the txn will fail.
   void CfsSchedule(const Cpu& cpu, StatusWord::BarrierToken agent_barrier,
                    bool prio_boost);
-  void TaskOffCpu(CfsTask* task, bool blocked, bool from_switchto);
+
+  // HandleTaskDone is responsible for remvoing a task from the run queue and
+  // freeing it if it is currently !cs->current, otherwise, it defers the
+  // freeing to PickNextTask.
+  void HandleTaskDone(CfsTask* task, bool from_switchto);
+
+  // Migrate takes task and places it on cpu's run queue.
   void Migrate(CfsTask* task, Cpu cpu, StatusWord::BarrierToken seqnum);
-  int DiscoverTask(CfsTask* task);
-  Cpu AssignCpu(CfsTask* task);
+  Cpu SelectTaskRq(CfsTask* task);
   void DumpAllTasks();
 
-  struct CpuState {
-    CfsTask* current = nullptr;
-    std::unique_ptr<ghost::LocalChannel> channel = nullptr;
-    CfsRq run_queue;
-  } ABSL_CACHELINE_ALIGNED;
+  void PingCpu(const Cpu& cpu);
 
-  inline CpuState* cpu_state(const Cpu& cpu) { return &cpu_states_[cpu.id()]; }
+  CpuState* cpu_state(const Cpu& cpu) { return &cpu_states_[cpu.id()]; }
 
-  inline CpuState* cpu_state_of(const CfsTask* task) {
+  CpuState* cpu_state_of(const CfsTask* task) {
     CHECK_GE(task->cpu, 0);
     CHECK_LT(task->cpu, MAX_CPUS);
     return &cpu_states_[task->cpu];
@@ -243,6 +307,8 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
 
   absl::Duration min_granularity_;
   absl::Duration latency_;
+
+  friend class CfsRq;
 };
 
 std::unique_ptr<CfsScheduler> MultiThreadedCfsScheduler(
@@ -275,6 +341,7 @@ class CfsConfig : public AgentConfig {
   absl::Duration latency_;
 };
 
+// TODO: Pull these classes out into different files.
 template <class EnclaveType>
 class FullCfsAgent : public FullAgent<EnclaveType> {
  public:

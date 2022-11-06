@@ -28,9 +28,8 @@ void SimpleExp() {
     fprintf(stderr, "fantastic nap!\n");
     // Verify that a ghost thread implicitly clones itself in the ghost
     // scheduling class.
-    std::thread t2([] {
-      CHECK_EQ(sched_getscheduler(/*pid=*/0), SCHED_GHOST);
-    });
+    std::thread t2(
+        [] { CHECK_EQ(sched_getscheduler(/*pid=*/0), SCHED_GHOST); });
     t2.join();
   });
 
@@ -49,9 +48,8 @@ void SimpleExpMany(int num_threads) {
 
           // Verify that a ghost thread implicitly clones itself in the ghost
           // scheduling class.
-          std::thread t([] {
-            CHECK_EQ(sched_getscheduler(/*pid=*/0), SCHED_GHOST);
-          });
+          std::thread t(
+              [] { CHECK_EQ(sched_getscheduler(/*pid=*/0), SCHED_GHOST); });
           t.join();
 
           absl::SleepFor(absl::Milliseconds(10));
