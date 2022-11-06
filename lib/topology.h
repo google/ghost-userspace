@@ -24,6 +24,7 @@
 
 #include <sched.h>
 
+#include <atomic>
 #include <filesystem>
 #include <vector>
 
@@ -457,6 +458,68 @@ class CpuList : public CpuMap {
   uint64_t bitmap_[kMapCapacity] = {0};
 };
 
+// An atomic implementation of a CpuMap. Useful for cases where it would be
+// undesirable to use a mutex to protect a CpuList.
+//
+// Like CpuMap, this works with range based iterators.
+class AtomicCpuMap : public CpuMap {
+ public:
+  explicit AtomicCpuMap(const Topology& topology) : CpuMap(topology) {}
+
+  // Sets the bit at index `id`.
+  void Set(uint32_t id) override {
+    DCHECK_GE(id, 0);
+    DCHECK_LT(id, MAX_CPUS);
+
+    bitmap_[id / kIntsBits].fetch_or(1ULL << (id % kIntsBits),
+                                     std::memory_order_release);
+  }
+  // Inheritance would otherwise hide the overloaded function that takes in a
+  // Cpu argument (here and below).
+  using CpuMap::Set;
+
+  // Clears the bit at index `id`.
+  void Clear(uint32_t id) override {
+    DCHECK_GE(id, 0);
+    DCHECK_LT(id, MAX_CPUS);
+
+    bitmap_[id / kIntsBits].fetch_and(~(1ULL << (id % kIntsBits)),
+                                      std::memory_order_release);
+  }
+  using CpuMap::Clear;
+
+  // Returns true if the bit at index `id` is set, returns false otherwise.
+  bool IsSet(uint32_t id) const override {
+    DCHECK_GE(id, 0);
+    DCHECK_LT(id, MAX_CPUS);
+
+    return GetNthMap(id / kIntsBits) & (1ULL << (id % kIntsBits));
+  }
+  using CpuMap::IsSet;
+
+  // Clears the given bit in the mask. Returns true if bit was previously set,
+  // false otherwise.
+  bool TestAndClear(uint32_t id) {
+    DCHECK_GE(id, 0);
+    DCHECK_LT(id, MAX_CPUS);
+
+    const uint64_t mask = ~(1ULL << (id % kIntsBits));
+    uint64_t old =
+        bitmap_[id / kIntsBits].fetch_and(mask, std::memory_order_release);
+    return old & ~mask;
+  }
+  bool TestAndClear(const Cpu& cpu) { return TestAndClear(cpu.id()); }
+
+ private:
+  uint64_t GetNthMap(int n) const override {
+    DCHECK_GE(n, 0);
+    DCHECK_LT(n, kMapCapacity);
+    return bitmap_[n].load(std::memory_order_acquire);
+  }
+
+  std::atomic_uint64_t bitmap_[kMapCapacity] = {{0}};
+};
+
 // This represents the topology of the machine, including the CPUs, cores, and
 // NUMA node information. Methods that are passed invalid parameters (e.g.,
 // passing -1 to `cpu()`) will crash the program.
@@ -485,6 +548,7 @@ class Topology {
   std::vector<Cpu::Raw> Export() const;
 
   CpuList EmptyCpuList() const { return CpuList(*this); }
+  AtomicCpuMap EmptyAtomicCpuMap() const { return AtomicCpuMap(*this); }
 
   // Helper for creating CpuLists from a vector of integer CPU IDs (`cpus`).
   CpuList ToCpuList(const std::vector<int>& cpus) const {

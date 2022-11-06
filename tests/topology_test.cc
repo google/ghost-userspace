@@ -20,6 +20,7 @@
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/strings/numbers.h"
+#include "lib/ghost.h"
 
 // These tests check that the `Topology` functions return expected values.
 
@@ -959,6 +960,111 @@ TEST(TopologyTest, CpusOnNode) {
     EXPECT_THAT(cpus_on_node.Size(), Eq(1));
     EXPECT_THAT(cpus_on_node.Front().id(), Eq(i));
   }
+}
+// Tests the basic `Set`, `IsSet`, and `Clear` functionality of `AtomicCpuMap`.
+TEST(TopologyTest, AtomicBitmapSet) {
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
+  AtomicCpuMap map = TestTopology()->EmptyAtomicCpuMap();
+
+  std::vector<int> cpus = {5, 20, 87, 94, 100};
+  for (int cpu : cpus) {
+    map.Set(cpu);
+  }
+  for (int i = 0; i < MAX_CPUS; i++) {
+    bool exists = (std::find(cpus.begin(), cpus.end(), i) != cpus.end());
+    EXPECT_THAT(map.IsSet(i), Eq(exists));
+  }
+
+  EXPECT_THAT(map.Size(), Eq(cpus.size()));
+  for (int i = 0; i < cpus.size(); i++) {
+    map.Clear(cpus[i]);
+    EXPECT_THAT(map.IsSet(cpus[i]), IsFalse());
+  }
+  EXPECT_THAT(map.Size(), Eq(0));
+}
+
+// Tests that the iterator iterates over the `AtomicCpuMap` correctly with a for
+// loop.
+TEST(TopologyTest, AtomicIterator) {
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
+  AtomicCpuMap map = TestTopology()->EmptyAtomicCpuMap();
+  std::vector<int> cpus = {5, 20, 87, 94, 100};
+  for (int cpu : cpus) {
+    map.Set(cpu);
+  }
+
+  int index = 0;
+  auto it = map.begin();
+  for (; it != map.end(); it++) {
+    EXPECT_THAT(it->id(), Eq(cpus[index++]));
+  }
+  EXPECT_THAT(it, Eq(map.end()));
+  // Since `it` == `list.end()`, `it` should point to an invalid CPU.
+  EXPECT_THAT(it->valid(), IsFalse());
+  // Check that the for loop only iterated once per CPU in `list`.
+  EXPECT_THAT(index, Eq(cpus.size()));
+}
+
+// Tests that the iterator iterates over the `AtomicCpuMap` correctly with a
+// range-based for loop.
+TEST(TopologyTest, AtomicIteratorRange) {
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
+  AtomicCpuMap map = TestTopology()->EmptyAtomicCpuMap();
+  std::vector<int> cpus = {5, 20, 87, 94, 100};
+  for (int cpu : cpus) {
+    map.Set(cpu);
+  }
+
+  int index = 0;
+  for (const Cpu& cpu : map) {
+    EXPECT_THAT(cpu.id(), Eq(cpus[index++]));
+  }
+  // Check that the range-based for loop only iterated once per CPU in `list`.
+  EXPECT_THAT(index, Eq(cpus.size()));
+}
+
+// Tests that multiple threads racing over trying to do an
+// AtomicCpuMap::TestAndClear on the same cpu will only be able to clear the cpu
+// once.
+TEST(TopologyTest, AtomicTestAndClear) {
+  AtomicCpuMap map = TestTopology()->EmptyAtomicCpuMap();
+  for (const Cpu& cpu : TestTopology()->all_cpus()) {
+    map.Set(cpu);
+  }
+  const Cpu& target_cpu = TestTopology()->all_cpus().GetNthCpu(0);
+  map.Clear(target_cpu);
+  std::atomic<int> num_clears = 0;
+  Notification done;
+
+  std::vector<std::unique_ptr<GhostThread>> threads;
+  for (int i = 0; i < 5; i++) {
+    threads.emplace_back(
+        new GhostThread(GhostThread::KernelScheduler::kCfs,
+                        [&map, &target_cpu, &num_clears, &done] {
+                          while (true) {
+                            if (done.HasBeenNotified()) {
+                              return;
+                            }
+                            if (map.TestAndClear(target_cpu)) {
+                              num_clears++;
+                            }
+                          }
+                        }));
+  }
+
+  constexpr int n = 50;
+  for (int i = 0; i < n; i++) {
+    map.Set(target_cpu);
+    absl::SleepFor(absl::Microseconds(1));
+    while (map.IsSet(target_cpu)) {
+    }
+  }
+  done.Notify();
+
+  // Wait for all threads to finish.
+  for (std::unique_ptr<GhostThread>& t : threads) t->Join();
+
+  EXPECT_THAT(num_clears, Eq(n));
 }
 
 }  // namespace
