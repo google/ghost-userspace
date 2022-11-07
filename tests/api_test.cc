@@ -1730,7 +1730,7 @@ class DepartedRaceAgent : public LocalAgent {
       StatusWord::BarrierToken agent_barrier = status_word().barrier();
       const bool prio_boost = status_word().boosted_priority();
 
-      if (Finished() && !num_tasks) {
+      if (Finished()) {
         break;
       }
 
