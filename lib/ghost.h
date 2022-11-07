@@ -413,7 +413,7 @@ class StatusWord {
   bool stale(BarrierToken prev) const { return prev == barrier(); }
 
   bool in_use() const { return sw_flags() & GHOST_SW_F_INUSE; }
-  bool can_free() const { return sw_flags() & GHOST_SW_F_CANFREE; }
+  virtual bool can_free() const { return sw_flags() & GHOST_SW_F_CANFREE; }
   bool on_cpu() const { return sw_flags() & GHOST_SW_TASK_ONCPU; }
   bool cpu_avail() const { return sw_flags() & GHOST_SW_CPU_AVAIL; }
   bool runnable() const { return sw_flags() & GHOST_SW_TASK_RUNNABLE; }
