@@ -1747,6 +1747,13 @@ class DepartedRaceAgent : public LocalAgent {
           break;  // no more runnable tasks.
         }
 
+        if (task->status_word.on_cpu()) {
+          // 'task' is still oncpu: put it back on the run_queue and try to
+          // schedule in the next iteration.
+          run_queue.Enqueue(task);
+          continue;
+        }
+
         RunRequest* req = enclave()->GetRunRequest(cpu);
         req->Open({
             .target = task->gtid,
