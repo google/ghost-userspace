@@ -340,6 +340,11 @@ class Ghost {
     return sched_setaffinity(gtid.tid(), sizeof(cpuset), &cpuset);
   }
 
+  // Returns the sched class that the task `gtid` is in.
+  virtual int SchedGetScheduler(const Gtid& gtid) {
+    return sched_getscheduler(gtid.tid());
+  }
+
   // Moves the specified thread to the ghOSt scheduling class, using the enclave
   // dir_fd.  `pid` may be a pid_t or a raw gtid. If dir_fd is -1, this will use
   // the enclave dir_fd previously set with SetGlobalEnclaveFds().
