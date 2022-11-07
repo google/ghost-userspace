@@ -348,8 +348,8 @@ class Ghost {
   // Moves the specified thread to the ghOSt scheduling class, using the enclave
   // dir_fd.  `pid` may be a pid_t or a raw gtid. If dir_fd is -1, this will use
   // the enclave dir_fd previously set with SetGlobalEnclaveFds().
-  virtual int SchedTaskEnterGhost(int64_t pid, int dir_fd = -1);
-  virtual int SchedTaskEnterGhost(const Gtid& gtid, int dir_fd = -1);
+  virtual int SchedTaskEnterGhost(int64_t pid, int dir_fd);
+  virtual int SchedTaskEnterGhost(const Gtid& gtid, int dir_fd);
   // Makes the calling thread an agent.  Note that the calling thread must have
   // the `CAP_SYS_NICE` capability to make itself an agent.
   virtual int SchedAgentEnterGhost(int ctl_fd, int queue_fd);

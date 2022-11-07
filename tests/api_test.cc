@@ -1919,7 +1919,9 @@ TEST(ApiTest, SchedEnterGhostGtid) {
 
   GhostThread t(GhostThread::KernelScheduler::kCfs, [] {
     EXPECT_THAT(sched_getscheduler(/*pid=*/0), Eq(0));
-    EXPECT_THAT(GhostHelper()->SchedTaskEnterGhost(Gtid::Current()), Eq(0));
+    EXPECT_THAT(
+        GhostHelper()->SchedTaskEnterGhost(Gtid::Current(), /*dir_fd=*/-1),
+        Eq(0));
     EXPECT_THAT(sched_getscheduler(/*pid=*/0), Eq(SCHED_GHOST));
   });
   t.Join();
