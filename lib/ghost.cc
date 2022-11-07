@@ -191,7 +191,7 @@ void Ghost::InitCore() {
   static_assert((MAX_CPUS & (MAX_CPUS - 1)) == 0);
 }
 
-int Ghost::SchedTaskEnterGhost(pid_t pid, int dir_fd) {
+int Ghost::SchedTaskEnterGhost(int64_t pid, int dir_fd) {
   if (dir_fd == -1) {
     dir_fd = GhostHelper()->GetGlobalEnclaveDirFd();
   }
@@ -213,6 +213,10 @@ int Ghost::SchedTaskEnterGhost(pid_t pid, int dir_fd) {
   // possible that the syscall succeeded, but the enclave was immediately
   // destroyed, and our task is back in CFS already.
   return ret;
+}
+
+int Ghost::SchedTaskEnterGhost(const Gtid& gtid, int dir_fd) {
+  return SchedTaskEnterGhost(gtid.id(), dir_fd);
 }
 
 int Ghost::SchedAgentEnterGhost(int ctl_fd, int queue_fd) {

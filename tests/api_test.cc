@@ -18,6 +18,7 @@
 #include "gtest/gtest.h"
 #include "absl/random/random.h"
 #include "lib/agent.h"
+#include "lib/ghost.h"
 #include "lib/scheduler.h"
 #include "schedulers/fifo/per_cpu/fifo_scheduler.h"
 
@@ -1905,6 +1906,23 @@ TEST(ApiTest, GhostCloneGhost) {
     num_tasks = ap.Rpc(FifoScheduler::kCountAllTasks);
     EXPECT_THAT(num_tasks, Ge(0));
   } while (num_tasks);
+
+  GhostHelper()->CloseGlobalEnclaveFds();
+}
+
+// Enter into ghost using a gtid.
+TEST(ApiTest, SchedEnterGhostGtid) {
+  Topology* topology = MachineTopology();
+
+  auto ap = AgentProcess<FullFifoAgent<LocalEnclave>, AgentConfig>(
+      AgentConfig(topology, topology->ToCpuList(std::vector<int>{0})));
+
+  GhostThread t(GhostThread::KernelScheduler::kCfs, [] {
+    EXPECT_THAT(sched_getscheduler(/*pid=*/0), Eq(0));
+    EXPECT_THAT(GhostHelper()->SchedTaskEnterGhost(Gtid::Current()), Eq(0));
+    EXPECT_THAT(sched_getscheduler(/*pid=*/0), Eq(SCHED_GHOST));
+  });
+  t.Join();
 
   GhostHelper()->CloseGlobalEnclaveFds();
 }
