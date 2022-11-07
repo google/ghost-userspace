@@ -89,6 +89,7 @@ class DeadAgent : public LocalAgent {
 
           case MSG_TASK_DEAD:
             ASSERT_THAT(task, NotNull());
+            task = nullptr;
             break;
 
           default:
@@ -101,6 +102,18 @@ class DeadAgent : public LocalAgent {
       const bool prio_boost = status_word().boosted_priority();
 
       if (Finished()) {
+        // If the agent is terminating before observing the TASK_DEAD msg
+        // then explicitly release ownership of the underlying Task object.
+        //
+        // In this situation it is possible that the task's status_word is
+        // not marked CAN_FREE when the Task::~Task() runs which in turn
+        // triggers a CHECK fail.
+        //
+        // Note that the kernel will move the task to CFS when the enclave
+        // is destroyed so there is no risk of stranding the task.
+        if (task) {
+          task.release();
+        }
         break;
       }
 
