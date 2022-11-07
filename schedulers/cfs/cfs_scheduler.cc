@@ -224,8 +224,7 @@ Cpu CfsScheduler::SelectTaskRq(CfsTask* task) {
   return min_load_cpu;
 }
 
-void CfsScheduler::Migrate(CfsTask* task, Cpu cpu,
-                           StatusWord::BarrierToken seqnum) {
+void CfsScheduler::Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum) {
   // The task is not visible to anyone except the agent currently proccessing
   // the task as the only way to get to migrate is if the task is not
   // currently on a rq, so it would be impossible for anyone else to touch the
@@ -463,8 +462,7 @@ void CfsScheduler::CpuTick(const Message& msg) {
   CheckPreemptTick(topology()->cpu(payload->cpu));
 }
 
-void CfsScheduler::CfsSchedule(const Cpu& cpu,
-                               StatusWord::BarrierToken agent_barrier,
+void CfsScheduler::CfsSchedule(const Cpu& cpu, BarrierToken agent_barrier,
                                bool prio_boost) {
   RunRequest* req = enclave()->GetRunRequest(cpu);
   CpuState* cs = cpu_state(cpu);
@@ -554,7 +552,7 @@ void CfsScheduler::CfsSchedule(const Cpu& cpu,
 }
 
 void CfsScheduler::Schedule(const Cpu& cpu, const StatusWord& agent_sw) {
-  StatusWord::BarrierToken agent_barrier = agent_sw.barrier();
+  BarrierToken agent_barrier = agent_sw.barrier();
   CpuState* cs = cpu_state(cpu);
 
   GHOST_DPRINT(3, stderr, "Schedule: agent_barrier[%d] = %d\n", cpu.id(),

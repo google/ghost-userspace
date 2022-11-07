@@ -272,8 +272,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   // CfsSchedule looks at the current cpu state and its run_queue, decides what
   // to run next, and then commits a txn. REQUIRES: Called after all messages
   // have been ack'ed otherwise the txn will fail.
-  void CfsSchedule(const Cpu& cpu, StatusWord::BarrierToken agent_barrier,
-                   bool prio_boost);
+  void CfsSchedule(const Cpu& cpu, BarrierToken agent_barrier, bool prio_boost);
 
   // HandleTaskDone is responsible for remvoing a task from the run queue and
   // freeing it if it is currently !cs->current, otherwise, it defers the
@@ -281,7 +280,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   void HandleTaskDone(CfsTask* task, bool from_switchto);
 
   // Migrate takes task and places it on cpu's run queue.
-  void Migrate(CfsTask* task, Cpu cpu, StatusWord::BarrierToken seqnum);
+  void Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum);
   Cpu SelectTaskRq(CfsTask* task);
   void DumpAllTasks();
 

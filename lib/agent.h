@@ -71,7 +71,7 @@ class Agent {
   // REQUIRES: StartComplete() has been called.
   bool cpu_avail() const { return status_word().cpu_avail(); }
   bool boosted_priority() const { return status_word().boosted_priority(); }
-  StatusWord::BarrierToken barrier() const { return status_word().barrier(); }
+  BarrierToken barrier() const { return status_word().barrier(); }
   Enclave* enclave() const { return enclave_; }
   virtual const StatusWord& status_word() const = 0;
 

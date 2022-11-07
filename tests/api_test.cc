@@ -98,7 +98,7 @@ class DeadAgent : public LocalAgent {
         Consume(channel_, msg);
       }
 
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      BarrierToken agent_barrier = status_word().barrier();
       const bool prio_boost = status_word().boosted_priority();
 
       if (Finished()) {
@@ -260,7 +260,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
     return rq_.Empty();
   }
 
-  void Schedule(const Cpu& this_cpu, StatusWord::BarrierToken agent_barrier,
+  void Schedule(const Cpu& this_cpu, BarrierToken agent_barrier,
                 bool prio_boost, bool finished) {
     RunRequest* req = enclave()->GetRunRequest(this_cpu);
 
@@ -298,7 +298,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
 
       const int sync_group_owner = this_cpu.id();
       Gtid target = Gtid(GHOST_IDLE_GTID);
-      StatusWord::BarrierToken target_barrier = StatusWord::NullBarrierToken();
+      BarrierToken target_barrier = StatusWord::NullBarrierToken();
       RunRequest* req = enclave()->GetRunRequest(cpu);
       if (cs->next) {
         target = cs->next->gtid;
@@ -488,7 +488,7 @@ class TestAgent : public LocalAgent {
     while (true) {
       // Order is important: agent_barrier must be evaluated before Finished().
       // (see cl/339780042 for details).
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      BarrierToken agent_barrier = status_word().barrier();
       const bool prio_boost = status_word().boosted_priority();
       const bool finished = Finished();
 
@@ -595,7 +595,7 @@ class IdlingAgent : public LocalAgent {
     remote_cpus.Clear(cpu());
 
     while (!Finished()) {
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      BarrierToken agent_barrier = status_word().barrier();
 
       // Non-scheduling agents just yield until they are terminated.
       if (!schedule_) {
@@ -1185,7 +1185,7 @@ class TimeAgent : public LocalAgent {
         Consume(&channel_, msg);
       }
 
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      BarrierToken agent_barrier = status_word().barrier();
       const bool prio_boost = status_word().boosted_priority();
 
       if (Finished() && !task) break;
@@ -1333,7 +1333,7 @@ class SchedAffinityAgent : public LocalAgent {
     size_t task_cpu_idx = 0;    // schedule task on task_cpulist[task_cpu_idx]
 
     while (true) {
-      const StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      const BarrierToken agent_barrier = status_word().barrier();
 
       while (true) {
         Message msg = Peek(channel_);
@@ -1737,7 +1737,7 @@ class DepartedRaceAgent : public LocalAgent {
         Consume(channel_, msg);
       }
 
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      BarrierToken agent_barrier = status_word().barrier();
       const bool prio_boost = status_word().boosted_priority();
 
       if (Finished()) {

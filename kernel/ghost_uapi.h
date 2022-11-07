@@ -99,7 +99,7 @@ struct ghost_ioc_create_queue {
 struct ghost_ioc_assoc_queue {
 	int fd;
 	struct ghost_msg_src src;
-	int barrier;
+	uint32_t barrier;
 	int flags;
 };
 

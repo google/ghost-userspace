@@ -289,7 +289,7 @@ void SolScheduler::RemoveFromRunqueue(SolTask* task) {
 }
 
 void SolScheduler::GlobalSchedule(const StatusWord& agent_sw,
-                                  StatusWord::BarrierToken agent_sw_last) {
+                                  BarrierToken agent_sw_last) {
   const int global_cpu_id = GetGlobalCPUId();
   CpuList available = topology()->EmptyCpuList();
   CpuList assigned = topology()->EmptyCpuList();
@@ -388,7 +388,7 @@ void SolScheduler::GlobalSchedule(const StatusWord& agent_sw,
   }
 }
 
-bool SolScheduler::PickNextGlobalCPU(StatusWord::BarrierToken agent_barrier,
+bool SolScheduler::PickNextGlobalCPU(BarrierToken agent_barrier,
                                      const Cpu& this_cpu) {
   Cpu target(Cpu::UninitializedType::kUninitialized);
   Cpu global_cpu = topology()->cpu(GetGlobalCPUId());
@@ -491,7 +491,7 @@ void SolAgent::AgentThread() {
   PeriodicEdge debug_out(absl::Seconds(1));
 
   while (!Finished() || !global_scheduler_->Empty()) {
-    StatusWord::BarrierToken agent_barrier = status_word().barrier();
+    BarrierToken agent_barrier = status_word().barrier();
     // Check if we're assigned as the Global agent.
     if (cpu().id() != global_scheduler_->GetGlobalCPUId()) {
       RunRequest* req = enclave()->GetRunRequest(cpu());

@@ -605,7 +605,7 @@ bool ShinjukuScheduler::SkipForSchedule(int iteration, const Cpu& cpu) {
 }
 
 void ShinjukuScheduler::GlobalSchedule(const StatusWord& agent_sw,
-                                       StatusWord::BarrierToken agent_sw_last) {
+                                       BarrierToken agent_sw_last) {
   // List of CPUs with open transactions.
   CpuList open_cpus = MachineTopology()->EmptyCpuList();
   const absl::Time now = absl::Now();
@@ -830,8 +830,7 @@ void ShinjukuScheduler::GlobalSchedule(const StatusWord& agent_sw,
   }
 }
 
-void ShinjukuScheduler::PickNextGlobalCPU(
-    StatusWord::BarrierToken agent_barrier) {
+void ShinjukuScheduler::PickNextGlobalCPU(BarrierToken agent_barrier) {
   // TODO: Select CPUs more intelligently.
   for (const Cpu& cpu : cpus()) {
     if (Available(cpu) && cpu.id() != GetGlobalCPUId()) {
@@ -884,7 +883,7 @@ void ShinjukuAgent::AgentThread() {
   PeriodicEdge debug_out(absl::Seconds(1));
 
   while (!Finished()) {
-    StatusWord::BarrierToken agent_barrier = status_word().barrier();
+    BarrierToken agent_barrier = status_word().barrier();
     // Check if we're assigned as the Global agent.
     if (cpu().id() != global_scheduler_->GetGlobalCPUId()) {
       RunRequest* req = enclave()->GetRunRequest(cpu());

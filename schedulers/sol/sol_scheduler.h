@@ -110,8 +110,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
   void RemoveFromRunqueue(SolTask* task);
 
   // Main scheduling function for the global agent.
-  void GlobalSchedule(const StatusWord& agent_sw,
-                      StatusWord::BarrierToken agent_sw_last);
+  void GlobalSchedule(const StatusWord& agent_sw, BarrierToken agent_sw_last);
 
   int32_t GetGlobalCPUId() {
     return global_cpu_.load(std::memory_order_acquire);
@@ -144,8 +143,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
   // global agent's CPU, the global agent calls this function to try to pick a
   // new CPU to move to and, if a new CPU is found, to initiate the handoff
   // process.
-  bool PickNextGlobalCPU(StatusWord::BarrierToken agent_barrier,
-                         const Cpu& this_cpu);
+  bool PickNextGlobalCPU(BarrierToken agent_barrier, const Cpu& this_cpu);
 
   // Print debug details about the current tasks managed by the global agent,
   // CPU state, and runqueue stats.

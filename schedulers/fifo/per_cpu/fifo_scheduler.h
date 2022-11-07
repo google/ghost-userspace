@@ -127,11 +127,11 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   void TaskSwitchto(FifoTask* task, const Message& msg) final;
 
  private:
-  void FifoSchedule(const Cpu& cpu, StatusWord::BarrierToken agent_barrier,
+  void FifoSchedule(const Cpu& cpu, BarrierToken agent_barrier,
                     bool prio_boosted);
   void TaskOffCpu(FifoTask* task, bool blocked, bool from_switchto);
   void TaskOnCpu(FifoTask* task, Cpu cpu);
-  void Migrate(FifoTask* task, Cpu cpu, StatusWord::BarrierToken seqnum);
+  void Migrate(FifoTask* task, Cpu cpu, BarrierToken seqnum);
   Cpu AssignCpu(FifoTask* task);
   void DumpAllTasks();
 

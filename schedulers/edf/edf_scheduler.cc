@@ -346,7 +346,7 @@ void EdfScheduler::DiscoveryComplete() {
 }
 
 bool EdfScheduler::PreemptTask(EdfTask* prev, EdfTask* next,
-                               StatusWord::BarrierToken agent_barrier) {
+                               BarrierToken agent_barrier) {
   GHOST_DPRINT(2, stderr, "PREEMPT(%d)\n", prev->cpu);
   Cpu cpu = topology()->cpu(prev->cpu);
 
@@ -674,7 +674,7 @@ void EdfScheduler::UpdateSchedParams() {
 }
 
 void EdfScheduler::GlobalSchedule(const StatusWord& agent_sw,
-                                  StatusWord::BarrierToken agent_sw_last) {
+                                  BarrierToken agent_sw_last) {
   CpuList updated_cpus = MachineTopology()->EmptyCpuList();
 
   for (const Cpu& cpu : cpus()) {
@@ -818,7 +818,7 @@ void GlobalSatAgent::AgentThread() {
   PeriodicEdge debug_out(absl::Seconds(1));
 
   while (!Finished()) {
-    StatusWord::BarrierToken agent_barrier = status_word().barrier();
+    BarrierToken agent_barrier = status_word().barrier();
     // Check if we're assigned as the Global agent.
     if (cpu().id() != global_scheduler_->GetGlobalCPUId()) {
       RunRequest* req = enclave()->GetRunRequest(cpu());

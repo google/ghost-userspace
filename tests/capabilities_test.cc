@@ -33,7 +33,9 @@ TEST(CapabilitiesTest, RunNice) {
   LocalEnclave enclave(AgentConfig(topology, topology->EmptyCpuList()));
 
   EXPECT_THAT(GhostHelper()->Run(Gtid::Current(), /*agent_barrier=*/0,
-                                 /*task_barrier=*/0, /*cpu=*/-1, /*flags=*/0),
+                                 /*task_barrier=*/0,
+                                 Cpu(Cpu::UninitializedType::kUninitialized),
+                                 /*flags=*/0),
               Eq(-1));
   EXPECT_THAT(errno, Eq(EINVAL));
 }
@@ -73,7 +75,7 @@ class CapabilitiesAgent : public LocalAgent {
     // up by a ping from the main test thread on termination.
     RunRequest* req = enclave()->GetRunRequest(cpu());
     while (!Finished()) {
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      BarrierToken agent_barrier = status_word().barrier();
       req->LocalYield(agent_barrier, /*flags=*/0);
     }
   }
@@ -132,7 +134,9 @@ TEST(CapabilitiesTest, RunNoNice) {
     LocalEnclave enclave(AgentConfig(topology, topology->EmptyCpuList()));
 
     EXPECT_THAT(GhostHelper()->Run(Gtid::Current(), /*agent_barrier=*/0,
-                                   /*task_barrier=*/0, /*cpu=*/-1, /*flags=*/0),
+                                   /*task_barrier=*/0,
+                                   Cpu(Cpu::UninitializedType::kUninitialized),
+                                   /*flags=*/0),
                 Eq(-1));
     EXPECT_THAT(errno, Eq(EPERM));
   });

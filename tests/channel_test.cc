@@ -104,7 +104,7 @@ class TestAgent : public LocalAgent {
         Consume(channel, msg);
       }
 
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      BarrierToken agent_barrier = status_word().barrier();
       const bool prio_boost = status_word().boosted_priority();
 
       if (Finished() && !task) break;

@@ -172,8 +172,7 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
   void UpdateRunqueuePosition(uint32_t pos);
   void CheckRunQueue();
 
-  void GlobalSchedule(const StatusWord& agent_sw,
-                      StatusWord::BarrierToken agent_sw_last);
+  void GlobalSchedule(const StatusWord& agent_sw, BarrierToken agent_sw_last);
 
   int32_t GetGlobalCPUId() {
     return global_cpu_.load(std::memory_order_acquire);
@@ -189,8 +188,7 @@ class EdfScheduler : public BasicDispatchScheduler<EdfTask> {
   static const int kDebugRunqueue = 1;
 
  private:
-  bool PreemptTask(EdfTask* prev, EdfTask* next,
-                   StatusWord::BarrierToken agent_barrier);
+  bool PreemptTask(EdfTask* prev, EdfTask* next, BarrierToken agent_barrier);
   void Yield(EdfTask* task);
   void Unyield(EdfTask* task);
   void Enqueue(EdfTask* task);

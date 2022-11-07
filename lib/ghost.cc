@@ -92,7 +92,7 @@ StatusWord::~StatusWord() {
 
 LocalStatusWord::LocalStatusWord(StatusWord::AgentSW) {
   CHECK_ZERO(
-      GhostHelper()->GetStatusWordInfo(GHOST_AGENT, sched_getcpu(), &sw_info_));
+      GhostHelper()->GetStatusWordInfo(GHOST_AGENT, sched_getcpu(), sw_info_));
   sw_ = status_word_from_info(&sw_info_);
   owner_ = Gtid::Current();
 }
@@ -116,7 +116,7 @@ void LocalStatusWord::Free() {
   CHECK(!empty());
   CHECK(can_free());
 
-  CHECK_EQ(GhostHelper()->FreeStatusWordInfo(&sw_info_), 0);
+  CHECK_EQ(GhostHelper()->FreeStatusWordInfo(sw_info_), 0);
   sw_ = nullptr;
   owner_ = Gtid(0);
 }

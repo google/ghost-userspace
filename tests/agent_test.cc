@@ -51,7 +51,7 @@ class SimpleAgent : public LocalAgent {
     // a LocalYield() every time it wakes up. We only expect to be woken up
     // by a Ping() from another agent or the main thread.
     while (!Finished()) {
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      BarrierToken agent_barrier = status_word().barrier();
       RunRequest* req = enclave()->GetRunRequest(cpu());
 
       NotifyIdle();
@@ -150,7 +150,7 @@ class FullSimpleAgent : public FullAgent<EnclaveType> {
         ghost_sw_info info;
         response_code = 0;
         if (GhostHelper()->GetStatusWordInfo(static_cast<ghost_type>(args.arg0),
-                                             args.arg1, &info) != 0) {
+                                             args.arg1, info) != 0) {
           response_code = errno;
         }
         break;
@@ -347,7 +347,7 @@ class SpinningAgent : public LocalAgent {
     // Spin so kernel emits MSG_CPU_TICK on the channel associated with
     // this agent.
     while (!Finished()) {
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      BarrierToken agent_barrier = status_word().barrier();
       bool prio_boost = status_word().boosted_priority();
       if (prio_boost) {
         RunRequest* req = enclave()->GetRunRequest(cpu());
@@ -490,7 +490,7 @@ class CallbackAgent : public LocalAgent {
 
       // Yield until a message on 'channel_' wakes us up.
       RunRequest* req = enclave()->GetRunRequest(cpu());
-      const StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      const BarrierToken agent_barrier = status_word().barrier();
       const bool prio_boost = status_word().boosted_priority();
 
       if (prio_boost) {
@@ -612,7 +612,7 @@ TEST(AgentTest, MsgTimerExpired) {
 
   const uint64_t type = fd;
   const uint64_t cookie = fd;
-  ASSERT_THAT(GhostHelper()->TimerFdSettime(fd, /*flags=*/0, &itimerspec,
+  ASSERT_THAT(GhostHelper()->TimerFdSettime(fd, /*flags=*/0, itimerspec,
                                             target_cpu, type, cookie),
               Eq(0));
 
@@ -772,7 +772,7 @@ class SetSchedAgent : public LocalAgent {
     // a Ping() from the main thread on termination.
     RunRequest* req = enclave()->GetRunRequest(cpu());
     while (!Finished()) {
-      StatusWord::BarrierToken agent_barrier = status_word().barrier();
+      BarrierToken agent_barrier = status_word().barrier();
       req->LocalYield(agent_barrier, /*flags=*/0);
     }
   }

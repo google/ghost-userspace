@@ -78,8 +78,7 @@ Cpu FifoScheduler::AssignCpu(FifoTask* task) {
   return next++;
 }
 
-void FifoScheduler::Migrate(FifoTask* task, Cpu cpu,
-                            StatusWord::BarrierToken seqnum) {
+void FifoScheduler::Migrate(FifoTask* task, Cpu cpu, BarrierToken seqnum) {
   CHECK_EQ(task->run_state, FifoTaskState::kRunnable);
   CHECK_EQ(task->cpu, -1);
 
@@ -251,8 +250,7 @@ void FifoScheduler::TaskOnCpu(FifoTask* task, Cpu cpu) {
   task->prio_boost = false;
 }
 
-void FifoScheduler::FifoSchedule(const Cpu& cpu,
-                                 StatusWord::BarrierToken agent_barrier,
+void FifoScheduler::FifoSchedule(const Cpu& cpu, BarrierToken agent_barrier,
                                  bool prio_boost) {
   CpuState* cs = cpu_state(cpu);
   FifoTask* next = nullptr;
@@ -316,7 +314,7 @@ void FifoScheduler::FifoSchedule(const Cpu& cpu,
 }
 
 void FifoScheduler::Schedule(const Cpu& cpu, const StatusWord& agent_sw) {
-  StatusWord::BarrierToken agent_barrier = agent_sw.barrier();
+  BarrierToken agent_barrier = agent_sw.barrier();
   CpuState* cs = cpu_state(cpu);
 
   GHOST_DPRINT(3, stderr, "Schedule: agent_barrier[%d] = %d\n", cpu.id(),

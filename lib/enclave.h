@@ -102,8 +102,7 @@ class Enclave {
   // The agent calls this when it wants to yield its CPU without scheduling a
   // task on its own CPU.
   virtual void LocalYieldRunRequest(const RunRequest* req,
-                                    StatusWord::BarrierToken agent_barrier,
-                                    int flags) = 0;
+                                    BarrierToken agent_barrier, int flags) = 0;
 
   // Ping agent on the CPU that corresponds to `req`. Ping may fail if there is
   // no agent associated with that CPU.
@@ -237,13 +236,13 @@ struct RunRequestOptions {
   // `target_barrier` is copied directly into txn->task_barrier and is used
   // by the kernel to ensure that the agent has consumed the latest message
   // associated with the task.
-  StatusWord::BarrierToken target_barrier = StatusWord::NullBarrierToken();
+  BarrierToken target_barrier = StatusWord::NullBarrierToken();
 
   // `agent_barrier` is copied directly into txn->agent_barrier and is used
   // by the kernel to ensure that the agent has consumed all notifications
   // posted to it. This barrier is checked only for local commits and the
   // default `NullBarrierToken()` is legal value for remote commits.
-  StatusWord::BarrierToken agent_barrier = StatusWord::NullBarrierToken();
+  BarrierToken agent_barrier = StatusWord::NullBarrierToken();
 
   // `commit_flags` is copied directly into txn->commit_flags and controls
   // how a transaction is committed.
@@ -317,8 +316,7 @@ class RunRequest {
   //
   // REQUIRES: Must be called by the agent of cpu().
   // TODO: This could locally submit when there's a READY transaction.
-  void LocalYield(const StatusWord::BarrierToken agent_barrier,
-                  const int flags) {
+  void LocalYield(const BarrierToken agent_barrier, const int flags) {
     enclave_->LocalYieldRunRequest(this, agent_barrier, flags);
   }
 
@@ -374,13 +372,13 @@ class RunRequest {
   virtual bool sync_group_owned() const = 0;
 
   // Returns the transaction's agent_barrier field.
-  virtual StatusWord::BarrierToken agent_barrier() const = 0;
+  virtual BarrierToken agent_barrier() const = 0;
 
   // Returns the transaction's gtid field.
   virtual Gtid target() const = 0;
 
   // Returns the transaction's task_barrier field.
-  virtual StatusWord::BarrierToken target_barrier() const = 0;
+  virtual BarrierToken target_barrier() const = 0;
 
   // Returns the transaction's commit_flags field.
   virtual int commit_flags() const = 0;
@@ -444,17 +442,13 @@ class LocalRunRequest : public RunRequest {
   }
 
   // Returns the transaction's agent_barrier field.
-  StatusWord::BarrierToken agent_barrier() const override {
-    return txn_->agent_barrier;
-  }
+  BarrierToken agent_barrier() const override { return txn_->agent_barrier; }
 
   // Returns the transaction's gtid field.
   Gtid target() const override { return Gtid(txn_->gtid); }
 
   // Returns the transaction's task_barrier field.
-  StatusWord::BarrierToken target_barrier() const override {
-    return txn_->task_barrier;
-  }
+  BarrierToken target_barrier() const override { return txn_->task_barrier; }
 
   // Returns the transaction's commit_flags field.
   int commit_flags() const override { return txn_->commit_flags; }
@@ -488,8 +482,7 @@ class LocalEnclave final : public Enclave {
   bool CommitRunRequest(RunRequest* req) final;
   void SubmitRunRequest(RunRequest* req) final;
   bool CompleteRunRequest(RunRequest* req) final;
-  void LocalYieldRunRequest(const RunRequest* req,
-                            StatusWord::BarrierToken agent_barrier,
+  void LocalYieldRunRequest(const RunRequest* req, BarrierToken agent_barrier,
                             int flags) final;
   bool PingRunRequest(const RunRequest* req) final;
 

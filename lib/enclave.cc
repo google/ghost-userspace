@@ -502,7 +502,7 @@ bool LocalEnclave::CommitRunRequests(const CpuList& cpu_list) {
 
 void LocalEnclave::SubmitRunRequests(const CpuList& cpu_list) {
   cpu_set_t cpus = topology()->ToCpuSet(cpu_list);
-  CHECK_EQ(GhostHelper()->Commit(&cpus), 0);
+  CHECK_EQ(GhostHelper()->Commit(cpus), 0);
 }
 
 bool LocalEnclave::CommitSyncRequests(const CpuList& cpu_list) {
@@ -532,7 +532,7 @@ bool LocalEnclave::CommitSyncRequests(const CpuList& cpu_list) {
 
 bool LocalEnclave::SubmitSyncRequests(const CpuList& cpu_list) {
   cpu_set_t cpus = topology()->ToCpuSet(cpu_list);
-  int ret = GhostHelper()->SyncCommit(&cpus);
+  int ret = GhostHelper()->SyncCommit(cpus);
   CHECK(ret == 0 || ret == 1);
   return ret;
 }
@@ -556,7 +556,7 @@ void LocalEnclave::SubmitRunRequest(RunRequest* req) {
                req->target().describe(), req->target_barrier());
 
   if (req->open()) {
-    CHECK_EQ(GhostHelper()->Commit(req->cpu().id()), 0);
+    CHECK_EQ(GhostHelper()->Commit(req->cpu()), 0);
   } else {
     // Request already picked up by target CPU for commit.
   }
@@ -620,13 +620,12 @@ bool LocalEnclave::CompleteRunRequest(RunRequest* req) {
   return false;
 }
 
-void LocalEnclave::LocalYieldRunRequest(
-    const RunRequest* req, const StatusWord::BarrierToken agent_barrier,
-    const int flags) {
+void LocalEnclave::LocalYieldRunRequest(const RunRequest* req,
+                                        BarrierToken agent_barrier, int flags) {
   DCHECK_EQ(sched_getcpu(), req->cpu().id());
   int error =
       GhostHelper()->Run(Gtid(0), agent_barrier, StatusWord::NullBarrierToken(),
-                         req->cpu().id(), flags);
+                         req->cpu(), flags);
   // Sanity check why we failed.
   //   ESTALE: old barrier / missed message
   //   ENODEV: enclave is being destroyed (a kernfs ioctl errno)
@@ -640,7 +639,7 @@ bool LocalEnclave::PingRunRequest(const RunRequest* req) {
   int rc = GhostHelper()->Run(Gtid(GHOST_AGENT_GTID),
                               StatusWord::NullBarrierToken(),  // agent_barrier
                               StatusWord::NullBarrierToken(),  // task_barrier
-                              req->cpu().id(), run_flags);
+                              req->cpu(), run_flags);
   return rc == 0;
 }
 
