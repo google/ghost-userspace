@@ -64,7 +64,6 @@ class DeadAgent : public LocalAgent {
     // the task when it is exiting).
     ASSERT_THAT(channel_, NotNull());
 
-    bool done = false;  // set to true below when MSG_TASK_DEAD is received.
     std::unique_ptr<Task<>> task(nullptr);  // initialized in TASK_NEW handler.
     while (true) {
       while (true) {
@@ -90,8 +89,6 @@ class DeadAgent : public LocalAgent {
 
           case MSG_TASK_DEAD:
             ASSERT_THAT(task, NotNull());
-            ASSERT_THAT(done, IsFalse());
-            done = true;
             break;
 
           default:
@@ -103,7 +100,7 @@ class DeadAgent : public LocalAgent {
       StatusWord::BarrierToken agent_barrier = status_word().barrier();
       const bool prio_boost = status_word().boosted_priority();
 
-      if (Finished() && done) {
+      if (Finished()) {
         break;
       }
 
