@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -121,30 +122,142 @@ void CfsScheduler::EnclaveReady() {
   }
 }
 
-// Implicitly thread-safe because it is only called from one agent associated
-// with the default queue.
-// Returns the CPU whose run queue we should use.
-// TODO: Use smarter logic (e.g. finding an idle cpu)
-// TODO: If we are not running anything on the current cpu, return that
-// so we don't have to wait for a ping.
+// The in kernel SelectTaskRq attempts to do the following:
+// - If sched_energy_enabled(), find an energy efficient CPU (not applicable to
+// us)
+// - If the affine flag is set, walks up the sched domain tree to see if we can
+// find a cpu in the same domain as our previous cpu, but that will allow us to
+// run sonner
+// - If the above two fail, then we find the idlest cpu within the highest level
+// sched domain assuming the sd_flag is on
+// - If the above fails, we try to find the most idle core inside the same LLC
+// assuming WF_TTWU is set
+// - Otherwise fallback to the old cpu
+// Our CFS agent has no notion of energy efficiency or scheduling domaims. So,
+// we can simplify our algorithm to:
+// - Check if the current CPU is idle, if so, place it there (this avoids a
+// ping)
+// - Otherwise, check if our prev_cpu is idle.
+// - Otherwise, try to find an idle CPU in the L3 sibiling list of our prev_cpu
+// - Otherwise, just use the least utilized CPU
+// In general, there are many, many, many heuristic in kernel CFS, so I tried to
+// just grab the general idea and translate it to ghost code. In the future, we
+// will probably end up tweaking this code.
+// TODO: We probably want to favor placing in a L3 cache sibling even if
+// there is no idle sibling. To do this, we can introduce a load_bias variable,
+// where we consider < load_bias load to be idle.
+// TODO: Collect some data about placing on this cpu if idle vs an idle
+// L3 sibling.
+// TODO: Once we add nice values and possibly a cgroup interface, we
+// need to update our load calculating logic from .Size() to something more
+// robust.
+// NOTE: This is inherently racy, since we only synchronize on individual rq's
+// we are not guaranteed to see a consistent view of rq loads.
 Cpu CfsScheduler::SelectTaskRq(CfsTask* task) {
-  static auto begin = cpus().begin();
-  static auto end = cpus().end();
-  static auto next = end;
+  PrintDebugTaskMessage("SelectTaskRq", nullptr, task);
 
-  if (next == end) {
-    next = begin;
+  uint64_t min_load = UINT64_MAX;
+  Cpu min_load_cpu = topology()->cpu(MyCpu());
+
+  // Updates the min cpu load variables and returns true if empty.
+  auto update_min = [&min_load, &min_load_cpu](uint64_t this_load,
+                                               const Cpu& this_cpu) {
+    if (min_load >= this_load) {
+      min_load = this_load;
+      min_load_cpu = this_cpu;
+    }
+    return this_load == 0;
+  };
+
+  // Check if this cpu is empty.
+  // NOTE: placing on this cpu is safe as it is in cpus() by virtue of
+  // us recieving a message on its queue
+  const Cpu this_cpu = topology()->cpu(MyCpu());
+  CpuState* cs = cpu_state(this_cpu);
+  {
+    absl::MutexLock l(&cs->run_queue.mu_);
+    if (update_min(cs->run_queue.Size(), this_cpu)) {
+      return this_cpu;
+    }
   }
-  return next++;
+
+  // Check our prev cpu and its siblings
+  // NOTE: placing on this cpu is safe as it is in cpus() by virtue of
+  // it being a valid cpu beforehand.
+  if (task->cpu >= 0) {
+    // Check if prev cpu is empty.
+    const Cpu prev_cpu = topology()->cpu(task->cpu);
+    cs = cpu_state(prev_cpu);
+    {
+      absl::MutexLock l(&cs->run_queue.mu_);
+      if (update_min(cs->run_queue.Size(), prev_cpu)) {
+        return prev_cpu;
+      }
+    }
+
+    // Check if we can find an idle l3 sibling.
+    for (const Cpu& cpu : prev_cpu.l3_siblings()) {
+      // We can't schedule on this cpu.
+      if (!cpus().IsSet(cpu)) continue;
+      cs = cpu_state(cpu);
+      {
+        absl::MutexLock l(&cs->run_queue.mu_);
+        if (update_min(cs->run_queue.Size(), cpu)) {
+          return cpu;
+        }
+      }
+    }
+  }
+
+  // Check if we can find any idle cpu.
+  for (const Cpu& cpu : cpus()) {
+    cs = cpu_state(cpu);
+    {
+      absl::MutexLock l(&cs->run_queue.mu_);
+      if (update_min(cs->run_queue.Size(), cpu)) {
+        return cpu;
+      }
+    }
+  }
+
+  // We couldn't find an idle cpu, so just use the least loaded one.
+  return min_load_cpu;
 }
 
 void CfsScheduler::Migrate(CfsTask* task, Cpu cpu,
                            StatusWord::BarrierToken seqnum) {
-  CHECK_EQ(task->cpu, -1);
-
+  // The task is not visible to anyone except the agent currently proccessing
+  // the task as the only way to get to migrate is if the task is not
+  // currently on a rq, so it would be impossible for anyone else to touch the
+  // task.
+  //
+  // In the future, when we add load balancing or work stealing, it still would
+  // only be possible to "see" the task once it is on a rq as there is not a
+  // place where we modify task state outside of getting a pointer to it from an
+  // rq. Since it isn't on the rq yet, there is not anyway for anything else to
+  // modify the task state at the same time.
+  //
+  // Even if we got a task_departed message at the same time as we are executing
+  // Migrate, there is no channel associated with the task yet, so it'll go to
+  // the default channel, which is proccessed by the agent executing Migrate.
   CpuState* cs = cpu_state(cpu);
   const Channel* channel = cs->channel.get();
-  CHECK(channel->AssociateTask(task->gtid, seqnum, /*status=*/nullptr));
+
+  // If this fails, then the runnable message raced with the departed message
+  // and won.
+  // TODO: As is written, the only way an AssociateTask will fail is if
+  // there are pending messages for the task under consideration. Given that
+  // the task is offcpu by virtue of recieving the runnable message, the only
+  // message we can race with is TaskDeparted, meaning it is safe to bail on
+  // the migration as we are not on an rq and will be deleted once we consume
+  // the task deleted message.
+  if (!channel->AssociateTask(task->gtid, seqnum, /*status=*/nullptr)) {
+    GHOST_DPRINT(3, stderr,
+                 "Couldn't associate task %s to cpu %d. This in only correct "
+                 "if a TaskDeparted message follows.",
+                 task->gtid.describe(), cpu.id());
+    return;
+  }
 
   GHOST_DPRINT(3, stderr, "Migrating task %s to cpu %d", task->gtid.describe(),
                cpu.id());
@@ -181,25 +294,23 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
 }
 
 void CfsScheduler::TaskRunnable(CfsTask* task, const Message& msg) {
-  if (task->cpu < 0) {
-    // There cannot be any more messages pending for this task after a
-    // MSG_TASK_WAKEUP (until the agent puts it oncpu) so it's safe to
-    // migrate.
-    Cpu cpu = SelectTaskRq(task);
-    PrintDebugTaskMessage("TaskRunnable", cpu_state(cpu), task);
-    Migrate(task, cpu, msg.seqnum());
-  } else {
+  PrintDebugTaskMessage(
+      "TaskRunnable",
+      cpu_state(topology()->cpu(task->cpu >= 0 ? task->cpu : sched_getcpu())),
+      task);
+
+  // If this is our current task, then we will defer its proccessing until
+  // PickNextTask. Otherwise, use the normal wakeup logic.
+  if (task->cpu >= 0) {
     CpuState* cs = cpu_state_of(task);
-    PrintDebugTaskMessage("TaskRunnable", cs, task);
-    {
+    if (cs->current == task) {
       absl::MutexLock l(&cs->run_queue.mu_);
-      if (cs->current == task) {
-        task->run_state.Set(CfsTaskState::kRunnable);
-      } else {
-        cs->run_queue.EnqueueTask(task);
-      }
+      cs->current = nullptr;
     }
   }
+
+  Cpu cpu = SelectTaskRq(task);
+  Migrate(task, cpu, msg.seqnum());
 }
 
 void CfsScheduler::HandleTaskDone(CfsTask* task, bool from_switchto) {

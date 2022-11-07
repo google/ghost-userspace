@@ -263,6 +263,9 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   void CpuTick(const Message& msg) final;
 
  private:
+  // Empties the channel associated with cpu and dispatches the messages.
+  void DrainChannel(const Cpu& cpu);
+
   // Checks if we should preempt the current task. If so, sets preempt_curr_.
   void CheckPreemptTick(const Cpu& cpu);
 
@@ -290,6 +293,21 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
     CHECK_GE(task->cpu, 0);
     CHECK_LT(task->cpu, MAX_CPUS);
     return &cpu_states_[task->cpu];
+  }
+
+  // If called with is_agent_thread = true, then we use the cache'd TLS cpu id
+  // as agent threads are local to a single cpu, otherwise, issue a syscall.
+  int MyCpu(bool is_agent_thread = true) {
+    if (!is_agent_thread) return sched_getcpu();
+    // "When thread_local is applied to a variable of block scope the
+    // storage-class-specifier static is implied if it does not appear
+    // explicitly" - C++ standard.
+    // This isn't obvious, so keep the static modifier.
+    static thread_local int my_cpu = -1;
+    if (my_cpu == -1) {
+      my_cpu = sched_getcpu();
+    }
+    return my_cpu;
   }
 
   CpuState cpu_states_[MAX_CPUS];
