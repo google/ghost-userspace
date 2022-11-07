@@ -7,8 +7,8 @@ package(default_visibility = ["//:__pkg__"])
 
 # Each license covers the code below:
 #
-# BSD 2: Just covers the IOVisor BCC code in third_party/iovisor_bcc/. This
-# code was not written by Google.
+# BSD 2-clause: Just covers the IOVisor BCC code in third_party/iovisor_bcc/.
+# This code was not written by Google.
 #
 # GPLv2: Just covers the eBPF code in third_party/bpf/. This code was written
 # by Google. We need to license it under GPLv2 though so that the eBPF code
@@ -17,8 +17,8 @@ package(default_visibility = ["//:__pkg__"])
 # MIT: Just covers third_party/util/util.h. This code was not written by Google,
 # but was modified by Google.
 #
-# Apache 2: All other code is covered by Apache 2. This includes the library
-# code in lib/, the experiments, all code in bpf/user/, etc.
+# BSD 3-clause: All other code is covered by BSD 3-clause. This includes the
+# library code in lib/, the experiments, all code in bpf/user/, etc.
 licenses(["notice"])
 
 exports_files(["LICENSE"])
