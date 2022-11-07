@@ -19,6 +19,7 @@
 #define GHOST_LIB_GHOST_H_
 
 #include <sys/ioctl.h>
+#include <sys/timerfd.h>
 
 #include <csignal>
 #include <cstdint>
@@ -240,6 +241,11 @@ class Ghost {
       *cpu_time = absl::Nanoseconds(data.runtime);
     }
     return ret;
+  }
+
+  // Creates a timerfd.
+  virtual int TimerFdCreate(int clockid, int flags) {
+    return timerfd_create(clockid, flags);
   }
 
   // Associate a timerfd with agent on 'cpu':
