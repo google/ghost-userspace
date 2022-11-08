@@ -7,8 +7,8 @@
 // A generic topology representation for use by ghOSt agents. As a rule of
 // thumb, please strongly prefer use of the topology interfaces (including
 // extending them when necessary) over the use of system API calls (e.g.,
-// sysconf).  The intent is that non-host topologies can eventually be passed
-// and tested (in conjunction with simulated ghOSt API boundaries) for testing.
+// sysconf). The intent is that non-host topologies can eventually be passed and
+// tested (in conjunction with simulated ghOSt API boundaries).
 #ifndef GHOST_LIB_TOPOLOGY_H_
 #define GHOST_LIB_TOPOLOGY_H_
 
