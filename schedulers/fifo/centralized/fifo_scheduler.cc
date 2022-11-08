@@ -254,6 +254,10 @@ void FifoScheduler::GlobalSchedule(const StatusWord& agent_sw,
       continue;
     }
 
+    if (!Available(cpu)) {
+      // This CPU is running a higher priority sched class, such as CFS.
+      continue;
+    }
     if (cs->current) {
       // This CPU is currently running a task, so do not schedule a different
       // task on it.
