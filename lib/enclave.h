@@ -142,8 +142,9 @@ class Enclave {
                          uint32_t idx)>
           l) = 0;
 
-  virtual void AdvertiseOnline() {}
-  virtual void PrepareToExit() {}
+  virtual void AdvertiseOnline() { is_online_ = true; }
+  virtual bool IsOnline() { return is_online_; }
+  virtual void PrepareToExit() { is_online_ = false; }
   // If there was an old agent attached to the enclave, this blocks until that
   // agent exits.
   virtual void WaitForOldAgent() = 0;
@@ -212,6 +213,7 @@ class Enclave {
   absl::Mutex mu_;
   std::list<Scheduler*> schedulers_ ABSL_GUARDED_BY(mu_);
   std::list<Agent*> agents_ ABSL_GUARDED_BY(mu_);
+  bool is_online_ = false;
 
   friend class Scheduler;
 };

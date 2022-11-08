@@ -592,7 +592,7 @@ bool LocalEnclave::CompleteRunRequest(RunRequest* req) {
     // target CPU's agent is exiting
     case GHOST_TXN_NO_AGENT:
       // If we ever shrink enclaves at runtime, we'll need to modify this check.
-      if (agent_online_fd_ != -1) {
+      if (IsOnline()) {
         GHOST_ERROR("TXN failed with NO_AGENT, but we are still online!");
       }
       break;
@@ -660,6 +660,8 @@ void LocalEnclave::AdvertiseOnline() {
   // there is an agent capable of scheduling this enclave.
   agent_online_fd_ = openat(dir_fd_, "agent_online", O_RDWR);
   CHECK_GE(agent_online_fd_, 0);
+
+  Enclave::AdvertiseOnline();
 }
 
 // We have a bunch of open FDs for enclave resources, such as agent_online and
@@ -670,6 +672,13 @@ void LocalEnclave::AdvertiseOnline() {
 // Make sure this is idempotent: TerminateAgentTasks() calls this as an
 // optimization, but ~LocalEnclave does too to ensure destruction.
 void LocalEnclave::PrepareToExit() {
+  Enclave::PrepareToExit();
+  // Relying on close(), at least for agent_online, to provide a write memory
+  // barrier after PrepareToExit, such that any reader who sees agent_online
+  // closed will see IsOnline as false (which was set in PrepareToExit).
+  //
+  // An external observer can see the enclave file agent_online == 0 (read() on
+  // agent_online), then contact the Agent, which must see IsOnline == false.
   close(agent_online_fd_);
   agent_online_fd_ = -1;
   agent_bpf_destroy();
