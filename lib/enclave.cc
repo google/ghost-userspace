@@ -198,6 +198,7 @@ int LocalEnclave::MakeNextEnclave() {
 // static
 int LocalEnclave::GetEnclaveDirectory(int ctl_fd) {
   CHECK_GE(ctl_fd, 0);
+  lseek(ctl_fd, 0, SEEK_SET);
   // 20 for the u64 in ascii, 2 for 0x, 1 for \0, 9 in case of a mistake.
   constexpr int kU64InAsciiBytes = 20 + 2 + 1 + 9;
   char buf[kU64InAsciiBytes] = {0};
