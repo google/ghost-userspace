@@ -144,6 +144,9 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
 
   // Marks a task as yielded.
   void Yield(FifoTask* task);
+  // Takes the task out of the yielding_tasks_ runqueue and puts it back into
+  // the global runqueue.
+  void Unyield(FifoTask* task);
 
   // Adds a task to the FIFO runqueue.
   void Enqueue(FifoTask* task);

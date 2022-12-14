@@ -122,6 +122,10 @@ void FifoScheduler::TaskRunnable(FifoTask* task, const Message& msg) {
 }
 
 void FifoScheduler::TaskDeparted(FifoTask* task, const Message& msg) {
+  if (task->yielding()) {
+    Unyield(task);
+  }
+
   if (task->oncpu()) {
     CpuState* cs = cpu_state_of(task);
     CHECK_EQ(cs->current, task);
@@ -187,6 +191,17 @@ void FifoScheduler::Yield(FifoTask* task) {
   CHECK(task->oncpu() || task->runnable());
   task->run_state = FifoTask::RunState::kYielding;
   yielding_tasks_.emplace_back(task);
+}
+
+void FifoScheduler::Unyield(FifoTask* task) {
+  CHECK(task->yielding());
+
+  auto it = std::find(yielding_tasks_.begin(), yielding_tasks_.end(), task);
+  CHECK(it != yielding_tasks_.end());
+  yielding_tasks_.erase(it);
+
+  task->run_state = FifoTask::RunState::kRunnable;
+  Enqueue(task);
 }
 
 void FifoScheduler::Enqueue(FifoTask* task) {
