@@ -13,6 +13,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -32,6 +33,9 @@
 // procfs may have been mounted somewhere other than root (eg. for testing
 // purposes).
 ABSL_FLAG(std::string, ghost_procfs_prefix, "", "procfs prefix");
+
+ABSL_FLAG(bool, emit_fork_warnings, true,
+          "Print info about multiple threads in ForkedProcess");
 
 namespace ghost {
 
@@ -373,10 +377,34 @@ void ForkedProcess::HandleSigchild(int signum) {
   }
 }
 
+void CheckForMultiThreaded(void) {
+  std::error_code ec;
+  auto f = std::filesystem::directory_iterator("/proc/self/task/", ec);
+  auto end = std::filesystem::directory_iterator();
+  std::string me = std::to_string(GetTID());
+  for ( ; !ec && f != end; f.increment(ec)) {
+    std::string tid = f->path().filename();
+    if (tid == me) {
+      continue;
+    }
+    std::ifstream ifs_comm((f->path() / "comm").string());
+    std::string comm;
+    std::getline(ifs_comm, comm);
+    absl::FPrintF(stderr, "Fork danger!  Found extra task %s %s\n", tid, comm);
+  }
+}
+
 ForkedProcess::ForkedProcess(int stderr_fd) {
   pid_t ppid = getpid();
-  pid_t p = fork();
+  pid_t p;
 
+  // Any extra threads that exist when making a ForkedProcess are potentially a
+  // risk: they will not be forked, and your application may depend on them.
+  if (absl::GetFlag(FLAGS_emit_fork_warnings)) {
+    CheckForMultiThreaded();
+  }
+
+  p = fork();
   CHECK_GE(p, 0);
 
   if (p == 0) {

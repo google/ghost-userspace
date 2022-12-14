@@ -34,6 +34,7 @@
 #include "lib/logging.h"
 
 ABSL_DECLARE_FLAG(std::string, ghost_procfs_prefix);
+ABSL_DECLARE_FLAG(bool, emit_fork_warnings);
 
 namespace ghost {
 
