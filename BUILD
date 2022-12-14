@@ -441,24 +441,6 @@ cc_test(
     ],
 )
 
-cc_library(
-    name = "fd_server",
-    srcs = [
-        "shared/fd_server.cc",
-    ],
-    hdrs = [
-        "shared/fd_server.h",
-    ],
-    copts = compiler_flags,
-    deps = [
-        "@com_google_absl//absl/cleanup",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
-    ],
-)
-
 cc_binary(
     name = "fdcat",
     srcs = [
@@ -466,7 +448,7 @@ cc_binary(
     ],
     copts = compiler_flags,
     deps = [
-        ":fd_server",
+        ":shared",
     ],
 )
 
@@ -477,7 +459,7 @@ cc_binary(
     ],
     copts = compiler_flags,
     deps = [
-        ":fd_server",
+        ":shared",
     ],
 )
 
@@ -489,7 +471,7 @@ cc_test(
     ],
     copts = compiler_flags,
     deps = [
-        ":fd_server",
+        ":shared",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -592,17 +574,23 @@ cc_test(
 cc_library(
     name = "shared",
     srcs = [
+        "shared/fd_server.cc",
         "shared/prio_table.cc",
         "shared/shmem.cc",
     ],
     hdrs = [
+        "shared/fd_server.h",
         "shared/prio_table.h",
         "shared/shmem.h",
     ],
     copts = compiler_flags,
     deps = [
         ":base",
+        "@com_google_absl//absl/cleanup",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
     ],
 )
 
