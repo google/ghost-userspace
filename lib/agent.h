@@ -310,6 +310,8 @@ class FullAgent {
   FullAgent(const FullAgent&) = delete;
   FullAgent& operator=(const FullAgent&) = delete;
 
+  EnclaveType enclave_;
+
  protected:
   // Makes an agent of a type specific to a derived FullAgent
   virtual std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) = 0;
@@ -360,7 +362,6 @@ class FullAgent {
     agents_.clear();
   }
 
-  EnclaveType enclave_;
   std::vector<std::unique_ptr<Agent>> agents_;
 };
 
@@ -477,8 +478,12 @@ class AgentProcess {
       for (;;) {
         sb_->rpc_pending_.WaitForNotification();
         sb_->rpc_pending_.Reset();
-        sb_->rpc_res_ = AgentRpcResponse();  // Reset the response.
-        full_agent_->RpcHandler(sb_->rpc_req_, sb_->rpc_args_, sb_->rpc_res_);
+        if (full_agent_->enclave_.IsOnline()) {
+          sb_->rpc_res_ = AgentRpcResponse();  // Reset the response.
+          full_agent_->RpcHandler(sb_->rpc_req_, sb_->rpc_args_, sb_->rpc_res_);
+        } else {
+          sb_->rpc_res_.response_code = -ENODEV;
+        }
         sb_->rpc_done_.Notify();
       }
     });
