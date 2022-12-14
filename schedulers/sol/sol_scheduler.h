@@ -165,6 +165,9 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 
   // Marks a task as yielded.
   void Yield(SolTask* task);
+  // Takes the task out of the yielding_tasks_ runqueue and puts it back into
+  // the global runqueue.
+  void Unyield(SolTask* task);
 
   // Adds a task to the FIFO runqueue.
   void Enqueue(SolTask* task);

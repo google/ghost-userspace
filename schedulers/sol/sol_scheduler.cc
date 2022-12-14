@@ -131,6 +131,10 @@ void SolScheduler::TaskDeparted(SolTask* task, const Message& msg) {
     SyncCpuState(task->cpu);
   }
 
+  if (task->yielding()) {
+    Unyield(task);
+  }
+
   if (task->oncpu()) {
     CpuState* cs = cpu_state_of(task);
     CHECK_EQ(cs->current, task);
@@ -246,6 +250,17 @@ void SolScheduler::Yield(SolTask* task) {
   CHECK(task->oncpu() || task->runnable());
   task->run_state = SolTask::RunState::kYielding;
   yielding_tasks_.emplace_back(task);
+}
+
+void SolScheduler::Unyield(SolTask* task) {
+  CHECK(task->yielding());
+
+  auto it = std::find(yielding_tasks_.begin(), yielding_tasks_.end(), task);
+  CHECK(it != yielding_tasks_.end());
+  yielding_tasks_.erase(it);
+
+  task->run_state = SolTask::RunState::kRunnable;
+  Enqueue(task);
 }
 
 void SolScheduler::Enqueue(SolTask* task) {
