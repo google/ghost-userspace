@@ -31,13 +31,13 @@ static struct bpf_registration {
 	int fd;
 } bpf_registry [__MAX_BPF_GHOST_ATTACH_TYPE];
 
-static size_t map_mmap_sz(struct bpf_map *map)
+size_t bpf_map__mmap_sz(struct bpf_map *map)
 {
 	size_t mmap_sz;
 
-  mmap_sz = (size_t)roundup(bpf_map__value_size(map), 8) *
-      bpf_map__max_entries(map);
-  mmap_sz = roundup(mmap_sz, sysconf(_SC_PAGE_SIZE));
+	mmap_sz = (size_t)roundup(bpf_map__value_size(map), 8) *
+		bpf_map__max_entries(map);
+	mmap_sz = roundup(mmap_sz, sysconf(_SC_PAGE_SIZE));
 
 	return mmap_sz;
 }
@@ -46,13 +46,14 @@ static size_t map_mmap_sz(struct bpf_map *map)
 // munmap it with bpf_map__munmap().
 void *bpf_map__mmap(struct bpf_map *map)
 {
-	return mmap(NULL, map_mmap_sz(map), PROT_READ | PROT_WRITE, MAP_SHARED,
+	return mmap(NULL, bpf_map__mmap_sz(map),
+		    PROT_READ | PROT_WRITE, MAP_SHARED,
 		    bpf_map__fd(map), 0);
 }
 
 int bpf_map__munmap(struct bpf_map *map, void *addr)
 {
-	return munmap(addr, map_mmap_sz(map));
+	return munmap(addr, bpf_map__mmap_sz(map));
 }
 
 void bpf_program__set_types(struct bpf_program *prog, int prog_type,

@@ -38,6 +38,7 @@ enum {
 
 // Generic BPF helpers
 
+size_t bpf_map__mmap_sz(struct bpf_map *map);
 void *bpf_map__mmap(struct bpf_map *map);
 int bpf_map__munmap(struct bpf_map *map, void *addr);
 void bpf_program__set_types(struct bpf_program *prog, int prog_type,
