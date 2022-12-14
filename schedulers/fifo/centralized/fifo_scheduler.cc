@@ -16,10 +16,12 @@ void FifoScheduler::CpuTimerExpired(const Message& msg) { CHECK(0); }
 
 FifoScheduler::FifoScheduler(Enclave* enclave, CpuList cpulist,
                              std::shared_ptr<TaskAllocator<FifoTask>> allocator,
-                             int32_t global_cpu)
+                             int32_t global_cpu,
+                             absl::Duration preemption_time_slice)
     : BasicDispatchScheduler(enclave, std::move(cpulist), std::move(allocator)),
       global_cpu_(global_cpu),
-      global_channel_(GHOST_MAX_QUEUE_ELEMS, /*node=*/0) {
+      global_channel_(GHOST_MAX_QUEUE_ELEMS, /*node=*/0),
+      preemption_time_slice_(preemption_time_slice) {
   if (!cpus().IsSet(global_cpu_)) {
     Cpu c = cpus().Front();
     CHECK(c.valid());
@@ -258,7 +260,8 @@ void FifoScheduler::GlobalSchedule(const StatusWord& agent_sw,
       // This CPU is running a higher priority sched class, such as CFS.
       continue;
     }
-    if (cs->current) {
+    if (cs->current &&
+        (MonotonicNow() - cs->last_commit) < preemption_time_slice_) {
       // This CPU is currently running a task, so do not schedule a different
       // task on it.
       continue;
@@ -290,7 +293,13 @@ void FifoScheduler::GlobalSchedule(const StatusWord& agent_sw,
     // Assign `next` to run on the CPU at the front of `available`.
     const Cpu& next_cpu = available.Front();
     CpuState* cs = cpu_state(next_cpu);
+
+    if (cs->current) {
+      cs->current->run_state = FifoTask::RunState::kRunnable;
+      Enqueue(cs->current);
+    }
     cs->current = next;
+
     available.Clear(next_cpu);
     assigned.Set(next_cpu);
 
@@ -306,6 +315,10 @@ void FifoScheduler::GlobalSchedule(const StatusWord& agent_sw,
   // Commit on all CPUs with open transactions.
   if (!assigned.Empty()) {
     enclave()->CommitRunRequests(assigned);
+    absl::Time now = MonotonicNow();
+    for (const Cpu& cpu : assigned) {
+      cpu_state(cpu)->last_commit = now;
+    }
   }
   for (const Cpu& next_cpu : assigned) {
     CpuState* cs = cpu_state(next_cpu);
@@ -411,13 +424,14 @@ found:
   return true;
 }
 
-std::unique_ptr<FifoScheduler> SingleThreadFifoScheduler(Enclave* enclave,
-                                                         CpuList cpulist,
-                                                         int32_t global_cpu) {
+std::unique_ptr<FifoScheduler> SingleThreadFifoScheduler(
+    Enclave* enclave, CpuList cpulist, int32_t global_cpu,
+    absl::Duration preemption_time_slice) {
   auto allocator =
       std::make_shared<SingleThreadMallocTaskAllocator<FifoTask>>();
   auto scheduler = absl::make_unique<FifoScheduler>(
-      enclave, std::move(cpulist), std::move(allocator), global_cpu);
+      enclave, std::move(cpulist), std::move(allocator), global_cpu,
+      preemption_time_slice);
   return scheduler;
 }
 

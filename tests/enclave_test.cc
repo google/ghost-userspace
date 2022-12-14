@@ -416,8 +416,8 @@ TEST_F(EnclaveTest, KillActiveEnclave) {
 
   FifoConfig config;
   config.topology_ = MachineTopology();
-  config.global_cpu_ = config.topology_->cpu(0);
   config.enclave_fd_ = enclave_fd;
+  config.global_cpu_ = config.topology_->cpu(0);
 
   auto ap = new AgentProcess<FullFifoAgent<LocalEnclave>, FifoConfig>(config);
   EXPECT_EQ(close(enclave_fd), 0);

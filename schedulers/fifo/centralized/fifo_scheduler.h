@@ -74,7 +74,7 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
  public:
   FifoScheduler(Enclave* enclave, CpuList cpulist,
                 std::shared_ptr<TaskAllocator<FifoTask>> allocator,
-                int32_t global_cpu);
+                int32_t global_cpu, absl::Duration preemption_time_slice);
   ~FifoScheduler();
 
   void EnclaveReady();
@@ -134,6 +134,7 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   struct CpuState {
     FifoTask* current = nullptr;
     const Agent* agent = nullptr;
+    absl::Time last_commit;
   } ABSL_CACHELINE_ALIGNED;
 
   // Updates the state of `task` to reflect that it is now running on `cpu`.
@@ -174,6 +175,8 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   LocalChannel global_channel_;
   int num_tasks_ = 0;
 
+  const absl::Duration preemption_time_slice_;
+
   std::deque<FifoTask*> run_queue_;
   std::vector<FifoTask*> yielding_tasks_;
 
@@ -183,9 +186,9 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
 };
 
 // Initializes the task allocator and the FIFO scheduler.
-std::unique_ptr<FifoScheduler> SingleThreadFifoScheduler(Enclave* enclave,
-                                                         CpuList cpulist,
-                                                         int32_t global_cpu);
+std::unique_ptr<FifoScheduler> SingleThreadFifoScheduler(
+    Enclave* enclave, CpuList cpulist, int32_t global_cpu,
+    absl::Duration preemption_time_slice);
 
 // Operates as the Global or Satellite agent depending on input from the
 // global_scheduler->GetGlobalCPU callback.
@@ -204,10 +207,14 @@ class FifoAgent : public LocalAgent {
 class FifoConfig : public AgentConfig {
  public:
   FifoConfig() {}
-  FifoConfig(Topology* topology, CpuList cpulist, Cpu global_cpu)
-      : AgentConfig(topology, std::move(cpulist)), global_cpu_(global_cpu) {}
+  FifoConfig(Topology* topology, CpuList cpulist, Cpu global_cpu,
+             absl::Duration preemption_time_slice)
+      : AgentConfig(topology, std::move(cpulist)),
+        global_cpu_(global_cpu),
+        preemption_time_slice_(preemption_time_slice) {}
 
   Cpu global_cpu_{Cpu::UninitializedType::kUninitialized};
+  absl::Duration preemption_time_slice_ = absl::InfiniteDuration();
 };
 
 // A global agent scheduler. It runs a single-threaded FIFO scheduler on the
@@ -217,7 +224,8 @@ class FullFifoAgent : public FullAgent<EnclaveType> {
  public:
   explicit FullFifoAgent(FifoConfig config) : FullAgent<EnclaveType>(config) {
     global_scheduler_ = SingleThreadFifoScheduler(
-        &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id());
+        &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id(),
+        config.preemption_time_slice_);
     this->StartAgentTasks();
     this->enclave_.Ready();
   }
