@@ -192,6 +192,10 @@ void ShinjukuScheduler::TaskRunnable(ShinjukuTask* task, const Message& msg) {
 }
 
 void ShinjukuScheduler::TaskDeparted(ShinjukuTask* task, const Message& msg) {
+  if (task->yielding()) {
+    Unyield(task);
+  }
+
   if (task->oncpu()) {
     CpuState* cs = cpu_state_of(task);
     CHECK_EQ(cs->current, task);
@@ -199,7 +203,7 @@ void ShinjukuScheduler::TaskDeparted(ShinjukuTask* task, const Message& msg) {
   } else if (task->queued()) {
     RemoveFromRunqueue(task);
   } else {
-    CHECK(task->blocked());
+    CHECK(task->blocked() || task->paused());
   }
 
   allocator()->FreeTask(task);
