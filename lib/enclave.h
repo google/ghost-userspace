@@ -152,6 +152,7 @@ class Enclave {
   virtual void DisableMyBpfProgLoad() {}
   // LocalEnclaves have a ctl fd, which various agent functions use.
   virtual int GetCtlFd() { return -1; }
+  virtual int GetDirFd() { return -1; }
   virtual void SetRunnableTimeout(absl::Duration d) {}
   virtual void SetCommitAtTick(bool enabled) {}
   virtual void SetDeliverTicks(bool enabled) {}
@@ -557,6 +558,7 @@ class LocalEnclave final : public Enclave {
   }
 
   int GetCtlFd() final { return ctl_fd_; }
+  int GetDirFd() final { return dir_fd_; }
 
   static int MakeNextEnclave();
   static int GetEnclaveDirectory(int ctl_fd);
