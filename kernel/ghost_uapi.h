@@ -25,7 +25,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	70
+#define GHOST_VERSION	71
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -252,6 +252,8 @@ enum {
 	MSG_CPU_TICK		= _MSG_CPU_FIRST,
 	MSG_CPU_TIMER_EXPIRED,
 	MSG_CPU_NOT_IDLE,	/* requested via run_flags: NEED_CPU_NOT_IDLE */
+	MSG_CPU_AVAILABLE,
+	MSG_CPU_BUSY,
 };
 
 /* TODO: Move payload to header once all clients updated. */
@@ -355,6 +357,14 @@ struct ghost_msg_payload_timer {
 	uint64_t cookie;
 };
 
+struct ghost_msg_payload_cpu_available {
+	int cpu;
+};
+
+struct ghost_msg_payload_cpu_busy {
+	int cpu;
+};
+
 struct bpf_ghost_msg {
 	union {
 		struct ghost_msg_payload_task_dead	dead;
@@ -370,6 +380,8 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_cpu_tick	cpu_tick;
 		struct ghost_msg_payload_timer		timer;
 		struct ghost_msg_payload_cpu_not_idle	cpu_not_idle;
+		struct ghost_msg_payload_cpu_available	cpu_available;
+		struct ghost_msg_payload_cpu_busy	cpu_busy;
 	};
 	uint16_t type;
 	uint32_t seqnum;

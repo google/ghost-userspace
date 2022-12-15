@@ -51,7 +51,7 @@ TEST_F(EnclaveTest, TxnRegionFree) {
   const AgentConfig config(topology, topology->all_cpus());
 
   // Create an enclave.
-  auto enclave = absl::make_unique<LocalEnclave>(config);
+  auto enclave = std::make_unique<LocalEnclave>(config);
 
   // Destroy the enclave - this should release the transaction region
   // buffers in the destructor.
@@ -61,7 +61,7 @@ TEST_F(EnclaveTest, TxnRegionFree) {
   //
   // The constructor will CHECK fail if it cannot allocate the txn region
   // so if this succeeds the destructor is properly releasing the resource.
-  enclave = absl::make_unique<LocalEnclave>(config);
+  enclave = std::make_unique<LocalEnclave>(config);
 
   SUCCEED();
 }
@@ -386,10 +386,22 @@ TEST_F(EnclaveTest, DestroyAndSetsched) {
 
 TEST_F(EnclaveTest, GetNrTasks) {
   Topology* topology = MachineTopology();
-  auto enclave = absl::make_unique<LocalEnclave>(
+  auto enclave = std::make_unique<LocalEnclave>(
       AgentConfig(topology, topology->all_cpus()));
 
   EXPECT_EQ(enclave->GetNrTasks(), 0);
+}
+
+TEST_F(EnclaveTest, SetDeliverCpuAvailability) {
+  Topology* topology = MachineTopology();
+  auto enclave = std::make_unique<LocalEnclave>(
+      AgentConfig(topology, topology->all_cpus()));
+
+  enclave->SetDeliverCpuAvailability(true);
+  std::string val =
+    LocalEnclave::ReadEnclaveTunable(enclave->GetDirFd(),
+                                     "deliver_cpu_availability");
+  EXPECT_EQ(val, "1");
 }
 
 // Tests killing an enclave from ghostfs while an agent is running.  This broke

@@ -32878,6 +32878,14 @@ struct ghost_msg_payload_cpu_not_idle {
 	uint64_t next_gtid;
 };
 
+struct ghost_msg_payload_cpu_available {
+	int cpu;
+};
+
+struct ghost_msg_payload_cpu_busy {
+	int cpu;
+};
+
 struct bpf_ghost_msg {
 	union {
 		struct ghost_msg_payload_task_dead dead;
@@ -32893,6 +32901,8 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_cpu_tick cpu_tick;
 		struct ghost_msg_payload_timer timer;
 		struct ghost_msg_payload_cpu_not_idle cpu_not_idle;
+		struct ghost_msg_payload_cpu_available cpu_available;
+		struct ghost_msg_payload_cpu_busy cpu_busy;
 	};
 	uint16_t type;
 	uint32_t seqnum;
@@ -32986,6 +32996,8 @@ enum {
 	MSG_CPU_TICK = 128,
 	MSG_CPU_TIMER_EXPIRED = 129,
 	MSG_CPU_NOT_IDLE = 130,
+	MSG_CPU_AVAILABLE = 131,
+	MSG_CPU_BUSY = 132,
 };
 
 enum ghost_txn_state {

@@ -155,6 +155,7 @@ class Enclave {
   virtual int GetDirFd() { return -1; }
   virtual void SetRunnableTimeout(absl::Duration d) {}
   virtual void SetCommitAtTick(bool enabled) {}
+  virtual void SetDeliverCpuAvailability(bool enabled) {}
   virtual void SetDeliverTicks(bool enabled) {}
   virtual void SetWakeOnWakerCpu(bool enabled) {}
   virtual void SetLiveDangerously(bool enabled) {}
@@ -512,23 +513,28 @@ class LocalEnclave final : public Enclave {
   }
 
   void SetCommitAtTick(bool enabled) final {
-    const char* val = enabled ? "1" : "0";
-    WriteEnclaveTunable(dir_fd_, "commit_at_tick", val);
+    WriteEnclaveTunable(dir_fd_, "commit_at_tick",
+                        BoolToTunableString(enabled));
+  }
+
+  void SetDeliverCpuAvailability(bool enabled) final {
+    WriteEnclaveTunable(dir_fd_, "deliver_cpu_availability",
+                        BoolToTunableString(enabled));
   }
 
   void SetDeliverTicks(bool enabled) final {
-    const char* val = enabled ? "1" : "0";
-    WriteEnclaveTunable(dir_fd_, "deliver_ticks", val);
+    WriteEnclaveTunable(dir_fd_, "deliver_ticks",
+                        BoolToTunableString(enabled));
   }
 
   void SetWakeOnWakerCpu(bool enabled) final {
-    const char* val = enabled ? "1" : "0";
-    WriteEnclaveTunable(dir_fd_, "wake_on_waker_cpu", val);
+    WriteEnclaveTunable(dir_fd_, "wake_on_waker_cpu",
+                        BoolToTunableString(enabled));
   }
 
   void SetLiveDangerously(bool enabled) final {
-    const char* val = enabled ? "1" : "0";
-    WriteEnclaveTunable(dir_fd_, "live_dangerously", val);
+    WriteEnclaveTunable(dir_fd_, "live_dangerously",
+                        BoolToTunableString(enabled));
   }
 
   // The kernel will send a task_new for every task in the enclave
@@ -564,6 +570,8 @@ class LocalEnclave final : public Enclave {
   static int GetEnclaveDirectory(int ctl_fd);
   static void WriteEnclaveTunable(int dir_fd, absl::string_view tunable_path,
                                   absl::string_view tunable_value);
+  static std::string ReadEnclaveTunable(int dir_fd,
+                                        absl::string_view tunable_path);
   static int GetCpuDataRegion(int dir_fd);
   // Waits on an enclave's agent_online until the value of the file was 'until'
   // (either 0 or 1) at some point in time.
@@ -587,6 +595,7 @@ class LocalEnclave final : public Enclave {
   } ABSL_CACHELINE_ALIGNED;
 
   CpuRep* rep(const Cpu& cpu) { return &cpus_[cpu.id()]; }
+  std::string BoolToTunableString(bool b) { return b ? "1" : "0"; }
 
   CpuRep cpus_[MAX_CPUS];
   ghost_cpu_data* data_region_ = nullptr;

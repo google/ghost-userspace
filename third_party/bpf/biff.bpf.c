@@ -546,6 +546,33 @@ static void __attribute__((noinline)) handle_cpu_tick(struct bpf_ghost_msg *msg)
 		resched_cpu(cpu);
 }
 
+static void __attribute__((noinline))
+handle_cpu_available(struct bpf_ghost_msg *msg)
+{
+	struct ghost_msg_payload_cpu_available *avail = &msg->cpu_available;
+	struct biff_bpf_cpu_data *pcpu;
+	int cpu = avail->cpu;
+
+
+	pcpu = bpf_map_lookup_elem(&cpu_data, &cpu);
+	if (!pcpu)
+		return;
+	pcpu->available = true;
+}
+
+static void __attribute__((noinline))
+handle_cpu_busy(struct bpf_ghost_msg *msg)
+{
+	struct ghost_msg_payload_cpu_busy *busy = &msg->cpu_busy;
+	struct biff_bpf_cpu_data *pcpu;
+	int cpu = busy->cpu;
+
+	pcpu = bpf_map_lookup_elem(&cpu_data, &cpu);
+	if (!pcpu)
+		return;
+	pcpu->available = false;
+}
+
 SEC("ghost_msg/msg_send")
 int biff_msg_send(struct bpf_ghost_msg *msg)
 {
@@ -579,6 +606,12 @@ int biff_msg_send(struct bpf_ghost_msg *msg)
 		break;
 	case MSG_CPU_TICK:
 		handle_cpu_tick(msg);
+		break;
+	case MSG_CPU_AVAILABLE:
+		handle_cpu_available(msg);
+		break;
+	case MSG_CPU_BUSY:
+		handle_cpu_busy(msg);
 		break;
 	}
 

@@ -28,6 +28,7 @@
 struct biff_bpf_cpu_data {
 	uint64_t current;
 	uint64_t cpu_seqnum;
+	bool available;
 } __attribute__((aligned(64)));
 
 /*

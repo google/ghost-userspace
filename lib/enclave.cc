@@ -222,6 +222,16 @@ void LocalEnclave::WriteEnclaveTunable(int dir_fd,
 }
 
 // static
+std::string LocalEnclave::ReadEnclaveTunable(int dir_fd,
+                                             absl::string_view tunable_path) {
+  int tunable_fd = openat(dir_fd, std::string(tunable_path).c_str(), O_RDONLY);
+  CHECK_GE(tunable_fd, 0);
+  std::string val = ReadString(tunable_fd);
+  close(tunable_fd);
+  return val;
+}
+
+// static
 int LocalEnclave::GetCpuDataRegion(int dir_fd) {
   CHECK_GE(dir_fd, 0);
   return openat(dir_fd, "cpu_data", O_RDWR);

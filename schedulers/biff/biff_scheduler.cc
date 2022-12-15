@@ -40,6 +40,8 @@ BiffScheduler::BiffScheduler(Enclave* enclave, CpuList cpulist,
   bpf_sw_data_ = static_cast<struct biff_bpf_sw_data*>(
       bpf_map__mmap(bpf_obj_->maps.sw_data));
   CHECK_NE(bpf_sw_data_, MAP_FAILED);
+
+  enclave->SetDeliverCpuAvailability(true);
 }
 
 BiffScheduler::~BiffScheduler() {
