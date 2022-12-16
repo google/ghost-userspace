@@ -325,15 +325,20 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
     // the agent on 'sched_cpu_' is doing the sync_group commits.
     bool successful = enclave()->CommitSyncRequests(cpus());
 
+    int num_txns_failed = 0;
+    int num_txns_succeeded = 0;
     for (const Cpu& cpu : cpus()) {
       CpuState* cs = cpu_state(cpu);
 
-      // Verify all-or-nothing semantics: all commits must have the same
-      // disposition (successful or failed).
       const RunRequest* req = enclave()->GetRunRequest(cpu);
       ASSERT_THAT(req->sync_group_owned(), IsFalse());
       ASSERT_THAT(req->committed(), IsTrue());
-      ASSERT_THAT(req->succeeded(), Eq(successful));
+      if (req->succeeded()) {
+        num_txns_succeeded++;
+      } else {
+        num_txns_failed++;
+      }
+
       if (cs->next != cs->current) {
         ASSERT_THAT(cs->next, NotNull());
         ASSERT_THAT(cs->current, IsNull());
@@ -362,6 +367,20 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
 
       cs->next = nullptr;  // reset for next scheduling round.
     }
+
+    // Verify all-or-nothing semantics.
+    //
+    // If the sync-group commit was successful then all of its component
+    // transactions must be successful. In the failure case at least one
+    // of its component transactions must have failed.
+    if (successful) {
+      EXPECT_THAT(num_txns_succeeded, Eq(cpus().Size()));
+    } else {
+      EXPECT_THAT(num_txns_failed, Gt(0));
+    }
+
+    // At the end of the sync_group commit all txns must have completed.
+    EXPECT_THAT(num_txns_succeeded + num_txns_failed, Eq(cpus().Size()));
   }
 
  protected:
