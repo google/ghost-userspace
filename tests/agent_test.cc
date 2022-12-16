@@ -827,5 +827,136 @@ TEST(AgentTest, GetStatusWordInfo) {
   EXPECT_THAT(ap.Rpc(kGetStatusWordInfo, rpc_args), Eq(EINVAL));
 }
 
+
+// Single-producer/single-consumer synchronization struct to run a function and
+// report OK.  Used by an AgentRpc handler (CFS thread) and an agent task.
+struct Runner {
+  std::atomic<bool> run_func;
+  std::atomic<bool> ran_func;
+  bool ok;
+};
+
+// Single-cpu spinning agent.  Tests that we can detect it blocking and waking.
+class BlockTestAgent : public LocalAgent {
+ public:
+  BlockTestAgent(Enclave* enclave, Cpu cpu, LocalChannel* channel,
+                 Runner* runner) :
+    LocalAgent(enclave, cpu),
+    channel_(channel),
+    runner_(runner) {}
+
+ protected:
+  void AgentThread() override {
+    SignalReady();
+    WaitForEnclaveReady();
+
+    while (!Finished()) {
+      BarrierToken agent_barrier = status_word().barrier();
+      bool prio_boost = status_word().boosted_priority();
+      if (prio_boost) {
+        RunRequest* req = enclave()->GetRunRequest(cpu());
+        req->LocalYield(agent_barrier, RTLA_ON_IDLE);
+      }
+      Pause();
+
+      if (runner_->run_func.load()) {
+        runner_->run_func.store(false);
+
+        enclave_->SetDeliverAgentRunnability(true);
+        // Ensure at least one block and wakeup cycle.
+        absl::SleepFor(absl::Milliseconds(5));
+        enclave_->SetDeliverAgentRunnability(false);
+
+        Message msg;
+        bool saw_blocked = false;
+        bool saw_wakeup = false;
+        while (!(msg = Peek(channel_)).empty()) {
+          switch (msg.type()) {
+            case MSG_CPU_AGENT_BLOCKED:
+              saw_blocked = true;
+              break;
+            case MSG_CPU_AGENT_WAKEUP:
+              saw_wakeup = true;
+              break;
+          }
+          Consume(channel_, msg);
+        }
+
+        runner_->ok = saw_blocked && saw_wakeup;
+        runner_->ran_func.store(true);
+      }
+    }
+  }
+
+ private:
+  LocalChannel* channel_;
+  Runner* runner_;
+};
+
+class RunnerConfig : public AgentConfig {
+ public:
+  RunnerConfig(int cpu_id)
+      : AgentConfig(MachineTopology(),
+                    MachineTopology()->ToCpuList(std::vector<int>{cpu_id})) {}
+};
+
+constexpr int kRunBlockTest = 42;
+
+template <class EnclaveType = LocalEnclave>
+class FullBlockTestAgent : public FullAgent<EnclaveType> {
+#define AGENT_AS(agent) agent_down_cast<BlockTestAgent*>((agent).get())
+
+ public:
+  explicit FullBlockTestAgent(const RunnerConfig& config)
+      : FullAgent<EnclaveType>(config),
+        default_channel_(GHOST_MAX_QUEUE_ELEMS, /*numa_node_=*/0) {
+    default_channel_.SetEnclaveDefault();
+    this->StartAgentTasks();
+    this->enclave_.Ready();
+  }
+
+  ~FullBlockTestAgent() override { this->TerminateAgentTasks(); }
+
+  std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
+    return absl::make_unique<BlockTestAgent>(&this->enclave_, cpu,
+                                             &default_channel_, &runner_);
+  }
+
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse& response) override {
+    switch (req) {
+      case kRunBlockTest:
+        runner_.run_func.store(true);
+        while (!runner_.ran_func.load()) {
+          Pause();
+        }
+        if (runner_.ok) {
+          response.response_code = 0;
+        } else {
+          response.response_code = -1;
+        }
+        break;
+      default:
+        response.response_code = -1;
+        return;
+    }
+  }
+
+ private:
+  LocalChannel default_channel_;
+  Runner runner_;
+#undef AGENT_AS
+};
+
+
+TEST(AgentTest, AgentBlock) {
+  constexpr int kCpuNum = 0;
+
+  auto ap = AgentProcess<FullBlockTestAgent<>, RunnerConfig>(
+         RunnerConfig(kCpuNum));
+
+  ASSERT_EQ(ap.Rpc(kRunBlockTest), 0);
+}
+
 }  // namespace
 }  // namespace ghost

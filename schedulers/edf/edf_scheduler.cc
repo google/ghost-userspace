@@ -95,6 +95,8 @@ EdfScheduler::EdfScheduler(Enclave* enclave, CpuList cpulist,
   bpf_data_ = static_cast<struct edf_bpf_per_cpu_data*>(
       bpf_map__mmap(bpf_obj_->maps.cpu_data));
   CHECK_NE(bpf_data_, MAP_FAILED);
+
+  enclave->SetDeliverAgentRunnability(true);
 }
 
 EdfScheduler::~EdfScheduler() {

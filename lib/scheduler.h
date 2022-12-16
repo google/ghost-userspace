@@ -335,6 +335,8 @@ class BasicDispatchScheduler : public Scheduler {
   virtual void CpuTimerExpired(const Message& msg) {}
   virtual void CpuAvailable(const Message& msg) {}
   virtual void CpuBusy(const Message& msg) {}
+  virtual void AgentBlocked(const Message& msg) {}
+  virtual void AgentWakeup(const Message& msg) {}
 
   TaskAllocator<TaskType>* allocator() const { return allocator_.get(); }
 
@@ -456,6 +458,12 @@ void BasicDispatchScheduler<TaskType>::DispatchMessage(const Message& msg) {
         break;
       case MSG_CPU_BUSY:
         CpuBusy(msg);
+        break;
+      case MSG_CPU_AGENT_BLOCKED:
+        AgentBlocked(msg);
+        break;
+      case MSG_CPU_AGENT_WAKEUP:
+        AgentWakeup(msg);
         break;
       default:
         GHOST_ERROR("Unhandled message type %d", msg.type());

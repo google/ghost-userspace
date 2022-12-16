@@ -392,6 +392,18 @@ TEST_F(EnclaveTest, GetNrTasks) {
   EXPECT_EQ(enclave->GetNrTasks(), 0);
 }
 
+TEST_F(EnclaveTest, SetDeliverAgentRunnability) {
+  Topology* topology = MachineTopology();
+  auto enclave = std::make_unique<LocalEnclave>(
+      AgentConfig(topology, topology->all_cpus()));
+
+  enclave->SetDeliverAgentRunnability(true);
+  std::string val =
+    LocalEnclave::ReadEnclaveTunable(enclave->GetDirFd(),
+                                     "deliver_agent_runnability");
+  EXPECT_EQ(val, "1");
+}
+
 TEST_F(EnclaveTest, SetDeliverCpuAvailability) {
   Topology* topology = MachineTopology();
   auto enclave = std::make_unique<LocalEnclave>(

@@ -155,6 +155,7 @@ class Enclave {
   virtual int GetDirFd() { return -1; }
   virtual void SetRunnableTimeout(absl::Duration d) {}
   virtual void SetCommitAtTick(bool enabled) {}
+  virtual void SetDeliverAgentRunnability(bool enabled) {}
   virtual void SetDeliverCpuAvailability(bool enabled) {}
   virtual void SetDeliverTicks(bool enabled) {}
   virtual void SetWakeOnWakerCpu(bool enabled) {}
@@ -514,6 +515,11 @@ class LocalEnclave final : public Enclave {
 
   void SetCommitAtTick(bool enabled) final {
     WriteEnclaveTunable(dir_fd_, "commit_at_tick",
+                        BoolToTunableString(enabled));
+  }
+
+  void SetDeliverAgentRunnability(bool enabled) final {
+    WriteEnclaveTunable(dir_fd_, "deliver_agent_runnability",
                         BoolToTunableString(enabled));
   }
 

@@ -72,6 +72,13 @@ int edf_msg_send(struct bpf_ghost_msg *msg)
 		if (skip_tick)
 			return 1;
 		break;
+	case MSG_CPU_AGENT_BLOCKED:
+	case MSG_CPU_AGENT_WAKEUP:
+		/*
+		 * Suppress these messages.  Having this in BPF ensures that
+		 * our vmlinux.h knows about these message types.
+		 */
+		return 1;
 	}
 
 	return 0;
