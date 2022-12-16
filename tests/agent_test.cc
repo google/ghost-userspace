@@ -912,6 +912,10 @@ class FullBlockTestAgent : public FullAgent<EnclaveType> {
         default_channel_(GHOST_MAX_QUEUE_ELEMS, /*numa_node_=*/0) {
     default_channel_.SetEnclaveDefault();
     this->StartAgentTasks();
+    // Toggling SetDeliverAgentRunnability() from an agent task is dangerous.
+    // Normally, you shouldn't open files from an agent task, since it grabs a
+    // kernel mutex.
+    this->enclave_.SetLiveDangerously(true);
     this->enclave_.Ready();
   }
 
