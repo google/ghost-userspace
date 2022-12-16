@@ -102,6 +102,34 @@ with an individual target name, such as `agent_shinjuku`.
 
 ---
 
+### Running the ghOSt Tests
+
+We include many different tests to ensure that both the ghOSt userspace code and
+the ghOSt kernel code are working correctly. Some of these tests are in `tests/`
+while others are in other subdirectories. To view all of the tests, run:
+```
+bazel query 'tests(//...)'
+```
+
+To build a test, such as `agent_test`, run:
+```
+bazel build -c opt agent_test
+```
+
+To run a test, launch the test binary directly:
+```
+bazel-bin/agent_test
+```
+
+Generally, Bazel encourages the use of `bazel test` when running tests. However,
+`bazel test` sandboxes the tests so that they have read-only access to `/sys`
+and are constrained in how long they can run for. However, the tests need write
+access to `/sys/fs/ghost` to coordinate with the kernel and may take a long time
+to complete. Thus, to avoid sandboxing, launch the test binaries directly (e.g.,
+`bazel-bin/agent_test`).
+
+---
+
 ### Running a ghOSt Scheduler
 
 We will run the per-CPU FIFO ghOSt scheduler and use it to schedule Linux
