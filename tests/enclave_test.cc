@@ -12,6 +12,9 @@
 #include "gtest/gtest.h"
 #include "schedulers/fifo/centralized/fifo_scheduler.h"
 
+ABSL_FLAG(std::string, test_tmpdir, "/tmp",
+          "A temporary file system directory that the test can access");
+
 namespace ghost {
 namespace {
 
@@ -256,7 +259,8 @@ TEST_F(EnclaveTest, CpuListComma) {
 
   // Linux's cpumask requires a comma between every 32 bit chunk (8 hex
   // nibbles).  We want to test having at least one comma. (1,84218421)
-  CpuList comma_list = MachineTopology()->ToCpuList(
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/false);
+  CpuList comma_list = TestTopology()->ToCpuList(
       std::vector<int>{0, 5, 10, 15, 16, 21, 26, 31, 32});
   std::string comma_str = comma_list.CpuMaskStr();
 
