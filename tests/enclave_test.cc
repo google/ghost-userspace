@@ -397,8 +397,14 @@ TEST_F(EnclaveTest, SetDeliverAgentRunnability) {
   auto enclave = std::make_unique<LocalEnclave>(
       AgentConfig(topology, topology->all_cpus()));
 
-  enclave->SetDeliverAgentRunnability(true);
   std::string val =
+    LocalEnclave::ReadEnclaveTunable(enclave->GetDirFd(),
+                                     "deliver_agent_runnability");
+  EXPECT_EQ(val, "0");
+
+  enclave->SetDeliverAgentRunnability(true);
+
+  val =
     LocalEnclave::ReadEnclaveTunable(enclave->GetDirFd(),
                                      "deliver_agent_runnability");
   EXPECT_EQ(val, "1");
@@ -409,8 +415,14 @@ TEST_F(EnclaveTest, SetDeliverCpuAvailability) {
   auto enclave = std::make_unique<LocalEnclave>(
       AgentConfig(topology, topology->all_cpus()));
 
-  enclave->SetDeliverCpuAvailability(true);
   std::string val =
+    LocalEnclave::ReadEnclaveTunable(enclave->GetDirFd(),
+                                     "deliver_cpu_availability");
+  EXPECT_EQ(val, "0");
+
+  enclave->SetDeliverCpuAvailability(true);
+
+  val =
     LocalEnclave::ReadEnclaveTunable(enclave->GetDirFd(),
                                      "deliver_cpu_availability");
   EXPECT_EQ(val, "1");

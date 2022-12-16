@@ -96,6 +96,7 @@ EdfScheduler::EdfScheduler(Enclave* enclave, CpuList cpulist,
       bpf_map__mmap(bpf_obj_->maps.cpu_data));
   CHECK_NE(bpf_data_, MAP_FAILED);
 
+  // AGENT_BLOCKED and AGENT_WAKEUP are filtered by BPF.
   enclave->SetDeliverAgentRunnability(true);
 }
 
