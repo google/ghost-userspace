@@ -250,15 +250,14 @@ void CfsScheduler::Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum) {
   // one we are migrating to). Once this happens, we will recieve messages on
   // the new queue. Then, we recieve a TaskDeparted messaged, which deletes the
   // task on another CPU. This leads to a use-after-free bug on the task in
-  // question. The avoid those, lock the entire reference to task.
+  // question. To avoid those, lock the entire reference to task.
   {
     absl::MutexLock l(&cs->run_queue.mu_);
     if (!channel->AssociateTask(task->gtid, seqnum, /*status=*/nullptr)) {
-      GHOST_DPRINT(
-          3, stderr,
-          "Could not associate task %s to cpu %d. This in only correct "
-          "if a TaskDeparted message follows.",
-          task->gtid.describe(), cpu.id());
+      GHOST_DPRINT(3, stderr,
+                   "Could not associate task %s to cpu %d. This is only "
+                   "correct if a TaskDeparted message follows.",
+                   task->gtid.describe(), cpu.id());
       return;
     }
 
@@ -610,19 +609,16 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
       task->gtid.describe()));
   }
 
-  // Get the intersection of the eligible CPUs and
-  // the enclave CPUs.
+  // Get the intersection of the eligible CPUs and the enclave CPUs.
   eligible_cpus.Intersection(cpus());
   if (eligible_cpus.Empty()) {
-    // Not able to migrate as the eligible CPUs are
-    // outside of the enclave.
+    // Not able to migrate as the eligible CPUs are outside of the enclave.
     DPRINT_CFS(3, absl::StrFormat("[%s]: No CPUs eligible for migration.",
       task->gtid.describe()));
     return;
   }
 
-  // Make sure to remove the task from the
-  // current cpu.
+  // Make sure to remove the task from the current cpu.
   CpuState* cs = cpu_state_of(task);
   CHECK_EQ(cs->current, task);
   {
@@ -634,11 +630,11 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
   // Get a target CPU from the eligible CPU list.
   Cpu target_cpu = SelectTaskRq(task, eligible_cpus);
 
-  // When not removing the task from the current RQ, seqnum+1 is
-  // necessary because migrating a running task generates a new message, which
-  // increments seqnum and fails Migrate (passed seqnum less than the current
-  // seqnum). Even after erasing the task, we need seqnum+1, otherwise the task
-  // enters a weird state (no failures though, just hangs).
+  // When not removing the task from the current RQ, seqnum+1 is necessary
+  // because migrating a running task generates a new message, which increments
+  // seqnum and fails Migrate (passed seqnum less than the current seqnum). Even
+  // after erasing the task, we need seqnum+1, otherwise the task enters a weird
+  // state (no failures though, just hangs).
   Migrate(task, target_cpu, msg.seqnum()+1);
 }
 

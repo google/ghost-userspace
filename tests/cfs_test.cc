@@ -38,15 +38,8 @@ TEST_F(CfsTest, Simple) {
   // Create the CFS agent process.
   auto ap = AgentProcess<FullCfsAgent<LocalEnclave>, CfsConfig>(config);
 
-  std::vector<std::unique_ptr<Notification>> exit;
-  for (int i = 0; i < 5; i++) {
-    exit.push_back(std::make_unique<Notification>());
-  }
-
-  GhostThread t(GhostThread::KernelScheduler::kGhost, [&exit] {
+  GhostThread t(GhostThread::KernelScheduler::kGhost, [] {
     CHECK_EQ(sched_getcpu(), 0);
-
-    while (!exit[0]->HasBeenNotified()) {}
 
     // The mask includes CPUs 1 and 3. CPU 3 is outside
     // the enclave, so should be ignored by the agent.
@@ -56,12 +49,10 @@ TEST_F(CfsTest, Simple) {
                      std::vector<int>{1, 3})),
              0);
 
-    // Thread migration not instant, wait
-    while (!exit[1]->HasBeenNotified()) {}
-
-    CHECK_EQ(sched_getcpu(), 1);
-
-    while (!exit[2]->HasBeenNotified()) {}
+    int cpu;
+    while ((cpu = sched_getcpu()) == 0) {
+    }
+    CHECK_EQ(cpu, 1);
 
     // The mask includes CPUs 1 and 4. CPU 4 is outside
     // the enclave, so should be ignored by the agent.
@@ -71,19 +62,10 @@ TEST_F(CfsTest, Simple) {
                      std::vector<int>{2, 4})),
              0);
 
-    while (!exit[3]->HasBeenNotified()) {}
-
-    CHECK_EQ(sched_getcpu(), 2);
-
-    // Just to observe in top. We can remove this.
-    while (!exit[4]->HasBeenNotified()) {}
+    while ((cpu = sched_getcpu()) == 1) {
+    }
+    CHECK_EQ(cpu, 2);
   });
-
-  for (int i = 0; i < 5; i++) {
-    absl::SleepFor(absl::Seconds(1));
-    exit[i]->Notify();
-  }
-
   t.Join();
 
   int num_tasks;
