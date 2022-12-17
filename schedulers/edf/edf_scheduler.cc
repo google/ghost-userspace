@@ -70,7 +70,7 @@ EdfScheduler::EdfScheduler(Enclave* enclave, CpuList cpulist,
   bpf_obj_ = edf_bpf__open();
   CHECK_NE(bpf_obj_, nullptr);
 
-  bpf_map__resize(bpf_obj_->maps.cpu_data, libbpf_num_possible_cpus());
+  bpf_map__set_max_entries(bpf_obj_->maps.cpu_data, libbpf_num_possible_cpus());
 
   bpf_program__set_types(bpf_obj_->progs.edf_pnt,
                          BPF_PROG_TYPE_GHOST_SCHED, BPF_GHOST_SCHED_PNT);
