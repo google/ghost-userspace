@@ -88,6 +88,28 @@ cc_binary(
     ],
 )
 
+cc_library(
+    name = "cfs_scheduler",
+    srcs = [
+        "schedulers/cfs/cfs_agent.cc",
+        "schedulers/cfs/cfs_scheduler.cc",
+        "schedulers/cfs/cfs_scheduler.h",
+    ],
+    hdrs = [
+        "schedulers/cfs/cfs_scheduler.h",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        ":base",
+        "@com_google_absl//absl/debugging:symbolize",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+    ],
+)
+
 cc_binary(
     name = "agent_exp",
     srcs = [
@@ -192,6 +214,22 @@ cc_binary(
         ":base",
         ":ghost",
         "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_binary(
+    name = "cfs_test",
+    testonly = 1,
+    srcs = [
+        "tests/cfs_test.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        ":base",
+        ":cfs_scheduler",
+        ":ghost",
+        "@com_google_googletest//:gtest",
     ],
 )
 

@@ -260,6 +260,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   void TaskBlocked(CfsTask* task, const Message& msg) final;
   void TaskPreempted(CfsTask* task, const Message& msg) final;
   void TaskSwitchto(CfsTask* task, const Message& msg) final;
+  void TaskAffinityChanged(CfsTask* task, const Message& msg) final;
   void CpuTick(const Message& msg) final;
 
  private:
@@ -281,7 +282,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
 
   // Migrate takes task and places it on cpu's run queue.
   void Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum);
-  Cpu SelectTaskRq(CfsTask* task);
+  Cpu SelectTaskRq(CfsTask* task, const CpuList& eligible_cpus);
   void DumpAllTasks();
 
   void PingCpu(const Cpu& cpu);
@@ -336,6 +337,10 @@ class CfsAgent : public LocalAgent {
 class CfsConfig : public AgentConfig {
  public:
   CfsConfig() {}
+  CfsConfig(Topology* topology, CpuList cpulist)
+      : AgentConfig(topology, std::move(cpulist)) {
+    tick_config_ = CpuTickConfig::kAllTicks;
+  }
   CfsConfig(Topology* topology, CpuList cpulist, absl::Duration min_granularity,
             absl::Duration latency)
       : AgentConfig(topology, std::move(cpulist)),

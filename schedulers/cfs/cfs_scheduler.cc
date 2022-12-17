@@ -153,20 +153,23 @@ void CfsScheduler::EnclaveReady() {
 // robust.
 // NOTE: This is inherently racy, since we only synchronize on individual rq's
 // we are not guaranteed to see a consistent view of rq loads.
-Cpu CfsScheduler::SelectTaskRq(CfsTask* task) {
+Cpu CfsScheduler::SelectTaskRq(CfsTask* task, const CpuList& eligible_cpus) {
   PrintDebugTaskMessage("SelectTaskRq", nullptr, task);
 
   uint64_t min_load = UINT64_MAX;
   Cpu min_load_cpu = topology()->cpu(MyCpu());
 
   // Updates the min cpu load variables and returns true if empty.
-  auto update_min = [&min_load, &min_load_cpu](uint64_t this_load,
+  auto update_min = [&min_load, &min_load_cpu, &eligible_cpus](uint64_t this_load,
                                                const Cpu& this_cpu) {
-    if (min_load >= this_load) {
-      min_load = this_load;
-      min_load_cpu = this_cpu;
+    if (eligible_cpus.IsSet(this_cpu)) {
+      if (min_load >= this_load) {
+        min_load = this_load;
+        min_load_cpu = this_cpu;
+      }
+      return this_load == 0;
     }
-    return this_load == 0;
+    return false;
   };
 
   // Check if this cpu is empty.
@@ -276,6 +279,8 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
 
   PrintDebugTaskMessage("TaskNew", nullptr, task);
 
+  CpuList eligible_cpus = cpus();
+
   task->seqnum = msg.seqnum();
 
   // Our task does not have an rq assigned to it yet, so we do not need to hold
@@ -283,7 +288,7 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
   task->run_state.Set(CfsTaskState::kBlocked);
 
   if (payload->runnable) {
-    Cpu cpu = SelectTaskRq(task);
+    Cpu cpu = SelectTaskRq(task, eligible_cpus);
     Migrate(task, cpu, msg.seqnum());
   } else {
     // Wait until task becomes runnable to avoid race between migration
@@ -297,6 +302,8 @@ void CfsScheduler::TaskRunnable(CfsTask* task, const Message& msg) {
       cpu_state(topology()->cpu(task->cpu >= 0 ? task->cpu : sched_getcpu())),
       task);
 
+  CpuList eligible_cpus = cpus();
+
   // If this is our current task, then we will defer its proccessing until
   // PickNextTask. Otherwise, use the normal wakeup logic.
   if (task->cpu >= 0) {
@@ -307,7 +314,7 @@ void CfsScheduler::TaskRunnable(CfsTask* task, const Message& msg) {
     }
   }
 
-  Cpu cpu = SelectTaskRq(task);
+  Cpu cpu = SelectTaskRq(task, eligible_cpus);
   Migrate(task, cpu, msg.seqnum());
 }
 
@@ -405,7 +412,11 @@ void CfsScheduler::TaskPreempted(CfsTask* task, const Message& msg) {
   CpuState* cs = cpu_state(cpu);
   PrintDebugTaskMessage("TaskPreempted", cs, task);
 
-  CHECK_EQ(cs->current, task);
+  // Skip the check in case cs->current == nullptr. TaskPreempted
+  // invoked after the task has been removed from the RQ.
+  if (cs->current) {
+    CHECK_EQ(cs->current, task);
+  }
 
   // no-op. the task doesn't change any state.
 
@@ -584,6 +595,51 @@ void CfsScheduler::PingCpu(const Cpu& cpu) {
   if (agent) {
     agent->Ping();
   }
+}
+
+void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
+  const ghost_msg_payload_task_affinity_changed* payload =
+    static_cast<const ghost_msg_payload_task_affinity_changed*>(msg.payload());
+
+  CHECK_EQ(task->gtid.id(), payload->gtid);
+  CHECK_EQ(task->run_state.Get(), CfsTaskState::kRunning);
+
+  CpuList eligible_cpus = MachineTopology()->EmptyCpuList();
+  if (GhostHelper()->SchedGetAffinity(task->gtid, eligible_cpus) != 0) {
+    DPRINT_CFS(3, absl::StrFormat("[%s]: Cannot retrieve the CPU mask.",
+      task->gtid.describe()));
+  }
+
+  // Get the intersection of the eligible CPUs and
+  // the enclave CPUs.
+  eligible_cpus.Intersection(cpus());
+  if (eligible_cpus.Empty()) {
+    // Not able to migrate as the eligible CPUs are
+    // outside of the enclave.
+    DPRINT_CFS(3, absl::StrFormat("[%s]: No CPUs eligible for migration.",
+      task->gtid.describe()));
+    return;
+  }
+
+  // Make sure to remove the task from the
+  // current cpu.
+  CpuState* cs = cpu_state_of(task);
+  CHECK_EQ(cs->current, task);
+  {
+      absl::MutexLock l(&cs->run_queue.mu_);
+      cs->current = nullptr;
+      cs->run_queue.Erase(task);
+  }
+
+  // Get a target CPU from the eligible CPU list.
+  Cpu target_cpu = SelectTaskRq(task, eligible_cpus);
+
+  // When not removing the task from the current RQ, seqnum+1 is
+  // necessary because migrating a running task generates a new message, which
+  // increments seqnum and fails Migrate (passed seqnum less than the current
+  // seqnum). Even after erasing the task, we need seqnum+1, otherwise the task
+  // enters a weird state (no failures though, just hangs).
+  Migrate(task, target_cpu, msg.seqnum()+1);
 }
 
 #ifndef NDEBUG
