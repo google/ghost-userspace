@@ -60,8 +60,8 @@ TEST(DatabaseTest, RangeNoStartEntry) {
 }
 
 // Tests that the database returns an error when we attempt to get the values
-// for entries in a range such that the first first few entries exist but a
-// middle entry does not.
+// for entries in a range such that the first few entries exist but a middle
+// entry does not.
 TEST(DatabaseTest, RangeNoMiddleEntry) {
   constexpr uint32_t kRangeSize = 10;
   Database database(GetDatabasePath());
