@@ -20,6 +20,7 @@
 namespace ghost {
 namespace {
 
+using ::testing::Eq;
 using ::testing::Ge;
 
 class CfsTest : public testing::Test {};
@@ -39,32 +40,30 @@ TEST_F(CfsTest, Simple) {
   auto ap = AgentProcess<FullCfsAgent<LocalEnclave>, CfsConfig>(config);
 
   GhostThread t(GhostThread::KernelScheduler::kGhost, [] {
-    CHECK_EQ(sched_getcpu(), 0);
+    EXPECT_THAT(sched_getcpu(), Eq(0));
 
     // The mask includes CPUs 1 and 3. CPU 3 is outside
     // the enclave, so should be ignored by the agent.
-    CHECK_EQ(ghost::GhostHelper()->SchedSetAffinity(
-                 ghost::Gtid::Current(),
-                 ghost::MachineTopology()->ToCpuList(
-                     std::vector<int>{1, 3})),
-             0);
+    EXPECT_THAT(ghost::GhostHelper()->SchedSetAffinity(
+                    ghost::Gtid::Current(), ghost::MachineTopology()->ToCpuList(
+                                                std::vector<int>{1, 3})),
+                Eq(0));
 
     int cpu;
     while ((cpu = sched_getcpu()) == 0) {
     }
-    CHECK_EQ(cpu, 1);
+    EXPECT_THAT(cpu, Eq(1));
 
     // The mask includes CPUs 1 and 4. CPU 4 is outside
     // the enclave, so should be ignored by the agent.
-    CHECK_EQ(ghost::GhostHelper()->SchedSetAffinity(
-                 ghost::Gtid::Current(),
-                 ghost::MachineTopology()->ToCpuList(
-                     std::vector<int>{2, 4})),
-             0);
+    EXPECT_THAT(ghost::GhostHelper()->SchedSetAffinity(
+                    ghost::Gtid::Current(), ghost::MachineTopology()->ToCpuList(
+                                                std::vector<int>{2, 4})),
+                Eq(0));
 
     while ((cpu = sched_getcpu()) == 1) {
     }
-    CHECK_EQ(cpu, 2);
+    EXPECT_THAT(cpu, Eq(2));
   });
   t.Join();
 
