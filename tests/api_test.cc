@@ -1957,5 +1957,26 @@ TEST(ApiTest, SchedEnterGhostGtid) {
   GhostHelper()->CloseGlobalEnclaveFds();
 }
 
+TEST(ApiTest, EnteringGhostViaSetSchedulerReturnsBadFdError) {
+  // Sets sched_priority to be less than -1 to simulate a regular task trying
+  // to enter ghost via sched_setscheduler call, which should fail.
+  const sched_param param = { .sched_priority = -2 };
+  EXPECT_THAT(sched_setscheduler(/*pid=*/0, SCHED_GHOST, &param), Eq(-1));
+  EXPECT_THAT(errno, Eq(EBADF));
+
+  // It should fail even inside a ghost thread.
+  Topology* topology = MachineTopology();
+  auto ap = AgentProcess<FullFifoAgent<LocalEnclave>, AgentConfig>(
+      AgentConfig(topology, topology->ToCpuList(std::vector<int>{0})));
+
+  GhostThread t(GhostThread::KernelScheduler::kGhost, [&param] {
+    EXPECT_THAT(sched_setscheduler(/*pid=*/0, SCHED_GHOST, &param), Eq(-1));
+    EXPECT_THAT(errno, AnyOf(EPERM, EBADF));
+  });
+  t.Join();
+
+  GhostHelper()->CloseGlobalEnclaveFds();
+}
+
 }  // namespace
 }  // namespace ghost
