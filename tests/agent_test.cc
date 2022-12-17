@@ -831,9 +831,9 @@ TEST(AgentTest, GetStatusWordInfo) {
 // Single-producer/single-consumer synchronization struct to run a function and
 // report OK.  Used by an AgentRpc handler (CFS thread) and an agent task.
 struct Runner {
-  std::atomic<bool> run_func;
-  std::atomic<bool> ran_func;
-  bool ok;
+  std::atomic<bool> run_func = false;
+  std::atomic<bool> ran_func = false;
+  bool ok = false;
 };
 
 // Single-cpu spinning agent.  Tests that we can detect it blocking and waking.
