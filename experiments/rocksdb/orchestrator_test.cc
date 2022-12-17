@@ -22,13 +22,13 @@ using ::testing::IsTrue;
 // can instantiate an orchestrator and test it.
 //
 // Example:
-// Orchestrator::Options options;
+// Options options;
 // ... Fill in 'options'.
 // TestOrchestrator orchestrator(options);
 // ... Test 'orchestrator'.
 class TestOrchestrator : public Orchestrator {
  public:
-  explicit TestOrchestrator(Orchestrator::Options options)
+  explicit TestOrchestrator(Options options)
       : Orchestrator(options, /*total_threads=*/0) {}
   ~TestOrchestrator() final {}
 
@@ -64,8 +64,8 @@ bool IsWithin(absl::Duration actual, absl::Duration expected,
 }
 
 // Returns orchestrator options suitable for the tests.
-Orchestrator::Options GetOptions() {
-  Orchestrator::Options options;
+Options GetOptions() {
+  Options options;
 
   options.print_options.pretty = true;
   options.print_options.distribution = false;
@@ -80,9 +80,10 @@ Orchestrator::Options GetOptions() {
   options.load_generator_cpu = 1;
   options.cfs_dispatcher_cpu = 2;
   options.num_workers = 2;
-  options.worker_cpus = {3, 4};
   options.cfs_wait_type = ThreadWait::WaitType::kSpin;
-  options.ghost_wait_type = Orchestrator::GhostWaitType::kFutex;
+  options.worker_cpus =
+      ghost::MachineTopology()->ToCpuList(std::vector<int>{3, 4});
+  options.ghost_wait_type = GhostWaitType::kFutex;
   options.get_duration = kGetRequestDuration;
   options.range_duration = kRangeQueryDuration;
   options.get_exponential_mean = absl::ZeroDuration();

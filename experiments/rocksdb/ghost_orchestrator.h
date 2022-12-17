@@ -21,7 +21,7 @@ namespace ghost_test {
 // exists because the ghOSt global agent has that role.
 //
 // Example:
-// Orchestrator::Options options;
+// Options options;
 // ... Fill in the options.
 // GhostOrchestrator orchestrator_(options);
 // (Constructs orchestrator with options.)
@@ -30,7 +30,7 @@ namespace ghost_test {
 // (Tells orchestrator to stop the experiment and print the results.)
 class GhostOrchestrator final : public Orchestrator {
  public:
-  explicit GhostOrchestrator(Orchestrator::Options opts);
+  explicit GhostOrchestrator(Options opts);
   ~GhostOrchestrator() final {}
 
   void Terminate() final;
@@ -60,11 +60,11 @@ class GhostOrchestrator final : public Orchestrator {
 
   // Returns true if RocksDB workers wait on a PrioTable.
   bool UsesPrioTable() const {
-    return options().ghost_wait_type == Orchestrator::GhostWaitType::kPrioTable;
+    return options().ghost_wait_type == GhostWaitType::kPrioTable;
   }
   // Returns true if RocksDB workers wait on futexes.
   bool UsesFutex() const {
-    return options().ghost_wait_type == Orchestrator::GhostWaitType::kFutex;
+    return options().ghost_wait_type == GhostWaitType::kFutex;
   }
 
   // Used by `GetIdleWorkerSIDs()`. Returns true if the idle worker with SID

@@ -21,7 +21,7 @@ namespace ghost_test {
 // futex until more work is assigned to them.
 //
 // Example:
-// Orchestrator::Options options;
+// Options options;
 // ... Fill in the options.
 // CfsOrchestrator orchestrator_(options);
 // (Constructs orchestrator with options.)
@@ -30,7 +30,7 @@ namespace ghost_test {
 // (Tells orchestrator to stop the experiment and print the results.)
 class CfsOrchestrator final : public Orchestrator {
  public:
-  explicit CfsOrchestrator(Orchestrator::Options opts);
+  explicit CfsOrchestrator(Options opts);
   ~CfsOrchestrator() final {}
 
   void Terminate() final;
@@ -55,10 +55,6 @@ class CfsOrchestrator final : public Orchestrator {
   // the SIDs of idle workers. Note that this method clears 'idle_sids_' before
   // filling it in.
   void GetIdleWorkerSIDs();
-
-  // The total number of threads, including the load generator thread, the
-  // dispatcher thread, and the worker threads.
-  const size_t total_threads_ = 0;
 
   // Allows runnable threads to run and keeps idle threads either spinning or
   // sleeping on a futex until they are marked runnable again.

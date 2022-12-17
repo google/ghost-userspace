@@ -65,7 +65,7 @@ void GhostOrchestrator::InitPrioTable() {
   }
 }
 
-GhostOrchestrator::GhostOrchestrator(Orchestrator::Options opts)
+GhostOrchestrator::GhostOrchestrator(Options opts)
     // Add 1 to account for the load generator.
     : Orchestrator(opts, opts.num_workers + 1) {
   // We include a sched item for the load generator even though the load
@@ -81,7 +81,7 @@ GhostOrchestrator::GhostOrchestrator(Orchestrator::Options opts)
     thread_wait_ = std::make_unique<ThreadWait>(/*num_threads=*/total_threads(),
                                                 ThreadWait::WaitType::kFutex);
   }
-  CHECK_EQ(options().worker_cpus.size(), 0);
+  CHECK(!options().worker_cpus.Empty());
 
   InitThreadPool();
   // This must be called after 'InitThreadPool' since it accesses the GTIDs of
@@ -256,6 +256,9 @@ void GhostOrchestrator::Worker(uint32_t sid) {
     request.request_start = absl::Now();
     HandleRequest(request, gen()[sid]);
     request.request_finished = absl::Now();
+    // Clear the response so that we do not waste memory storing it along with
+    // the latency results.
+    request.response.clear();
 
     requests()[sid].push_back(request);
   }

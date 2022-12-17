@@ -15,8 +15,7 @@ namespace {
 std::string BoolToString(bool b) { return b ? "true" : "false"; }
 }  // namespace
 
-std::ostream& operator<<(std::ostream& os,
-                         const Orchestrator::Options& options) {
+std::ostream& operator<<(std::ostream& os, const Options& options) {
   // Put the options and their values into an 'std::map' so that we can print
   // out the option/value pairs in alphabetical order.
   std::map<std::string, std::string> flags;
@@ -34,9 +33,10 @@ std::ostream& operator<<(std::ostream& os,
   flags["cfs_dispatcher_cpu"] = std::to_string(options.cfs_dispatcher_cpu);
   flags["num_workers"] = std::to_string(options.num_workers);
 
-  for (int i = 0; i < options.worker_cpus.size(); i++) {
-    flags["worker_cpus"] += std::to_string(options.worker_cpus[i]);
-    if (i < options.worker_cpus.size() - 1) {
+  for (int i = 0; i < options.worker_cpus.Size(); i++) {
+    flags["worker_cpus"] +=
+        std::to_string(options.worker_cpus.GetNthCpu(i).id());
+    if (i < options.worker_cpus.Size() - 1) {
       flags["worker_cpus"] += " ";
     }
   }
@@ -46,9 +46,8 @@ std::ostream& operator<<(std::ostream& os,
           ? "spin"
           : "futex";
   flags["ghost_wait_type"] =
-      options.ghost_wait_type == Orchestrator::GhostWaitType::kPrioTable
-          ? "prio_table"
-          : "futex";
+      options.ghost_wait_type == GhostWaitType::kPrioTable ? "prio_table"
+                                                           : "futex";
   flags["get_duration"] = absl::FormatDuration(options.get_duration);
   flags["range_duration"] = absl::FormatDuration(options.range_duration);
   flags["get_exponential_mean"] =
@@ -91,9 +90,8 @@ Orchestrator::Orchestrator(Options options, size_t total_threads)
         options_.cfs_dispatcher_cpu != kBackgroundThreadCpu);
   CHECK(options_.scheduler != ghost::GhostThread::KernelScheduler::kCfs ||
         options_.cfs_dispatcher_cpu >= 0);
-  for (const int cpu : options_.worker_cpus) {
-    CHECK_GE(cpu, 0);
-    CHECK_NE(cpu, kBackgroundThreadCpu);
+  for (const ghost::Cpu& cpu : options_.worker_cpus) {
+    CHECK_NE(cpu.id(), kBackgroundThreadCpu);
   }
 
   // Add 2 to account for the load generator thread and the dispatcher thread.
@@ -160,9 +158,8 @@ void Orchestrator::HandleGet(Request& request, absl::BitGen& gen) {
         Request::GetExponentialHandleTime(gen, options_.get_exponential_mean);
   }
 
-  std::string response;
   Request::Get& get = std::get<Request::Get>(request.work);
-  CHECK(database_.Get(get.entry, response));
+  CHECK(database_.Get(get.entry, request.response));
 
   absl::Duration now_duration = GetThreadCpuTime();
   if (now_duration - start_duration < service_time) {
@@ -176,9 +173,8 @@ void Orchestrator::HandleRange(Request& request, absl::BitGen& gen) {
   absl::Duration start_duration = GetThreadCpuTime();
   absl::Duration service_time = options_.range_duration;
 
-  std::string response;
   Request::Range& range = std::get<Request::Range>(request.work);
-  CHECK(database_.RangeQuery(range.start_entry, range.size, response));
+  CHECK(database_.RangeQuery(range.start_entry, range.size, request.response));
 
   absl::Duration now_duration = GetThreadCpuTime();
   if (now_duration - start_duration < service_time) {

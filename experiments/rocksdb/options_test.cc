@@ -17,8 +17,8 @@ namespace {
 using ::testing::Eq;
 
 // Returns orchestrator options suitable for the tests.
-Orchestrator::Options GetOptions() {
-  Orchestrator::Options options;
+Options GetOptions() {
+  Options options;
 
   options.print_options.pretty = true;
   options.print_options.distribution = false;
@@ -32,9 +32,10 @@ Orchestrator::Options GetOptions() {
   options.load_generator_cpu = 1;
   options.cfs_dispatcher_cpu = 2;
   options.num_workers = 2;
-  options.worker_cpus = {3, 4};
   options.cfs_wait_type = ThreadWait::WaitType::kSpin;
-  options.ghost_wait_type = Orchestrator::GhostWaitType::kFutex;
+  options.worker_cpus =
+      ghost::MachineTopology()->ToCpuList(std::vector<int>{3, 4});
+  options.ghost_wait_type = GhostWaitType::kFutex;
   options.get_duration = absl::Microseconds(10);
   options.range_duration = absl::Milliseconds(5);
   options.get_exponential_mean = absl::ZeroDuration();
@@ -47,7 +48,7 @@ Orchestrator::Options GetOptions() {
   return options;
 }
 
-// The '<<' operator for 'Orchestrator::Options' should print all options and
+// The '<<' operator for 'Options' should print all options and
 // their values in alphabetical order by option name.
 std::string GetExpectedOutput() {
   return R"(batch: 1
@@ -77,7 +78,7 @@ worker_cpus: 3 4)";
 // This tests that the '<<' operator prints all options and their values in
 // alphabetical order by option name.
 TEST(OptionsTest, PrintOptions) {
-  Orchestrator::Options options = GetOptions();
+  Options options = GetOptions();
   std::ostringstream os;
 
   os << options;

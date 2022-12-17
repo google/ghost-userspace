@@ -43,16 +43,13 @@ ABSL_FLAG(int, cfs_dispatcher_cpu, 11,
           "the dispatcher runs on (default: 11).");
 ABSL_FLAG(size_t, num_workers, 6,
           "The number of workers. Each worker has one thread. (default: 6).");
-// It is preferred that the 'worker_cpus' flag be an 'std::vector<int>', but the
-// only vector type that Abseil supports is 'std::vector<std::string>'.
-ABSL_FLAG(std::vector<std::string>, worker_cpus,
-          std::vector<std::string>({"12", "13", "14", "15", "16", "17"}),
+ABSL_FLAG(std::string, worker_cpus, "12-17",
           "The CPUs that worker threads run on for CFS (Linux Completely Fair "
           "Scheduler) experiments. Each worker thread is pinned to its own "
-          "CPU. This, the number of CPUs must be equal to the 'num_workers' "
+          "CPU. Thus, the number of CPUs must be equal to the 'num_workers' "
           "flag value. For ghOSt experiments, ghOSt assigns workers to CPUs. "
           "Thus, no CPUs should be specified with this flag when ghOSt is "
-          "used. (default: 12,13,14,15,16,17).");
+          "used. (default: 12-17).");
 ABSL_FLAG(std::string, cfs_wait_type, "spin",
           "For CFS experiments, the way that worker threads wait until they "
           "are assigned more work by the dispatcher (\"spin\" or \"futex\", "
@@ -93,9 +90,9 @@ ABSL_FLAG(
 
 namespace {
 // Parses all command line flags and returns them as a
-// 'ghost_test::Orchestrator::Options' instance.
-ghost_test::Orchestrator::Options GetOptions() {
-  ghost_test::Orchestrator::Options options;
+// 'ghost_test::Options' instance.
+ghost_test::Options GetOptions() {
+  ghost_test::Options options;
 
   std::string print_format = absl::GetFlag(FLAGS_print_format);
   CHECK(print_format == "pretty" || print_format == "csv");
@@ -112,11 +109,8 @@ ghost_test::Orchestrator::Options GetOptions() {
   options.load_generator_cpu = absl::GetFlag(FLAGS_load_generator_cpu);
   options.cfs_dispatcher_cpu = absl::GetFlag(FLAGS_cfs_dispatcher_cpu);
   options.num_workers = absl::GetFlag(FLAGS_num_workers);
-
-  const std::vector<std::string> worker_cpus = absl::GetFlag(FLAGS_worker_cpus);
-  for (const std::string& cpu : worker_cpus) {
-    options.worker_cpus.push_back(std::stoi(cpu));
-  }
+  options.worker_cpus =
+      ghost::MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_worker_cpus));
 
   std::string cfs_wait_type = absl::GetFlag(FLAGS_cfs_wait_type);
   CHECK(cfs_wait_type == "spin" || cfs_wait_type == "futex");
@@ -126,10 +120,9 @@ ghost_test::Orchestrator::Options GetOptions() {
 
   std::string ghost_wait_type = absl::GetFlag(FLAGS_ghost_wait_type);
   CHECK(ghost_wait_type == "prio_table" || ghost_wait_type == "futex");
-  options.ghost_wait_type =
-      (ghost_wait_type == "prio_table")
-          ? ghost_test::Orchestrator::GhostWaitType::kPrioTable
-          : ghost_test::Orchestrator::GhostWaitType::kFutex;
+  options.ghost_wait_type = (ghost_wait_type == "prio_table")
+                                ? ghost_test::GhostWaitType::kPrioTable
+                                : ghost_test::GhostWaitType::kFutex;
 
   options.get_duration = absl::GetFlag(FLAGS_get_duration);
   CHECK_GE(options.get_duration, absl::ZeroDuration());
@@ -227,7 +220,7 @@ int main(int argc, char* argv[]) {
 
   absl::ParseCommandLine(argc, argv);
 
-  ghost_test::Orchestrator::Options options = GetOptions();
+  ghost_test::Options options = GetOptions();
   std::cout << options << std::endl;
   std::cout << std::endl;
 

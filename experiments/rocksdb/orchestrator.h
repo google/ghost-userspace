@@ -18,6 +18,117 @@
 
 namespace ghost_test {
 
+enum GhostWaitType {
+  kPrioTable,
+  kFutex,
+};
+
+// Orchestrator configuration options.
+struct Options {
+  // Parses all command line flags and returns them as an 'Options' instance.
+  static Options GetOptions();
+
+  // This pass a string representation of 'options' to 'os'. The options are
+  // printed in alphabetical order by name.
+  friend std::ostream& operator<<(std::ostream& os, const Options& options);
+
+  latency::PrintOptions print_options;
+
+  // The orchestrator prints the overall results for all request types combined,
+  // no matter what.
+
+  // If true, the orchestrator will also print a section with the results for
+  // just Get requests.
+  bool print_get;
+
+  // If true, the orchestrator will also print a section with the results for
+  // just Range queries.
+  bool print_range;
+
+  // The path to the RocksDB database.
+  std::filesystem::path rocksdb_db_path;
+
+  // The throughput of the generated synthetic load.
+  double throughput;
+
+  // The share of requests that are Range queries. This value must be greater
+  // than or equal to 0 and less than or equal to 1. The share of requests that
+  // are Get requests is '1 - range_query_ratio'.
+  double range_query_ratio;
+
+  // The CPU that the load generator thread runs on.
+  int load_generator_cpu;
+
+  // For CFS (Linux Completely Fair Scheduler) experiments, the CPU that the
+  // dispatcher runs on.
+  int cfs_dispatcher_cpu;
+
+  // The number of workers. Each worker has one thread.
+  size_t num_workers;
+
+  // The CPUs that worker threads run on for CFS (Linux Completely Fair
+  // Scheduler) experiments. Each worker thread is pinned to its own CPU. Thus,
+  // `worker_cpus.Size()` must be equal to `num_workers`.
+  //
+  // For ghOSt experiments, ghOSt assigns workers to CPUs. Thus, this vector
+  // must be empty when ghOSt is used.
+  ghost::CpuList worker_cpus = ghost::MachineTopology()->EmptyCpuList();
+
+  // The worker wait type for CFS (Linux Completely Fair Scheduler)
+  // experiments. The workers can either spin while waiting for more work
+  // ('kWaitSpin') or they can sleep on a futex while waiting for more work
+  // ('kWaitFutex').
+  ThreadWait::WaitType cfs_wait_type;
+
+  // The worker wait type for ghOSt experiments. The workers can either interact
+  // with ghOSt and wait via the PrioTable or they can wait via a futex. In the
+  // former case, ghOSt learns worker runnability status via the PrioTable. In
+  // the latter case, ghOSt learns worker runnability status implicitly via
+  // TASK_BLOCKED/TASK_WAKEUP messages generated via the futex.
+  GhostWaitType ghost_wait_type;
+
+  // The total amount of time spent processing a Get request in RocksDB and
+  // doing synthetic work.
+  absl::Duration get_duration;
+
+  // The total amount of time spent processing a Range query in RocksDB and
+  // doing synthetic work.
+  absl::Duration range_duration;
+
+  // The Get request service time distribution can be converted from a fixed
+  // distribution to an exponential distribution by adding a sample from the
+  // exponential distribution with a mean of 'get_exponential_mean' to
+  // 'get_duration' to get the total service time for a Get request.
+  //
+  // Distribution: 'get_duration' + Exp(1 / 'get_exponential_mean')
+  //
+  // To keep the Get request service time distribution as a fixed distribution,
+  // set 'get_exponential_mean' to 'absl::ZeroDuration()'.
+  absl::Duration get_exponential_mean;
+
+  // The maximum number of requests to assign at a time to a worker. Generally
+  // this should be set to 1 (otherwise centralized queuing and Shinjuku cannot
+  // be faithfully implemented) but we support larger batches for future
+  // experiments that may want them.
+  size_t batch;
+
+  // The experiment duration.
+  absl::Duration experiment_duration;
+
+  // Discards all results from when the experiment starts to when the 'discard'
+  // duration has elapsed. We do not want the results to include initialization
+  // costs, such as page faults.
+  absl::Duration discard_duration;
+
+  // The scheduler that schedules the experiment. This is either CFS (Linux
+  // Completely Fair Scheduler) or ghOSt.
+  ghost::GhostThread::KernelScheduler scheduler;
+
+  // For the ghOSt experiments, this is the QoS (Quality-of-Service) class for
+  // the PrioTable work class that all worker sched items are added to.
+  uint32_t ghost_qos;
+};
+
 // This class is the central orchestrator of the RocksDB experiment. It manages
 // the load generator, the dispatcher (if one exists), and the workers. It
 // prints out the results when the experiment is finished.
@@ -25,117 +136,6 @@ namespace ghost_test {
 // Note that this is an abstract class so it cannot be constructed.
 class Orchestrator {
  public:
-  enum GhostWaitType {
-    kPrioTable,
-    kFutex,
-  };
-
-  // Orchestrator configuration options.
-  struct Options {
-    // Parses all command line flags and returns them as an 'Options' instance.
-    static Options GetOptions();
-
-    // This pass a string representation of 'options' to 'os'. The options are
-    // printed in alphabetical order by name.
-    friend std::ostream& operator<<(std::ostream& os, const Options& options);
-
-    latency::PrintOptions print_options;
-
-    // The orchestrator prints the overall results for all request types
-    // combined, no matter what.
-
-    // If true, the orchestrator will also print a section with the results for
-    // just Get requests.
-    bool print_get;
-
-    // If true, the orchestrator will also print a section with the results for
-    // just Range queries.
-    bool print_range;
-
-    // The path to the RocksDB database.
-    std::filesystem::path rocksdb_db_path;
-
-    // The throughput of the generated synthetic load.
-    double throughput;
-
-    // The share of requests that are Range queries. This value must be greater
-    // than or equal to 0 and less than or equal to 1. The share of requests
-    // that are Get requests is '1 - range_query_ratio'.
-    double range_query_ratio;
-
-    // The CPU that the load generator thread runs on.
-    int load_generator_cpu;
-
-    // For CFS (Linux Completely Fair Scheduler) experiments, the CPU that the
-    // dispatcher runs on.
-    int cfs_dispatcher_cpu;
-
-    // The number of workers. Each worker has one thread.
-    size_t num_workers;
-
-    // The CPUs that worker threads run on for CFS (Linux Completely Fair
-    // Scheduler) experiments. Each worker thread is pinned to its own CPU.
-    // Thus, `worker_cpus.size()` must be equal to `num_workers`.
-    //
-    // For ghOSt experiments, ghOSt assigns workers to CPUs. Thus, this vector
-    // must be empty when ghOSt is used.
-    std::vector<int> worker_cpus;
-
-    // The worker wait type for CFS (Linux Completely Fair Scheduler)
-    // experiments. The workers can either spin while waiting for more work
-    // ('kWaitSpin') or they can sleep on a futex while waiting for more work
-    // ('kWaitFutex').
-    ThreadWait::WaitType cfs_wait_type;
-
-    // The worker wait type for ghOSt experiments. The workers can either
-    // interact with ghOSt and wait via the PrioTable or they can wait via a
-    // futex. In the former case, ghOSt learns worker runnability status via the
-    // PrioTable. In the latter case, ghOSt learns worker runnability status
-    // implicitly via TASK_BLOCKED/TASK_WAKEUP messages generated via the futex.
-    GhostWaitType ghost_wait_type;
-
-    // The total amount of time spent processing a Get request in RocksDB and
-    // doing synthetic work.
-    absl::Duration get_duration;
-
-    // The total amount of time spent processing a Range query in RocksDB and
-    // doing synthetic work.
-    absl::Duration range_duration;
-
-    // The Get request service time distribution can be converted from a fixed
-    // distribution to an exponential distribution by adding a sample from the
-    // exponential distribution with a mean of 'get_exponential_mean' to
-    // 'get_duration' to get the total service time for a Get request.
-    //
-    // Distribution: 'get_duration' + Exp(1 / 'get_exponential_mean')
-    //
-    // To keep the Get request service time distribution as a fixed
-    // distribution, set 'get_exponential_mean' to 'absl::ZeroDuration()'.
-    absl::Duration get_exponential_mean;
-
-    // The maximum number of requests to assign at a time to a worker. Generally
-    // this should be set to 1 (otherwise centralized queuing and Shinjuku
-    // cannot be faithfully implemented) but we support larger batches for
-    // future experiments that may want them.
-    size_t batch;
-
-    // The experiment duration.
-    absl::Duration experiment_duration;
-
-    // Discards all results from when the experiment starts to when the
-    // 'discard' duration has elapsed. We do not want the results to include
-    // initialization costs, such as page faults.
-    absl::Duration discard_duration;
-
-    // The scheduler that schedules the experiment. This is either CFS (Linux
-    // Completely Fair Scheduler) or ghOSt.
-    ghost::GhostThread::KernelScheduler scheduler;
-
-    // For the ghOSt experiments, this is the QoS (Quality-of-Service) class
-    // for the PrioTable work class that all worker sched items are added to.
-    uint32_t ghost_qos;
-  };
-
   // Threads use this type to pass requests to each other. In the CFS (Linux
   // Completely Fair Scheduler) experiments, the load generator uses this to
   // pass requests to the dispatcher and the dispatcher uses this to pass
@@ -209,7 +209,7 @@ class Orchestrator {
   // percentiles). 'experiment_duration' is the duration of the experiment.
   void PrintResults(absl::Duration experiment_duration) const;
 
-  const Options& options() const { return options_; }
+  virtual const Options& options() const { return options_; }
 
   size_t total_threads() const { return total_threads_; }
 

@@ -34,13 +34,13 @@ void CfsOrchestrator::InitThreadPool() {
   thread_pool().Init(kernel_schedulers, thread_work);
 }
 
-CfsOrchestrator::CfsOrchestrator(Orchestrator::Options opts)
+CfsOrchestrator::CfsOrchestrator(Options opts)
     // Add 2 to account for the load generator thread and the dispatcher
     // thread.
     : Orchestrator(opts, opts.num_workers + 2),
       thread_wait_(/*num_threads=*/total_threads(), options().cfs_wait_type),
       threads_ready_(total_threads()) {
-  CHECK_EQ(options().num_workers, options().worker_cpus.size());
+  CHECK_EQ(options().num_workers, options().worker_cpus.Size());
 
   InitThreadPool();
 }
@@ -226,10 +226,10 @@ void CfsOrchestrator::Worker(uint32_t sid) {
     CHECK_EQ(ghost::GhostHelper()->SchedSetAffinity(
                  ghost::Gtid::Current(),
                  ghost::MachineTopology()->ToCpuList(
-                     std::vector<int>{options().worker_cpus[sid - 2]})),
+                     {options().worker_cpus.GetNthCpu(sid - 2)})),
              0);
-    printf("Worker (SID %u, TID: %ld, affined to CPU %u)\n", sid,
-           syscall(SYS_gettid), options().worker_cpus[sid - 2]);
+    printf("Worker (SID %u, TID: %ld, affined to CPU %d)\n", sid,
+           syscall(SYS_gettid), options().worker_cpus.GetNthCpu(sid - 2).id());
     // Wait until the dispatcher assigns work to this worker.
     thread_wait_.MarkIdle(sid);
     // Do this after 'MarkIdle'. If the worker did it before calling 'MarkIdle',
@@ -260,6 +260,9 @@ void CfsOrchestrator::Worker(uint32_t sid) {
     request.request_start = absl::Now();
     HandleRequest(request, gen()[sid]);
     request.request_finished = absl::Now();
+    // Clear the response so that we do not waste memory storing it along with
+    // the latency results.
+    request.response.clear();
 
     requests()[sid].push_back(request);
   }
