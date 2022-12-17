@@ -529,8 +529,21 @@ void CfsScheduler::CfsSchedule(const Cpu& cpu, BarrierToken agent_barrier,
         .target = next->gtid,
         .target_barrier = next->seqnum,
         .agent_barrier = agent_barrier,
-        .commit_flags = COMMIT_AT_TXN_COMMIT | ALLOW_TASK_ONCPU,
+        .commit_flags = COMMIT_AT_TXN_COMMIT,
     });
+
+    // Although unlikely it's possible for an oncpu task to enter ghOSt on
+    // any cpu. In this case there is a race window between producing the
+    // MSG_TASK_NEW and getting off that cpu (a race that is exacerbated
+    // by CFS dropping the rq->lock in PNT). During this window an agent
+    // can observe the MSG_TASK_NEW on the default queue and because the
+    // task is runnable it becomes a candidate to be put oncpu immediately.
+    //
+    // In this case we wait for `next` to fully get offcpu before trying
+    // to Commit().
+    while (next->status_word.on_cpu()) {
+      Pause();
+    }
 
     uint64_t before_runtime = next->status_word.runtime();
     if (req->Commit()) {
