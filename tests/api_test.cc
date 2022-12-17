@@ -1927,13 +1927,13 @@ TEST(ApiTest, GhostCloneGhost) {
   // TASK_DEAD (CLONE_CHILD_CLEARTID sync via do_exit->exit_mm->mm_release).
   //
   // In this case FifoScheduler::ValidatePreExitState() can trigger a CHECK
-  // because if the runqueue is not empty. We avoid this by spinning here
-  // until there are no more tasks remaining.
+  // because the runqueue is not empty. We avoid this by spinning here until
+  // there are no more tasks remaining.
   int num_tasks;
   do {
     num_tasks = ap.Rpc(FifoScheduler::kCountAllTasks);
     EXPECT_THAT(num_tasks, Ge(0));
-  } while (num_tasks);
+  } while (num_tasks > 0);
 
   GhostHelper()->CloseGlobalEnclaveFds();
 }
@@ -1953,6 +1953,14 @@ TEST(ApiTest, SchedEnterGhostGtid) {
     EXPECT_THAT(sched_getscheduler(/*pid=*/0), Eq(SCHED_GHOST));
   });
   t.Join();
+
+  // Wait for all the tasks to die. See the comment in GhostCloneGhost for more
+  // information.
+  int num_tasks;
+  do {
+    num_tasks = ap.Rpc(FifoScheduler::kCountAllTasks);
+    EXPECT_THAT(num_tasks, Ge(0));
+  } while (num_tasks > 0);
 
   GhostHelper()->CloseGlobalEnclaveFds();
 }
@@ -1974,6 +1982,14 @@ TEST(ApiTest, EnteringGhostViaSetSchedulerReturnsBadFdError) {
     EXPECT_THAT(errno, AnyOf(EPERM, EBADF));
   });
   t.Join();
+
+  // Wait for all the tasks to die. See the comment in GhostCloneGhost for more
+  // information.
+  int num_tasks;
+  do {
+    num_tasks = ap.Rpc(FifoScheduler::kCountAllTasks);
+    EXPECT_THAT(num_tasks, Ge(0));
+  } while (num_tasks > 0);
 
   GhostHelper()->CloseGlobalEnclaveFds();
 }
