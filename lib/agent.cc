@@ -38,9 +38,6 @@ void LocalAgent::ThreadBody() {
   CHECK_EQ(prctl(PR_SET_NAME, absl::StrCat("ap_task_", cpu().id()).c_str()), 0);
 
   gtid_ = Gtid::Current();
-  CHECK_EQ(GhostHelper()->SchedSetAffinity(
-               Gtid::Current(), MachineTopology()->ToCpuList({cpu_})),
-           0);
   enclave_->WaitForOldAgent();
 
   // setsched may fail with EBUSY, which is when there is an old agent that has
@@ -50,7 +47,8 @@ void LocalAgent::ThreadBody() {
   // WaitForOldAgent.
   int ret;
   do {
-    ret = GhostHelper()->SchedAgentEnterGhost(enclave_->GetCtlFd(), queue_fd);
+    ret = GhostHelper()->SchedAgentEnterGhost(enclave_->GetCtlFd(), cpu_,
+                                              queue_fd);
   } while (ret && errno == EBUSY);
   CHECK_EQ(ret, 0);
 

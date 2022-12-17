@@ -352,9 +352,9 @@ class Ghost {
   // the enclave dir_fd previously set with SetGlobalEnclaveFds().
   virtual int SchedTaskEnterGhost(int64_t pid, int dir_fd);
   virtual int SchedTaskEnterGhost(const Gtid& gtid, int dir_fd);
-  // Makes the calling thread an agent.  Note that the calling thread must have
-  // the `CAP_SYS_NICE` capability to make itself an agent.
-  virtual int SchedAgentEnterGhost(int ctl_fd, int queue_fd);
+  // Makes calling thread the ghost agent on `cpu`.  Note that the calling
+  // thread must have the `CAP_SYS_NICE` capability to make itself an agent.
+  virtual int SchedAgentEnterGhost(int ctl_fd, const Cpu& cpu, int queue_fd);
 
   static constexpr char kGhostfsMount[] = "/sys/fs/ghost";
 

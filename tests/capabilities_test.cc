@@ -160,7 +160,9 @@ TEST(CapabilitiesTest, AgentNoNice) {
     // We do not need initialize an enclave, a channel, etc., for the agent
     // since the call below will fail before these are needed.
     EXPECT_THAT(
-        GhostHelper()->SchedAgentEnterGhost(enclave.GetCtlFd(), chan.GetFd()),
+        GhostHelper()->SchedAgentEnterGhost(enclave.GetCtlFd(),
+                                            MachineTopology()->cpu(0),
+                                            chan.GetFd()),
         Eq(-1));
     EXPECT_THAT(errno, Eq(EPERM));
   });

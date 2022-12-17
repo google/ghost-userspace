@@ -211,11 +211,23 @@ int Ghost::SchedTaskEnterGhost(const Gtid& gtid, int dir_fd) {
   return SchedTaskEnterGhost(gtid.id(), dir_fd);
 }
 
-int Ghost::SchedAgentEnterGhost(int ctl_fd, int queue_fd) {
-  std::string cmd = absl::StrCat("become agent ", queue_fd);
+int Ghost::SchedAgentEnterGhost(int ctl_fd, const Cpu& cpu, int queue_fd) {
+  std::string cmd = absl::StrCat("become agent ", cpu.id(), " ", queue_fd);
   ssize_t ret = write(ctl_fd, cmd.c_str(), cmd.length());
   if (ret == cmd.length()) {
+    CpuList agent_affinity = MachineTopology()->EmptyCpuList();
+    // Verify sched_class.
     CHECK_EQ(sched_getscheduler(0), SCHED_GHOST | SCHED_RESET_ON_FORK);
+
+    // Verify cpu affinity.
+    CHECK_EQ(SchedGetAffinity(Gtid::Current(), agent_affinity), 0);
+    CHECK_EQ(agent_affinity.Size(), 1);
+    CHECK(agent_affinity.IsSet(cpu));
+
+    // Verify that we are running on the agent cpu (probably overkill
+    // given the affinity check above).
+    CHECK_EQ(sched_getcpu(), cpu.id());
+
     return 0;
   }
   return ret;

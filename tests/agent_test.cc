@@ -962,5 +962,34 @@ TEST(AgentTest, AgentBlock) {
   ASSERT_EQ(ap.Rpc(kRunBlockTest), 0);
 }
 
+TEST(AgentTest, FailToBecomeAgent) {
+  GhostHelper()->InitCore();
+  Topology* topology = MachineTopology();
+
+  constexpr int kAgentCpu = 0;
+  auto enclave = absl::make_unique<LocalEnclave>(
+      AgentConfig(topology, topology->ToCpuList(std::vector<int>{kAgentCpu})));
+
+  // Stash cpu affinity.
+  CpuList orig_affinity = MachineTopology()->EmptyCpuList();
+  EXPECT_THAT(GhostHelper()->SchedGetAffinity(Gtid::Current(), orig_affinity),
+              Eq(0));
+
+  // Try to become agent with expectation of failure since we don't have
+  // a default queue.
+  int ret = GhostHelper()->SchedAgentEnterGhost(
+      enclave->GetCtlFd(), MachineTopology()->cpu(kAgentCpu), /*queue_fd=*/-1);
+  EXPECT_THAT(ret, Eq(-1));
+  EXPECT_THAT(errno, Eq(ENXIO));  /* no default queue */
+
+  // Get the cpu affinity and make sure it matches `orig_affinity`.
+  CpuList curr_affinity = MachineTopology()->EmptyCpuList();
+  EXPECT_THAT(GhostHelper()->SchedGetAffinity(Gtid::Current(), curr_affinity),
+              Eq(0));
+  EXPECT_THAT(curr_affinity, Eq(orig_affinity));
+
+  EXPECT_THAT(sched_getscheduler(0), Eq(SCHED_OTHER));
+}
+
 }  // namespace
 }  // namespace ghost
