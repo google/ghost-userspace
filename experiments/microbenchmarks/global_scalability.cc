@@ -226,6 +226,8 @@ enum class Sched {
   kEdf,
   kShinjuku,
   kSol,
+  kNone,  // Run the experiment without starting a ghOSt scheduler
+          // automatically.
 };
 static Sched sched_type;
 static const char usage[] =
@@ -281,6 +283,8 @@ int main(int argc, char* argv[]) {
     sched_type = Sched::kShinjuku;
   } else if (!strcmp(pos_args[1], "sol")) {
     sched_type = Sched::kSol;
+  } else if (!strcmp(pos_args[1], "none")) {
+    sched_type = Sched::kNone;
   } else {
     fprintf(stderr, "Unrecognized scheduler '%s'\n", pos_args[1]);
     exit(1);
@@ -320,6 +324,10 @@ int main(int argc, char* argv[]) {
       case Sched::kSol: {
         ghost::SolConfig cfg(t, cpus, t->cpu(global_cpu));
         ghost::RunSol(outfile, cfg, nr_task_cpus, nr_threads, nr_loops);
+        break;
+      }
+      case Sched::kNone: {
+        ghost::RunThreads(outfile, nr_task_cpus, nr_threads, nr_loops);
         break;
       }
     }
