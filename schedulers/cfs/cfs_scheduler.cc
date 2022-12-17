@@ -242,28 +242,27 @@ void CfsScheduler::Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum) {
   CpuState* cs = cpu_state(cpu);
   const Channel* channel = cs->channel.get();
 
-  // If this fails, then the runnable message raced with the departed message
-  // and won.
-  // TODO: As is written, the only way an AssociateTask will fail is if
-  // there are pending messages for the task under consideration. Given that
-  // the task is offcpu by virtue of recieving the runnable message, the only
-  // message we can race with is TaskDeparted, meaning it is safe to bail on
-  // the migration as we are not on an rq and will be deleted once we consume
-  // the task deleted message.
-  if (!channel->AssociateTask(task->gtid, seqnum, /*status=*/nullptr)) {
-    GHOST_DPRINT(3, stderr,
-                 "Couldn't associate task %s to cpu %d. This in only correct "
-                 "if a TaskDeparted message follows.",
-                 task->gtid.describe(), cpu.id());
-    return;
-  }
-
-  GHOST_DPRINT(3, stderr, "Migrating task %s to cpu %d", task->gtid.describe(),
-               cpu.id());
-  task->cpu = cpu.id();
-
+  // There is a dangerous interleaving where we hang inside AssociateTask, after
+  // changing the task's queue from the current CPU A to the target CPU B (the
+  // one we are migrating to). Once this happens, we will recieve messages on
+  // the new queue. Then, we recieve a TaskDeparted messaged, which deletes the
+  // task on another CPU. This leads to a use-after-free bug on the task in
+  // question. The avoid those, lock the entire reference to task.
   {
     absl::MutexLock l(&cs->run_queue.mu_);
+    if (!channel->AssociateTask(task->gtid, seqnum, /*status=*/nullptr)) {
+      GHOST_DPRINT(
+          3, stderr,
+          "Could not associate task %s to cpu %d. This in only correct "
+          "if a TaskDeparted message follows.",
+          task->gtid.describe(), cpu.id());
+      return;
+    }
+
+    GHOST_DPRINT(3, stderr, "Migrating task %s to cpu %d",
+                 task->gtid.describe(), cpu.id());
+    task->cpu = cpu.id();
+
     cs->run_queue.EnqueueTask(task);
   }
 
