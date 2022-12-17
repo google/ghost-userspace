@@ -15,4 +15,7 @@ your name to the end.
 <li>Ofir Weisse</li>
 <li>Hannah Pan</li>
 <li>Sourav Panda</li>
+<li>Andrew Delgadillo</li>
+<li>Dohyun Kim</li>
+<li>Stanko Novakovic</li>
 </ol>
