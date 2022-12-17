@@ -26,7 +26,7 @@ using ::testing::Ge;
 class CfsTest : public testing::Test {};
 
 TEST_F(CfsTest, Simple) {
-  if (ghost::MachineTopology()->num_cpus() < 5) {
+  if (MachineTopology()->num_cpus() < 5) {
     GTEST_SKIP() << "must have at least 5 cpus";
     return;
   }
@@ -44,9 +44,9 @@ TEST_F(CfsTest, Simple) {
 
     // The mask includes CPUs 1 and 3. CPU 3 is outside
     // the enclave, so should be ignored by the agent.
-    EXPECT_THAT(ghost::GhostHelper()->SchedSetAffinity(
-                    ghost::Gtid::Current(), ghost::MachineTopology()->ToCpuList(
-                                                std::vector<int>{1, 3})),
+    EXPECT_THAT(GhostHelper()->SchedSetAffinity(
+                    Gtid::Current(),
+                    MachineTopology()->ToCpuList(std::vector<int>{1, 3})),
                 Eq(0));
 
     int cpu;
@@ -56,9 +56,9 @@ TEST_F(CfsTest, Simple) {
 
     // The mask includes CPUs 1 and 4. CPU 4 is outside
     // the enclave, so should be ignored by the agent.
-    EXPECT_THAT(ghost::GhostHelper()->SchedSetAffinity(
-                    ghost::Gtid::Current(), ghost::MachineTopology()->ToCpuList(
-                                                std::vector<int>{2, 4})),
+    EXPECT_THAT(GhostHelper()->SchedSetAffinity(
+                    Gtid::Current(),
+                    MachineTopology()->ToCpuList(std::vector<int>{2, 4})),
                 Eq(0));
 
     while ((cpu = sched_getcpu()) == 1) {
