@@ -83,9 +83,17 @@ class Cpu {
   bool operator!=(const Cpu& other) const { return !(*this == other); }
   bool operator<(const Cpu& other) const { return id() < other.id(); }
 
+  // Returns the CPU ID if the CPU is initialized. Otherwise, if the CPU is
+  // uninitialized, returns -1.
+  std::string ToString() const {
+    if (valid()) {
+      return std::to_string(id());
+    }
+    return std::to_string(-1);
+  }
+
   friend std::ostream& operator<<(std::ostream& os, const Cpu& cpu) {
-    os << cpu.id();
-    return os;
+    return os << cpu.ToString();
   }
 
  private:

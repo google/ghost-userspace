@@ -50,6 +50,20 @@ TEST(TopologyTest, CpuNumaNode) {
   }
 }
 
+// Tests that Cpu::ToString() returns the expected CPU ID string for valid CPUs.
+TEST(TopologyTest, CpuToString) {
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
+  EXPECT_THAT(TestTopology()->cpu(0).ToString(), Eq("0"));
+  EXPECT_THAT(TestTopology()->cpu(3).ToString(), Eq("3"));
+  EXPECT_THAT(TestTopology()->cpu(19).ToString(), Eq("19"));
+}
+
+// Tests that Cpu::ToString() returns "-1" for an uninitialized CPU.
+TEST(TopologyTest, UninitializedCpuToString) {
+  Cpu cpu(Cpu::UninitializedType::kUninitialized);
+  EXPECT_THAT(cpu.ToString(), Eq("-1"));
+}
+
 // Tests that `num_cpus()` returns number of CPUs in the topology.
 TEST(TopologyTest, TopologyNumCpus) {
   EXPECT_THAT(MachineTopology()->all_cpus().Size(),
