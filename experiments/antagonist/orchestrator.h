@@ -41,8 +41,8 @@ class Orchestrator {
     // affined to each CPU. Note that this vector cannot include
     // 'kBackgroundThreadCpu'.
     //
-    // Note that 'cpus.size()' must equal 'num_threads'.
-    std::vector<int> cpus;
+    // Note that 'cpus.Size()' must equal 'num_threads'.
+    ghost::CpuList cpus = ghost::MachineTopology()->EmptyCpuList();
 
     // The experiment duration.
     absl::Duration experiment_duration;

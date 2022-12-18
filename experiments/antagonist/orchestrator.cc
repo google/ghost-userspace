@@ -13,8 +13,8 @@ namespace ghost_test {
 std::ostream& operator<<(std::ostream& os,
                          const Orchestrator::Options& options) {
   os << "cpus:";
-  for (int i = 0; i < options.cpus.size(); i++) {
-    os << " " << options.cpus[i];
+  for (const ghost::Cpu& cpu : options.cpus) {
+    os << " " << cpu.id();
   }
   os << std::endl;
   os << "experiment_duration: " << options.experiment_duration << std::endl;
@@ -40,9 +40,7 @@ Orchestrator::Orchestrator(Options opts)
       thread_pool_(opts.num_threads) {
   CHECK_GE(options_.work_share, 0.0);
   CHECK_LE(options_.work_share, 1.0);
-  for (int cpu : options_.cpus) {
-    CHECK_NE(cpu, kBackgroundThreadCpu);
-  }
+  CHECK(!options_.cpus.IsSet(kBackgroundThreadCpu));
 }
 
 // C++ requires pure virtual destructors to have a definition.

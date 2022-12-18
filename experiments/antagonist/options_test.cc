@@ -23,7 +23,8 @@ Orchestrator::Options GetOptions() {
   options.print_options.pretty = true;
   options.work_share = 0.9;
   options.num_threads = 4;
-  options.cpus = {1, 2, 3, 4};
+  options.cpus =
+      ghost::MachineTopology()->ToCpuList(std::vector<int>{1, 2, 3, 4});
   options.experiment_duration = absl::Seconds(15);
   options.scheduler = ghost::GhostThread::KernelScheduler::kCfs;
   options.ghost_qos = 2;

@@ -26,11 +26,7 @@ ABSL_FLAG(double, work_share, 1.0,
           "equal to 0.0 and less than or equal to 1.0. (default: 1.0)");
 ABSL_FLAG(size_t, num_threads, 8,
           "The number of worker threads to use (default: 8 threads).");
-// It is preferred that the 'cpus' flag be an 'std::vector<int>', but the only
-// vector type that Abseil supports is 'std::vector<std::string>>'.
-ABSL_FLAG(std::vector<std::string>, cpus,
-          std::vector<std::string>({"10", "11", "12", "13", "14", "15", "16",
-                                    "17"}),
+ABSL_FLAG(std::string, cpus, "10-17",
           "The CPUs to affine threads to. Only threads scheduled by CFS are "
           "affined. (default: CPUs 10-17).");
 ABSL_FLAG(absl::Duration, experiment_duration, absl::InfiniteDuration(),
@@ -57,10 +53,8 @@ ghost_test::Orchestrator::Options GetOptions() {
   CHECK_GE(options.work_share, 0.0);
   CHECK_LE(options.work_share, 1.0);
   options.num_threads = absl::GetFlag(FLAGS_num_threads);
-
-  for (const std::string& cpu : absl::GetFlag(FLAGS_cpus)) {
-    options.cpus.push_back(std::stoi(cpu));
-  }
+  options.cpus =
+      ghost::MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_cpus));
 
   options.experiment_duration = absl::GetFlag(FLAGS_experiment_duration);
   CHECK_GE(options.experiment_duration, absl::ZeroDuration());

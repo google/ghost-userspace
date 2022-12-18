@@ -23,7 +23,7 @@ void CfsOrchestrator::InitThreadPool() {
 
 CfsOrchestrator::CfsOrchestrator(Orchestrator::Options opts)
     : Orchestrator(std::move(opts)), threads_ready_(options().num_threads + 1) {
-  CHECK_EQ(options().num_threads, options().cpus.size());
+  CHECK_EQ(options().num_threads, options().cpus.Size());
 
   InitThreadPool();
   threads_ready_.Block();
@@ -33,11 +33,11 @@ CfsOrchestrator::CfsOrchestrator(Orchestrator::Options opts)
 void CfsOrchestrator::Worker(uint32_t sid) {
   if (!thread_triggers().Triggered(sid)) {
     thread_triggers().Trigger(sid);
+    const ghost::Cpu cpu = options().cpus.GetNthCpu(sid);
     CHECK_ZERO(ghost::GhostHelper()->SchedSetAffinity(
-        ghost::Gtid::Current(), ghost::MachineTopology()->ToCpuList(
-                                    std::vector<int>{options().cpus[sid]})));
+        ghost::Gtid::Current(), ghost::MachineTopology()->ToCpuList({cpu})));
     printf("Worker (SID %u, TID: %ld, affined to CPU %u)\n", sid,
-           syscall(SYS_gettid), options().cpus[sid]);
+           syscall(SYS_gettid), cpu.id());
     threads_ready_.Block();
   }
 

@@ -63,7 +63,7 @@ GhostOrchestrator::GhostOrchestrator(Orchestrator::Options opts)
     : Orchestrator(std::move(opts)),
       prio_table_helper_(/*num_sched_items=*/options().num_threads,
                          /*num_work_classes=*/1) {
-  CHECK_ZERO(options().cpus.size());
+  CHECK(options().cpus.Empty());
 
   InitThreadPool();
   // This must be called after 'InitThreadPool' since it accesses the GTIDs of
