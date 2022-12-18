@@ -233,10 +233,11 @@ int main(int argc, char* argv[]) {
     }
     for (absl::Duration sleep = spin; sleep >= spin / 10; sleep -= spin / 10) {
       int iterations = absl::Seconds(duration) / (spin + sleep);
-      if (use_cfs)
+      if (use_cfs) {
         ghost::doit_cfs(spin, sleep, iterations, num_cpus, overcommit);
-      else
+      } else {
         ghost::doit_ghost(spin, sleep, iterations, num_cpus);
+      }
     }
   }
 }

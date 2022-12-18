@@ -590,7 +590,7 @@ void CfsScheduler::Schedule(const Cpu& cpu, const StatusWord& agent_sw) {
 }
 
 void CfsScheduler::PingCpu(const Cpu& cpu) {
-  ghost::Agent* agent = enclave()->GetAgent(cpu);
+  Agent* agent = enclave()->GetAgent(cpu);
   if (agent) {
     agent->Ping();
   }
@@ -700,8 +700,7 @@ void CfsRq::PutPrevTask(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
   InsertTaskIntoRq(task);
 }
 
-CfsTask* CfsRq::PickNextTask(CfsTask* prev,
-                             TaskAllocator<ghost::CfsTask>* allocator,
+CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
                              CpuState* cs) {
   // Check if we can just keep running the current task.
   if (prev && prev->run_state.Get() == CfsTaskState::kRunning &&
@@ -827,8 +826,7 @@ absl::Duration CfsRq::MinPreemptionGranularity() {
   // Get the number of tasks our cpu is handling. As we only call this to check
   // if cs->current should be pulled be preempted, the number of tasks
   // associated with the cpu is rq_.size() + 1;
-  std::multiset<ghost::CfsTask*,
-                bool (*)(ghost::CfsTask*, ghost::CfsTask*)>::size_type tasks =
+  std::multiset<CfsTask*, bool (*)(CfsTask*, CfsTask*)>::size_type tasks =
       rq_.size() + 1;
   if (tasks * min_preemption_granularity_ > latency_) {
     // If we target latency_, each task will run for less than min_granularity

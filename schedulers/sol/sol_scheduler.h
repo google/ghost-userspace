@@ -123,12 +123,12 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 
   void EnterSchedule() {
     CHECK_EQ(schedule_timer_start_, absl::UnixEpoch());
-    schedule_timer_start_ = ghost::MonotonicNow();
+    schedule_timer_start_ = MonotonicNow();
   }
 
   void ExitSchedule() {
     CHECK_NE(schedule_timer_start_, absl::UnixEpoch());
-    schedule_durations_ += ghost::MonotonicNow() - schedule_timer_start_;
+    schedule_durations_ += MonotonicNow() - schedule_timer_start_;
     schedule_timer_start_ = absl::UnixEpoch();
     ++iterations_;
   }

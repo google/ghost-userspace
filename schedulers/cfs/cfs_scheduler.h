@@ -159,7 +159,7 @@ class CfsRq {
   // Otherwise, it picks the task with the smallest vruntime.
   // PickNextTask also is the sync up point for processing state changes to
   // prev. PickNextTask sets the state of its returned task to kOnCpu.
-  CfsTask* PickNextTask(CfsTask* prev, TaskAllocator<ghost::CfsTask>* allocator,
+  CfsTask* PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
                         CpuState* cs) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Enqueues a new task or a task that is coming from being blocked.

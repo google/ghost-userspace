@@ -29,7 +29,7 @@ namespace ghost {
 
 void ParseFifoConfig(FifoConfig* config) {
   CpuList ghost_cpus =
-      ghost::MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
+      MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
   // One CPU for the spinning global agent and at least one other for running
   // scheduled ghOSt tasks.
   CHECK_GE(ghost_cpus.Size(), 2);

@@ -218,8 +218,7 @@ GhostShmem* GhostShmem::GetShmemBlob(size_t size) {
   std::string blob = absl::StrCat(
       "blob-", std::to_string(unique.fetch_add(1, std::memory_order_relaxed)));
   // GhostShmem needs a unique name per process for the memfd
-  ghost::GhostShmem* shmem =
-      new ghost::GhostShmem(/*client_version=*/0, blob.c_str(), size);
+  GhostShmem* shmem = new GhostShmem(/*client_version=*/0, blob.c_str(), size);
   shmem->MarkReady();
 
   return shmem;

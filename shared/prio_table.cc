@@ -26,7 +26,7 @@ static size_t shmem_size(uint32_t sched_items, uint32_t work_classes,
   // The three structs above are each aligned to a cacheline, so this check
   // should succeed
   CHECK_ZERO(sz % ABSL_CACHELINE_SIZE);
-  sz += sizeof(struct ghost::PrioTable::stream) +
+  sz += sizeof(struct PrioTable::stream) +
         sizeof(std::atomic<int>) * stream_capacity;
 
   return sz;
@@ -77,10 +77,9 @@ bool PrioTable::Attach(pid_t remote) {
 
 PrioTable::~PrioTable() {}
 
-struct ghost::PrioTable::stream* PrioTable::stream() {
+struct PrioTable::stream* PrioTable::stream() {
   char* bytes = reinterpret_cast<char*>(hdr_);
-  return reinterpret_cast<struct ghost::PrioTable::stream*>(bytes +
-                                                            hdr()->st_off);
+  return reinterpret_cast<struct PrioTable::stream*>(bytes + hdr()->st_off);
 }
 
 void PrioTable::MarkUpdatedIndex(int idx, int num_retries) {

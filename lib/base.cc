@@ -313,11 +313,11 @@ void SpinFor(absl::Duration remaining) {
   while (remaining > absl::ZeroDuration()) {
     // We use MonotonicNow instead of absl::Now(), since the latter can acquire
     // a lock and sleep.
-    absl::Time start = ghost::MonotonicNow();
+    absl::Time start = MonotonicNow();
     absl::Duration delta;
 
     for (int i = 0; i < 100; ++i) {
-      delta = ghost::MonotonicNow() - start;
+      delta = MonotonicNow() - start;
     }
 
     // Don't count preempted time; if we were off cpu, the large delta

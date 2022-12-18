@@ -34,7 +34,7 @@ void ParseShinjukuConfig(ShinjukuConfig* config) {
 
   CHECK_GT(ncpus, 1);
   CHECK_GE(firstcpu, 0);
-  CHECK_LT(lastcpu, ghost::MachineTopology()->num_cpus());
+  CHECK_LT(lastcpu, MachineTopology()->num_cpus());
 
   if (globalcpu < 0) {
     CHECK_EQ(globalcpu, -1);

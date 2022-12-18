@@ -27,7 +27,7 @@ namespace ghost {
 void ParseSolConfig(SolConfig* config) {
   int globalcpu = absl::GetFlag(FLAGS_globalcpu);
   CpuList ghost_cpus =
-      ghost::MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
+      MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
 
   CHECK_GT(ghost_cpus.Size(), 1);
 

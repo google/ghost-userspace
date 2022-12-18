@@ -21,7 +21,7 @@ namespace ghost {
 
 static void ParseAgentConfig(AgentConfig* config) {
   CpuList ghost_cpus =
-      ghost::MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
+      MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
   CHECK(!ghost_cpus.Empty());
 
   Topology* topology = MachineTopology();

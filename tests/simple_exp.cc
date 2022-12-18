@@ -61,16 +61,20 @@ void SimpleExpMany(int num_threads) {
 
 void SpinFor(absl::Duration d) {
   while (d > absl::ZeroDuration()) {
-    absl::Time a = ghost::MonotonicNow();
+    absl::Time a = MonotonicNow();
     absl::Time b;
 
     // Try to minimize the contribution of arithmetic/Now() overhead.
-    for (int i = 0; i < 150; i++) b = ghost::MonotonicNow();
+    for (int i = 0; i < 150; i++) {
+      b = MonotonicNow();
+    }
 
     absl::Duration t = b - a;
 
     // Don't count preempted time
-    if (t < absl::Microseconds(100)) d -= t;
+    if (t < absl::Microseconds(100)) {
+      d -= t;
+    }
   }
 }
 
