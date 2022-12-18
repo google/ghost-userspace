@@ -522,21 +522,14 @@ class GhostThread {
   GhostThread& operator=(const GhostThread&) = delete;
   ~GhostThread();
 
-  friend std::ostream& operator<<(
-      std::ostream& os, const GhostThread::KernelScheduler& kernel_scheduler) {
-    switch (kernel_scheduler) {
+  friend std::ostream& operator<<(std::ostream& os,
+                                  GhostThread::KernelScheduler scheduler) {
+    switch (scheduler) {
       case GhostThread::KernelScheduler::kCfs:
-        os << "CFS";
-        break;
+        return os << "CFS";
       case GhostThread::KernelScheduler::kGhost:
-        os << "ghOSt";
-        break;
-      default:
-        GHOST_ERROR("`kernel_scheduler` has non-enumerator value %d.",
-                    static_cast<int>(kernel_scheduler));
-        break;
+        return os << "ghOSt";
     }
-    return os;
   }
 
   // Joins the thread.

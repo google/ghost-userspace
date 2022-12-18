@@ -65,8 +65,7 @@ struct EdfTask : public Task<> {
 
   friend inline std::ostream& operator<<(std::ostream& os,
                                          EdfTask::RunState run_state) {
-    os << RunStateToString(run_state);
-    return os;
+    return os << RunStateToString(run_state);
   }
 
   RunState run_state = RunState::kBlocked;

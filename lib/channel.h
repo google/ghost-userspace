@@ -64,8 +64,7 @@ class Message {
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Message& msg) {
-    os << msg.stringify();
-    return os;
+    return os << msg.stringify();
   }
 
  private:

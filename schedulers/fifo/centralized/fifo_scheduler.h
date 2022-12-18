@@ -48,18 +48,12 @@ struct FifoTask : public Task<> {
         return "OnCpu";
       case FifoTask::RunState::kYielding:
         return "Yielding";
-        // We will get a compile error if a new member is added to the
-        // `FifoTask::RunState` enum and a corresponding case is not added
-        // here.
     }
-    CHECK(false);
-    return "Unknown run state";
   }
 
   friend std::ostream& operator<<(std::ostream& os,
                                   FifoTask::RunState run_state) {
-    os << RunStateToString(run_state);
-    return os;
+    return os << RunStateToString(run_state);
   }
 
   RunState run_state = RunState::kBlocked;

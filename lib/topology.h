@@ -442,8 +442,7 @@ class CpuList : public CpuMap {
 
   // Dumps the bitmap in hexadecimal, highest cpus to the left
   friend std::ostream& operator<<(std::ostream& os, const CpuList& clist) {
-    os << clist.CpuMaskStr();
-    return os;
+    return os << clist.CpuMaskStr();
   }
 
  private:

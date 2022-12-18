@@ -62,15 +62,10 @@ inline std::ostream& operator<<(std::ostream& os,
                                 ThreadWait::WaitType wait_type) {
   switch (wait_type) {
     case ThreadWait::WaitType::kSpin:
-      os << "Spin";
-      break;
+      return os << "Spin";
     case ThreadWait::WaitType::kFutex:
-      os << "Futex";
-      break;
-      // We will get a compile error if a new member is added to the
-      // 'ThreadWait::WaitType' enum and a corresponding case is not added here.
+      return os << "Futex";
   }
-  return os;
 }
 
 }  // namespace ghost_test

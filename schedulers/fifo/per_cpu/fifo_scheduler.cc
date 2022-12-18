@@ -421,10 +421,7 @@ std::ostream& operator<<(std::ostream& os, const FifoTaskState& state) {
       return os << "kQueued";
     case FifoTaskState::kOnCpu:
       return os << "kOnCpu";
-      // No default (exhaustive switch)
   }
-
-  return os << static_cast<int>(state);  // 'state' has a non-enumerator value.
 }
 
 }  //  namespace ghost

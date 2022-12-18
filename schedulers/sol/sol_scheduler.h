@@ -62,8 +62,7 @@ struct SolTask : public Task<> {
 
   friend std::ostream& operator<<(std::ostream& os,
                                   SolTask::RunState run_state) {
-    os << RunStateToString(run_state);
-    return os;
+    return os << RunStateToString(run_state);
   }
 
   RunState run_state = RunState::kBlocked;

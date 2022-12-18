@@ -894,8 +894,6 @@ std::ostream& operator<<(std::ostream& os, const CfsTaskState& state) {
       return os << "kRunnable";
     case CfsTaskState::kNumStates:
       return os << "SENTINEL";
-      break;
-      // No default (exhaustive switch)
   }
 }
 

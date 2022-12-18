@@ -187,8 +187,7 @@ class Gtid {
   bool operator!() const { return id() == 0; }
 
   friend std::ostream& operator<<(std::ostream& os, const Gtid& gtid) {
-    os << gtid.id();
-    return os;
+    return os << gtid.id();
   }
 
   // These are just some simple debug helpers to make things more readable.
@@ -342,20 +341,12 @@ class Notification {
                                   Notification::NotifiedState notified_state) {
     switch (notified_state) {
       case Notification::NotifiedState::kNoWaiter:
-        os << "No Waiter";
-        break;
+        return os << "No Waiter";
       case Notification::NotifiedState::kWaiter:
-        os << "Waiter";
-        break;
+        return os << "Waiter";
       case Notification::NotifiedState::kNotified:
-        os << "Notified";
-        break;
-      default:
-        GHOST_ERROR("`notified_state` has non-enumerator value %d.",
-                    static_cast<int>(notified_state));
-        break;
+        return os << "Notified";
     }
-    return os;
   }
 
   // The notification state.
