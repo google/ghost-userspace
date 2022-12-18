@@ -98,6 +98,16 @@
 #include <asm-generic/errno.h>
 
 /*
+ * Toggle this manually for debugging  bpf_printk requires CAP_PERFMON, which
+ * agents might not have.
+ *
+ * TODO: it'd be nice to have libbpf compile this out if we don't have the right
+ * CAP, instead of failing verification.
+ */
+//#define bpf_printd bpf_printk
+#define bpf_printd(...)
+
+/*
  * Part of the ghost UAPI.  vmlinux.h doesn't include #defines, so we need to
  * add it manually.
  */
@@ -236,7 +246,7 @@ static void enqueue_task(u64 gtid, u32 task_barrier)
 		 * on a bpf ring_buffer map to handle it by trying to shove the
 		 * task into the queue again.
 		 */
-		bpf_printk("failed to enqueue %p, err %d\n", gtid, err);
+		bpf_printd("failed to enqueue %p, err %d\n", gtid, err);
 	}
 }
 
@@ -285,7 +295,7 @@ int biff_pnt(struct bpf_ghost_sched *ctx)
 		case ENOENT:
 			break;
 		default:
-			bpf_printk("failed to dequeue, err %d\n", err);
+			bpf_printd("failed to dequeue, err %d\n", err);
 		}
 		goto done;
 	}
@@ -349,7 +359,7 @@ int biff_pnt(struct bpf_ghost_sched *ctx)
 			 *   where CFS is present, though right now it shouldn't
 			 *   be reachable from bpf-pnt.
 			 */
-			bpf_printk("failed to run %p, err %d\n", next->gtid, err);
+			bpf_printd("failed to run %p, err %d\n", next->gtid, err);
 			enqueue_task(next->gtid, next->task_barrier);
 			break;
 		}
