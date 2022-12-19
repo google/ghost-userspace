@@ -113,6 +113,8 @@ absl::string_view Message::describe_type() const {
       return "MSG_TASK_AFFINITY_CHANGED";
     case MSG_TASK_LATCHED:
       return "MSG_TASK_LATCHED";
+    case MSG_TASK_PRIORITY_CHANGED:
+      return "MSG_TASK_PRIORITY_CHANGED";
     case MSG_CPU_TICK:
       return "MSG_CPU_TICK";
     case MSG_CPU_TIMER_EXPIRED:
@@ -196,6 +198,14 @@ std::string Message::stringify() const {
           static_cast<const ghost_msg_payload_task_departed*>(payload());
       absl::StrAppend(&result, " on cpu ", departed->cpu);
       if (departed->from_switchto) absl::StrAppend(&result, " (from_switchto)");
+      break;
+    }
+
+    case MSG_TASK_PRIORITY_CHANGED: {
+      const ghost_msg_payload_task_priority_changed* priority =
+          static_cast<const ghost_msg_payload_task_priority_changed*>(
+              payload());
+      absl::StrAppend(&result, " to nice ", priority->nice);
       break;
     }
 

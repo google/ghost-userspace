@@ -324,6 +324,7 @@ class BasicDispatchScheduler : public Scheduler {
   virtual void TaskPreempted(TaskType* task, const Message& msg) = 0;
   virtual void TaskSwitchto(TaskType* task, const Message& msg) {}
   virtual void TaskAffinityChanged(TaskType* task, const Message& msg) {}
+  virtual void TaskPriorityChanged(TaskType* task, const Message& msg) {}
   virtual void TaskLatched(TaskType* task, const Message& msg) {}
 
   virtual void TaskDiscovered(TaskType* task) {}
@@ -541,6 +542,9 @@ void BasicDispatchScheduler<TaskType>::DispatchMessage(const Message& msg) {
       break;
     case MSG_TASK_AFFINITY_CHANGED:
       TaskAffinityChanged(task, msg);
+      break;
+    case MSG_TASK_PRIORITY_CHANGED:
+      TaskPriorityChanged(task, msg);
       break;
     case MSG_TASK_LATCHED:
       TaskLatched(task, msg);

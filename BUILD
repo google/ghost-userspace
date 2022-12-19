@@ -271,6 +271,7 @@ cc_test(
         ":agent",
         ":fifo_per_cpu_scheduler",
         ":ghost",
+        "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/random",
         "@com_google_googletest//:gtest_main",
     ],

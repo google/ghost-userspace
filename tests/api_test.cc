@@ -5,9 +5,13 @@
 // https://developers.google.com/open-source/licenses/bsd
 
 #include <sys/mman.h>
+#include <sys/resource.h>
+
+#include <cstdint>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "absl/functional/any_invocable.h"
 #include "absl/random/random.h"
 #include "lib/agent.h"
 #include "lib/ghost.h"
@@ -1971,25 +1975,436 @@ TEST(ApiTest, EnteringGhostViaSetSchedulerReturnsBadFdError) {
   const sched_param param = { .sched_priority = -2 };
   EXPECT_THAT(sched_setscheduler(/*pid=*/0, SCHED_GHOST, &param), Eq(-1));
   EXPECT_THAT(errno, Eq(EBADF));
+}
 
-  // It should fail even inside a ghost thread.
+// Simple container to store ghost message copies.
+class GhostMessageStore {
+ public:
+  GhostMessageStore() = default;
+
+  // Not copyable.
+  GhostMessageStore(const GhostMessageStore&) = delete;
+  GhostMessageStore& operator=(const GhostMessageStore&) = delete;
+
+  ~GhostMessageStore() {
+    for (uint8_t* ptr : ghost_msgs_) {
+      delete[] ptr;
+    }
+  }
+
+  Message Add(const Message& message) {
+    uint8_t* data = new uint8_t[message.length()];
+    memcpy(data, message.msg(), message.length());
+    ghost_msgs_.push_back(data);
+    return Message(reinterpret_cast<ghost_msg*>(data));
+  }
+
+  Message At(size_t index) const {
+    CHECK(index < ghost_msgs_.size());
+    return Message(reinterpret_cast<ghost_msg*>(ghost_msgs_[index]));
+  }
+
+  size_t Size() const { return ghost_msgs_.size(); }
+
+ private:
+  std::vector<uint8_t*> ghost_msgs_;
+};
+
+// Bare-bones agent implementation that can schedule exactly one task and
+// allows an external callback to verify/inspect messages sent from the
+// kernel.
+class MessageAgent : public LocalAgent {
+ public:
+  MessageAgent(Enclave* enclave, Cpu cpu,
+               absl::AnyInvocable<void(const Message&) const> on_message)
+      : LocalAgent(enclave, cpu),
+        channel_(GHOST_MAX_QUEUE_ELEMS, kNumaNode,
+                 MachineTopology()->ToCpuList({cpu})),
+        on_message_(std::move(on_message)) {
+    channel_.SetEnclaveDefault();
+  }
+
+  ~MessageAgent() {}
+
+ protected:
+  void AgentThread() override {
+    // Boilerplate to synchronize startup until all agents are ready
+    // (mostly redundant since we only have a single agent in the test).
+    SignalReady();
+    WaitForEnclaveReady();
+
+    std::unique_ptr<Task<>> task;
+    bool runnable = false;
+    while (true) {
+      while (true) {
+        Message msg = Peek(&channel_);
+        if (msg.empty()) break;
+
+        on_message_(msg);
+
+        // Ignore all types other than task messages (e.g. CPU_TICK).
+        if (msg.is_task_msg() && msg.type() != MSG_TASK_NEW) {
+          ASSERT_THAT(task, NotNull());
+          task->Advance(msg.seqnum());
+        }
+
+        // Scheduling is simple: we track whether the task is runnable
+        // or blocked. If the task is runnable the agent switches to it
+        // and idles otherwise.
+        switch (msg.type()) {
+          case MSG_TASK_NEW: {
+            const ghost_msg_payload_task_new* payload =
+                static_cast<const ghost_msg_payload_task_new*>(msg.payload());
+
+            ASSERT_THAT(task, IsNull());
+            task =
+                std::make_unique<Task<>>(Gtid(payload->gtid), payload->sw_info);
+            task->seqnum = msg.seqnum();
+            runnable = payload->runnable;
+            break;
+          }
+
+          case MSG_TASK_WAKEUP:
+            ASSERT_THAT(task, NotNull());
+            ASSERT_FALSE(runnable);
+            runnable = true;
+            break;
+
+          case MSG_TASK_BLOCKED:
+            ASSERT_THAT(task, NotNull());
+            ASSERT_TRUE(runnable);
+            runnable = false;
+            break;
+
+          case MSG_TASK_DEAD:
+            ASSERT_THAT(task, NotNull());
+            ASSERT_FALSE(runnable);
+            task = nullptr;
+            break;
+
+          default:
+            // This includes task messages like TASK_PREEMPTED and cpu messages
+            // like CPU_TICK that don't influence runnability.
+            break;
+        }
+        Consume(&channel_, msg);
+      }
+
+      BarrierToken agent_barrier = status_word().barrier();
+      const bool prio_boost = status_word().boosted_priority();
+
+      if (Finished() && !task) break;
+
+      RunRequest* req = enclave()->GetRunRequest(cpu());
+      if (!task || !runnable || prio_boost) {
+        req->LocalYield(agent_barrier, prio_boost ? RTLA_ON_IDLE : 0);
+      } else if (task->status_word.on_cpu()) {
+        // 'task' is still oncpu: just loop back and try to schedule it
+        // in the next iteration.
+      } else {
+        req->Open({
+            .target = task->gtid,
+            .target_barrier = task->seqnum,
+            .agent_barrier = agent_barrier,
+            .commit_flags = COMMIT_AT_TXN_COMMIT,
+        });
+        req->Commit();
+      }
+    }
+  }
+
+ private:
+  // The NUMA node that the channel is on.
+  static constexpr int kNumaNode = 0;
+
+  LocalChannel channel_;
+  absl::AnyInvocable<void(const Message&) const> on_message_;
+};
+
+template <class EnclaveType>
+class FullMessageAgent final : public FullAgent<EnclaveType> {
+ public:
+  explicit FullMessageAgent(const AgentConfig& config)
+      : FullAgent<EnclaveType>(config) {
+    this->StartAgentTasks();
+    this->enclave_.Ready();
+  }
+
+  ~FullMessageAgent() final { this->TerminateAgentTasks(); }
+
+  std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) final {
+    return std::make_unique<MessageAgent>(
+        &this->enclave_, cpu, [this](const Message& message) {
+          absl::MutexLock lock(&this->mu_);
+          this->message_store_.Add(message);
+
+          if (message.type() == MSG_TASK_DEAD) {
+            task_dead_message_count++;
+          }
+        });
+  }
+
+  static constexpr int64_t kErrorUnknownReq = -1;
+  static constexpr int64_t kErrorInvalidIndex = -2;
+  static constexpr int64_t kErrorIndexOutOfRange = -3;
+
+  static constexpr int64_t kCountAllMessages = 1;
+  static constexpr int64_t kCountDeadTaskMessages = 2;
+  static constexpr int64_t kMessageAt = 3;
+
+  void RpcHandler(int64_t req, const AgentRpcArgs& args,
+                  AgentRpcResponse& response) final {
+    if (req == kCountAllMessages) {
+      absl::MutexLock lock(&mu_);
+      response.response_code = message_store_.Size();
+      return;
+    }
+
+    if (req == kCountDeadTaskMessages) {
+      absl::MutexLock lock(&mu_);
+      response.response_code = task_dead_message_count;
+      return;
+    }
+
+    if (req == kMessageAt) {
+      if (args.arg0 < 0) {
+        response.response_code = kErrorInvalidIndex;
+        return;
+      }
+
+      Message message;
+      size_t index = static_cast<size_t>(args.arg0);
+      {
+        absl::MutexLock lock(&mu_);
+        if (index >= message_store_.Size()) {
+          response.response_code = kErrorIndexOutOfRange;
+          return;
+        }
+        message = message_store_.At(index);
+      }
+
+      response.buffer.Serialize(*message.msg(), message.length());
+      response.response_code = 0;
+      return;
+    }
+
+    response.response_code = kErrorUnknownReq;
+  }
+
+ private:
+  absl::Mutex mu_;
+  int64_t task_dead_message_count ABSL_GUARDED_BY(mu_) = 0;
+  GhostMessageStore message_store_ ABSL_GUARDED_BY(mu_);
+};
+
+TEST(ApiTest, GhostTaskPriorityViaGetSetPriority) {
+  GhostHelper()->InitCore();
+
   Topology* topology = MachineTopology();
-  auto ap = AgentProcess<FullFifoAgent<LocalEnclave>, AgentConfig>(
+
+  auto ap = AgentProcess<FullMessageAgent<LocalEnclave>, AgentConfig>(
       AgentConfig(topology, topology->ToCpuList(std::vector<int>{0})));
 
-  GhostThread t(GhostThread::KernelScheduler::kGhost, [&param] {
-    EXPECT_THAT(sched_setscheduler(/*pid=*/0, SCHED_GHOST, &param), Eq(-1));
-    EXPECT_THAT(errno, AnyOf(EPERM, EBADF));
+  GhostThread t(GhostThread::KernelScheduler::kCfs, [] {
+    EXPECT_THAT(setpriority(PRIO_PROCESS, /*pid=*/0, 1), Eq(0));
+
+    GhostHelper()->SchedTaskEnterGhost(/*pid=*/0, -1);
+
+    // At this point, the ghOSt agent should receive TASK_NEW message with
+    // nice = 1.
+
+    // Clear errno before calling getpriority because it can also return
+    // a negative number on success.
+    errno = 0;
+    EXPECT_THAT(getpriority(PRIO_PROCESS, /*pid=*/0), Eq(1));
+    EXPECT_THAT(errno, Eq(0));
+
+    EXPECT_THAT(setpriority(PRIO_PROCESS, /*pid=*/0, 2), Eq(0));
+
+    // At this point, the ghOSt agent should receive TASK_PRIORITY_CHANGED
+    // message with nice = 2.
+
+    errno = 0;
+    EXPECT_THAT(getpriority(PRIO_PROCESS, /*pid=*/0), Eq(2));
+    EXPECT_THAT(errno, Eq(0));
   });
+
+  Gtid gtid = t.gtid();
   t.Join();
 
-  // Wait for all the tasks to die. See the comment in GhostCloneGhost for more
-  // information.
-  int num_tasks;
+  // Wait until task dead message is received.
+  int num_dead_task_messages = 0;
   do {
-    num_tasks = ap.Rpc(FifoScheduler::kCountAllTasks);
-    EXPECT_THAT(num_tasks, Ge(0));
-  } while (num_tasks > 0);
+    num_dead_task_messages =
+        ap.Rpc(FullMessageAgent<LocalEnclave>::kCountDeadTaskMessages);
+    EXPECT_THAT(num_dead_task_messages, Ge(0));
+  } while (num_dead_task_messages < 1);
+
+  // Agent now received all the messages related to the thread under test. The
+  // agent should have received the messages in the following order.
+  // 1. TASK_NEW message with nice = 1.
+  //    Then, zero or more messages other than TASK_NEW and
+  //    TASK_PRIORITY_CHANGED messages.
+  // 2. TASK_PRIORITY_CHANGED message with nice = 2.
+  //    Then, zero or more messages other than TASK_NEW and
+  //    TASK_PRIORITY_CHANGED messages.
+  // 3. TASK_DEAD message.
+  int64_t index = 0;
+  int64_t response_code = 0;
+  int32_t state = 0;
+  do {
+    AgentRpcArgs args{.arg0 = index};
+    AgentRpcResponse resp =
+        ap.RpcWithResponse(FullMessageAgent<LocalEnclave>::kMessageAt, args);
+
+    response_code = resp.response_code;
+    if (!response_code) {
+      Message message(reinterpret_cast<ghost_msg*>(resp.buffer.data.data()));
+      if (message.type() == MSG_TASK_NEW) {
+        EXPECT_THAT(state, Eq(0));
+        EXPECT_THAT(message.gtid(), Eq(gtid));
+
+        const ghost_msg_payload_task_new* payload_new =
+            static_cast<const ghost_msg_payload_task_new*>(message.payload());
+        EXPECT_THAT(payload_new->nice, Eq(1));
+        state++;
+      } else if (message.type() == MSG_TASK_PRIORITY_CHANGED) {
+        EXPECT_THAT(state, Eq(1));
+        EXPECT_THAT(message.gtid(), Eq(gtid));
+
+        const ghost_msg_payload_task_priority_changed* payload_priority =
+            static_cast<const ghost_msg_payload_task_priority_changed*>(
+                message.payload());
+        EXPECT_THAT(payload_priority->nice, Eq(2));
+        state++;
+      } else if (message.type() == MSG_TASK_DEAD) {
+        EXPECT_THAT(state, Eq(2));
+        EXPECT_THAT(message.gtid(), Eq(gtid));
+        state++;
+      }
+    }
+    index++;
+  } while (!response_code);
+  EXPECT_THAT(response_code,
+              Eq(FullMessageAgent<LocalEnclave>::kErrorIndexOutOfRange));
+  EXPECT_THAT(state, Eq(3));
+
+  GhostHelper()->CloseGlobalEnclaveFds();
+}
+
+TEST(ApiTest, GhostTaskPriorityViaSchedGetSetAttr) {
+  GhostHelper()->InitCore();
+
+  Topology* topology = MachineTopology();
+
+  auto ap = AgentProcess<FullMessageAgent<LocalEnclave>, AgentConfig>(
+      AgentConfig(topology, topology->ToCpuList(std::vector<int>{0})));
+
+  GhostThread t(GhostThread::KernelScheduler::kCfs, [] {
+    // Need to define `sched_attr` and call `sched_{get|set}attr` via syscall
+    // because they are not supported by glibc.
+    struct {
+      uint32_t size;
+
+      uint32_t sched_policy;
+      uint64_t sched_flags;
+
+      // SCHED_NORMAL, SCHED_BATCH
+      int32_t sched_nice;
+
+      // SCHED_FIFO, SCHED_RR
+      uint32_t sched_priority;
+
+      // SCHED_DEADLINE
+      uint64_t sched_runtime;
+      uint64_t sched_deadline;
+      uint64_t sched_period;
+    } attr;
+
+    EXPECT_THAT(syscall(SYS_sched_getattr, 0, &attr, sizeof(attr), 0), Eq(0));
+
+    attr.sched_nice = 1;
+    EXPECT_THAT(syscall(SYS_sched_setattr, 0, &attr, 0), Eq(0));
+
+    GhostHelper()->SchedTaskEnterGhost(/*pid=*/0, -1);
+
+    // At this point, the ghOSt agent should receive TASK_NEW message with
+    // nice = 1.
+
+    EXPECT_THAT(syscall(SYS_sched_getattr, 0, &attr, sizeof(attr), 0), Eq(0));
+    EXPECT_THAT(attr.sched_policy, Eq(SCHED_GHOST));
+    EXPECT_THAT(attr.sched_nice, Eq(1));
+
+    attr.sched_nice = 2;
+    EXPECT_THAT(syscall(SYS_sched_setattr, 0, &attr, 0), Eq(0));
+
+    // At this point, the ghOSt agent should receive TASK_PRIORITY_CHANGED
+    // message with nice = 2.
+
+    EXPECT_THAT(syscall(SYS_sched_getattr, 0, &attr, sizeof(attr), 0), Eq(0));
+    EXPECT_THAT(attr.sched_policy, Eq(SCHED_GHOST));
+    EXPECT_THAT(attr.sched_nice, Eq(2));
+  });
+
+  Gtid gtid = t.gtid();
+  t.Join();
+
+  // Wait until task dead message is received.
+  int num_dead_task_messages = 0;
+  do {
+    num_dead_task_messages =
+        ap.Rpc(FullMessageAgent<LocalEnclave>::kCountDeadTaskMessages);
+    EXPECT_THAT(num_dead_task_messages, Ge(0));
+  } while (num_dead_task_messages < 1);
+
+  // Agent now received all the messages related to the thread under test. The
+  // agent should have received the messages in the following order.
+  // 1. TASK_NEW message with nice = 1.
+  //    Then, zero or more messages other than TASK_NEW and
+  //    TASK_PRIORITY_CHANGED messages.
+  // 2. TASK_PRIORITY_CHANGED message with nice = 2.
+  //    Then, zero or more messages other than TASK_NEW and
+  //    TASK_PRIORITY_CHANGED messages.
+  // 3. TASK_DEAD message.
+  int64_t index = 0;
+  int64_t response_code = 0;
+  int32_t state = 0;
+  do {
+    AgentRpcArgs args{.arg0 = index};
+    AgentRpcResponse resp =
+        ap.RpcWithResponse(FullMessageAgent<LocalEnclave>::kMessageAt, args);
+
+    response_code = resp.response_code;
+    if (!response_code) {
+      Message message(reinterpret_cast<ghost_msg*>(resp.buffer.data.data()));
+      if (message.type() == MSG_TASK_NEW) {
+        EXPECT_THAT(state, Eq(0));
+        EXPECT_THAT(message.gtid(), Eq(gtid));
+
+        const ghost_msg_payload_task_new* payload_new =
+            static_cast<const ghost_msg_payload_task_new*>(message.payload());
+        EXPECT_THAT(payload_new->nice, Eq(1));
+        state++;
+      } else if (message.type() == MSG_TASK_PRIORITY_CHANGED) {
+        EXPECT_THAT(state, Eq(1));
+        EXPECT_THAT(message.gtid(), Eq(gtid));
+
+        const ghost_msg_payload_task_priority_changed* payload_priority =
+            static_cast<const ghost_msg_payload_task_priority_changed*>(
+                message.payload());
+        EXPECT_THAT(payload_priority->nice, Eq(2));
+        state++;
+      } else if (message.type() == MSG_TASK_DEAD) {
+        EXPECT_THAT(state, Eq(2));
+        EXPECT_THAT(message.gtid(), Eq(gtid));
+        state++;
+      }
+    }
+    index++;
+  } while (!response_code);
+  EXPECT_THAT(response_code,
+              Eq(FullMessageAgent<LocalEnclave>::kErrorIndexOutOfRange));
+  EXPECT_THAT(state, Eq(3));
 
   GhostHelper()->CloseGlobalEnclaveFds();
 }
