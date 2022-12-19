@@ -362,6 +362,19 @@ cc_library(
 )
 
 cc_test(
+    name = "bpf_queue_test",
+    size = "small",
+    srcs = [
+        "lib/queue.bpf.h",
+        "tests/bpf_queue_test.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_test(
     name = "biff_test",
     size = "small",
     srcs = [
