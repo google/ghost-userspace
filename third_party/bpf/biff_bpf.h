@@ -18,6 +18,7 @@
 #include <stdint.h>
 #endif
 
+#define BIFF_MAX_CPUS	1024
 #define BIFF_MAX_GTIDS 65536
 
 /*

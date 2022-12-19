@@ -115,20 +115,43 @@
 
 bool initialized;
 
-/* max_entries is patched at runtime to num_possible_cpus */
+/*
+ * You can't hold bpf spinlocks and make helper calls, which include looking up
+ * map elements.  To use 'intrusive' list struct embedded cpu_data and sw_data
+ * (e.g.  a 'next' index/pointer for a singly-linked list), and to manipulate
+ * those structs while holding a lock, we need to safely access fields by index
+ * without calling bpf_map_lookup_elem().
+ *
+ * We can do so with...  drumroll... another layer of indirection.  (Sort of).
+ * The Array map is a map of a single struct, which contains the entire array
+ * that we want to access.  So once we do a single lookup, we have access to the
+ * entire array.  e.g. lookup(cpu_data, 0), and now we can access cpu[x],
+ * cpu[y], cpu[z], etc.
+ *
+ * The data layout of the Array map is still just an array of structs; we just
+ * have an intermediate struct (e.g. __cpu_arr) to convince the verifier this is
+ * safe.  Userspace still can cast the array map to an array of
+ * biff_bpf_cpu_data[BIFF_MAX_CPUS].
+ */
+struct __cpu_arr {
+	struct biff_bpf_cpu_data e[BIFF_MAX_CPUS];
+};
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
-	__uint(max_entries, 1024);
+	__uint(max_entries, 1);
 	__type(key, u32);
-	__type(value, struct biff_bpf_cpu_data);
+	__type(value, struct __cpu_arr);
 	__uint(map_flags, BPF_F_MMAPABLE);
 } cpu_data SEC(".maps");
 
+struct __sw_arr {
+	struct biff_bpf_sw_data e[BIFF_MAX_GTIDS];
+};
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
-	__uint(max_entries, BIFF_MAX_GTIDS);
+	__uint(max_entries, 1);
 	__type(key, u32);
-	__type(value, struct biff_bpf_sw_data);
+	__type(value, struct __sw_arr);
 	__uint(map_flags, BPF_F_MMAPABLE);
 } sw_data SEC(".maps");
 
@@ -154,23 +177,45 @@ struct {
 	__type(value, struct task_sw_info);
 } sw_lookup SEC(".maps");
 
+/* Helper, from cpu id to per-cpu data blob */
+static struct biff_bpf_cpu_data *cpu_to_pcpu(u32 cpu)
+{
+	struct __cpu_arr *__ca;
+	u32 zero = 0;
+
+	if (cpu >= BIFF_MAX_CPUS)
+		return NULL;
+	__ca = bpf_map_lookup_elem(&cpu_data, &zero);
+	if (!__ca)
+		return NULL;
+	return &__ca->e[cpu];
+}
 
 /* Helper, from gtid to per-task sw_data blob */
 static struct biff_bpf_sw_data *gtid_to_swd(u64 gtid)
 {
 	struct task_sw_info *swi;
+	struct __sw_arr *__swa;
+	u32 zero = 0;
+	u32 idx;
 
 	swi = bpf_map_lookup_elem(&sw_lookup, &gtid);
 	if (!swi)
 		return NULL;
-	return bpf_map_lookup_elem(&sw_data, &swi->index);
+	idx = swi->index;
+	if (idx >= BIFF_MAX_GTIDS)
+		return NULL;
+	__swa = bpf_map_lookup_elem(&sw_data, &zero);
+	if (!__swa)
+		return NULL;
+	return &__swa->e[idx];
 }
 
 static void task_started(u64 gtid, int cpu, u64 cpu_seqnum)
 {
 	struct biff_bpf_cpu_data *pcpu;
 
-	pcpu = bpf_map_lookup_elem(&cpu_data, &cpu);
+	pcpu = cpu_to_pcpu(cpu);
 	if (!pcpu)
 		return;
 	pcpu->current = gtid;
@@ -181,7 +226,7 @@ static void task_stopped(int cpu)
 {
 	struct biff_bpf_cpu_data *pcpu;
 
-	pcpu = bpf_map_lookup_elem(&cpu_data, &cpu);
+	pcpu = cpu_to_pcpu(cpu);
 	if (!pcpu)
 		return;
 	pcpu->current = 0;
@@ -191,7 +236,7 @@ static struct biff_bpf_sw_data *get_current(int cpu)
 {
 	struct biff_bpf_cpu_data *pcpu;
 
-	pcpu = bpf_map_lookup_elem(&cpu_data, &cpu);
+	pcpu = cpu_to_pcpu(cpu);
 	if (!pcpu)
 		return NULL;
 	if (!pcpu->current)
@@ -204,7 +249,7 @@ static int resched_cpu(int cpu)
 {
 	struct biff_bpf_cpu_data *pcpu;
 
-	pcpu = bpf_map_lookup_elem(&cpu_data, &cpu);
+	pcpu = cpu_to_pcpu(cpu);
 	if (!pcpu)
 		return -1;
 	return bpf_ghost_resched_cpu(cpu, pcpu->cpu_seqnum);
@@ -563,8 +608,7 @@ handle_cpu_available(struct bpf_ghost_msg *msg)
 	struct biff_bpf_cpu_data *pcpu;
 	int cpu = avail->cpu;
 
-
-	pcpu = bpf_map_lookup_elem(&cpu_data, &cpu);
+	pcpu = cpu_to_pcpu(cpu);
 	if (!pcpu)
 		return;
 	pcpu->available = true;
@@ -577,7 +621,7 @@ handle_cpu_busy(struct bpf_ghost_msg *msg)
 	struct biff_bpf_cpu_data *pcpu;
 	int cpu = busy->cpu;
 
-	pcpu = bpf_map_lookup_elem(&cpu_data, &cpu);
+	pcpu = cpu_to_pcpu(cpu);
 	if (!pcpu)
 		return;
 	pcpu->available = false;
