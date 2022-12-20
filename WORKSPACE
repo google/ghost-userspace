@@ -39,11 +39,12 @@ http_archive(
   strip_prefix = "abseil-cpp-8c0b94e793a66495e0b1f34a5eb26bd7dc672db0",
 )
 
+# GoogleTest release-1.12.1 (Jun 27 2022)
 http_archive(
   name = "com_google_googletest",
-  url = "https://github.com/google/googletest/archive/011959aafddcd30611003de96cfd8d7a7685c700.zip",
-  sha256 = "6a5d7d63cd6e0ad2a7130471105a3b83799a7a2b14ef7ec8d742b54f01a4833c",
-  strip_prefix = "googletest-011959aafddcd30611003de96cfd8d7a7685c700",
+  url = "https://github.com/google/googletest/archive/58d77fa8070e8cec2dc1ed015d66b454c8d78850.zip",
+  sha256 = "ab78fa3f912d44d38b785ec011a25f26512aaedc5291f51f3807c592b506d33a",
+  strip_prefix = "googletest-58d77fa8070e8cec2dc1ed015d66b454c8d78850",
 )
 
 http_archive(
