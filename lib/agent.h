@@ -179,6 +179,9 @@ struct AgentRpcBuffer {
     });
     // null terminator
     data[s.size()] = std::byte(0);
+
+    // See DeserializeString().
+    string_length = s.size();
   }
 
   // See comment above for `Serialize<T>(const T& t, size_t size)`. This
@@ -245,7 +248,11 @@ struct AgentRpcBuffer {
   }
 
   std::string DeserializeString() const {
-    return std::string(reinterpret_cast<const char*>(&data[0]));
+    // We need to use the cached string length, because it is possible that we
+    // have serialized a string that contains internal null bytes (for example,
+    // this occurs with a proto serialized as a string).
+    CHECK(string_length >= 0 && string_length < BufferBytes);
+    return std::string(reinterpret_cast<const char*>(&data[0]), string_length);
   }
 
   // This is a region where arbitrary bytes of data can be written (ie. when the
@@ -255,6 +262,9 @@ struct AgentRpcBuffer {
   // different RPCs to return different types of responses (all of which must
   // fit within the shared memory region).
   std::array<std::byte, BufferBytes> data;
+
+  // For internal use only.
+  size_t string_length;
 };
 
 // Encapsulation for any arguments that might need to be passed as part of an
