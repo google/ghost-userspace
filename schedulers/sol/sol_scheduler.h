@@ -26,6 +26,7 @@ struct SolTask : public Task<> {
     kOnCpu,
     kYielding,
     kPending,
+    kPreemptedByAgent,
   };
 
   explicit SolTask(Gtid sol_task_gtid, ghost_sw_info sw_info)
@@ -38,6 +39,9 @@ struct SolTask : public Task<> {
   bool oncpu() const { return run_state == RunState::kOnCpu; }
   bool yielding() const { return run_state == RunState::kYielding; }
   bool pending() const { return run_state == RunState::kPending; }
+  bool preempted_by_agent() const {
+    return run_state == RunState::kPreemptedByAgent;
+  }
 
   static std::string_view RunStateToString(SolTask::RunState run_state) {
     switch (run_state) {
@@ -53,9 +57,8 @@ struct SolTask : public Task<> {
         return "Yielding";
       case SolTask::RunState::kPending:
         return "Pending";
-        // We will get a compile error if a new member is added to the
-        // `SolTask::RunState` enum and a corresponding case is not added
-        // here.
+      case SolTask::RunState::kPreemptedByAgent:
+        return "PreemptedByAgent";
     }
     CHECK(false);
     return "Unknown run state";

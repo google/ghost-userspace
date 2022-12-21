@@ -200,8 +200,8 @@ bool SolScheduler::SyncCpuState(const Cpu& cpu) {
     if (cs->current) {
       // `cs->current` is not a nullptr when we are trying to preempt the
       // currently running task because its preemption time slice expired.
-      cs->current->run_state = SolTask::RunState::kRunnable;
-      Enqueue(cs->current);
+      CHECK(cs->current->oncpu());
+      cs->current->run_state = SolTask::RunState::kPreemptedByAgent;
     }
     cs->current = next;
     next->run_state = SolTask::RunState::kOnCpu;
@@ -234,6 +234,8 @@ void SolScheduler::TaskBlocked(SolTask* task, const Message& msg) {
     CpuState* cs = cpu_state_of(task);
     CHECK_EQ(cs->current, task);
     cs->current = nullptr;
+  } else if (task->preempted_by_agent()) {
+    // Do nothing. We cannot enqueue the task since it is blocked.
   } else {
     CHECK(task->queued());
     RemoveFromRunqueue(task);
@@ -255,6 +257,9 @@ void SolScheduler::TaskPreempted(SolTask* task, const Message& msg) {
     cs->current = nullptr;
     task->run_state = SolTask::RunState::kRunnable;
     Enqueue(task);
+  } else if (task->preempted_by_agent()) {
+    task->run_state = SolTask::RunState::kRunnable;
+    Enqueue(task);
   } else {
     CHECK(task->queued());
   }
@@ -270,6 +275,9 @@ void SolScheduler::TaskYield(SolTask* task, const Message& msg) {
     CHECK_EQ(cs->current, task);
     cs->current = nullptr;
     Yield(task);
+  } else if (task->preempted_by_agent()) {
+    task->run_state = SolTask::RunState::kRunnable;
+    Enqueue(task);
   } else {
     CHECK(task->queued());
   }
