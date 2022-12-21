@@ -29,8 +29,25 @@ std::ostream& operator<<(std::ostream& os, const Options& options) {
   flags["rocksdb_db_path"] = options.rocksdb_db_path.string();
   flags["throughput"] = std::to_string(options.throughput);
   flags["range_query_ratio"] = std::to_string(options.range_query_ratio);
-  flags["load_generator_cpu"] = std::to_string(options.load_generator_cpu);
-  flags["cfs_dispatcher_cpu"] = std::to_string(options.cfs_dispatcher_cpu);
+
+  std::string load_generator_cpus;
+  for (size_t i = 0; i < options.load_generator_cpus.Size(); i++) {
+    load_generator_cpus += options.load_generator_cpus.GetNthCpu(i).ToString();
+    if (i < options.load_generator_cpus.Size() - 1) {
+      load_generator_cpus += " ";
+    }
+  }
+  flags["load_generator_cpus"] = load_generator_cpus;
+
+  std::string cfs_dispatcher_cpus;
+  for (size_t i = 0; i < options.cfs_dispatcher_cpus.Size(); i++) {
+    cfs_dispatcher_cpus += options.cfs_dispatcher_cpus.GetNthCpu(i).ToString();
+    if (i < options.cfs_dispatcher_cpus.Size() - 1) {
+      cfs_dispatcher_cpus += " ";
+    }
+  }
+  flags["cfs_dispatcher_cpus"] = cfs_dispatcher_cpus;
+
   flags["num_workers"] = std::to_string(options.num_workers);
 
   for (int i = 0; i < options.worker_cpus.Size(); i++) {
@@ -77,25 +94,32 @@ Orchestrator::Orchestrator(Options options, size_t total_threads)
     : options_(options),
       total_threads_(total_threads),
       database_(options_.rocksdb_db_path),
-      network_(options_.throughput, options_.range_query_ratio),
       gen_(total_threads),
       first_run_(total_threads),
       thread_pool_(total_threads) {
   CHECK(!options_.rocksdb_db_path.empty());
   CHECK_GE(options_.range_query_ratio, 0.0);
   CHECK_LE(options_.range_query_ratio, 1.0);
-  CHECK_GE(options_.load_generator_cpu, 0);
-  CHECK_NE(options_.load_generator_cpu, kBackgroundThreadCpu);
+  CHECK(!options_.load_generator_cpus.IsSet(kBackgroundThreadCpu));
   CHECK(options_.scheduler != ghost::GhostThread::KernelScheduler::kCfs ||
-        options_.cfs_dispatcher_cpu != kBackgroundThreadCpu);
-  CHECK(options_.scheduler != ghost::GhostThread::KernelScheduler::kCfs ||
-        options_.cfs_dispatcher_cpu >= 0);
+        !options_.cfs_dispatcher_cpus.IsSet(kBackgroundThreadCpu));
+
+  double throughput_per_load_generator =
+      options_.throughput / options_.load_generator_cpus.Size();
+  absl::PrintF("Each load generator generates a throughput of %f req/s\n",
+               throughput_per_load_generator);
+  for (size_t i = 0; i < options_.load_generator_cpus.Size(); i++) {
+    network_.push_back(std::make_unique<SyntheticNetwork>(
+        throughput_per_load_generator, options_.range_query_ratio));
+  }
   for (const ghost::Cpu& cpu : options_.worker_cpus) {
     CHECK_NE(cpu.id(), kBackgroundThreadCpu);
   }
 
-  // Add 2 to account for the load generator thread and the dispatcher thread.
-  for (size_t i = 0; i < options_.num_workers + 2; ++i) {
+  for (size_t i = 0;
+       i < options_.load_generator_cpus.Size() +
+               options_.cfs_dispatcher_cpus.Size() + options_.num_workers;
+       ++i) {
     worker_work_.push_back(std::make_unique<WorkerWork>());
     worker_work_.back()->num_requests = 0;
 

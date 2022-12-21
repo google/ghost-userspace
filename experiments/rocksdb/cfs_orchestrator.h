@@ -49,12 +49,12 @@ class CfsOrchestrator final : public Orchestrator {
 
   // The dispatcher calls this method to receive requests sent to it by the load
   // generator.
-  void HandleLoadGenerator();
+  void HandleLoadGenerator(uint32_t sid);
 
   // The dispatcher calls this method to populate 'idle_sids_' with a list of
   // the SIDs of idle workers. Note that this method clears 'idle_sids_' before
   // filling it in.
-  void GetIdleWorkerSIDs();
+  void GetIdleWorkerSIDs(uint32_t sid);
 
   // Allows runnable threads to run and keeps idle threads either spinning or
   // sleeping on a futex until they are marked runnable again.
@@ -73,14 +73,15 @@ class CfsOrchestrator final : public Orchestrator {
   // the dispatcher.
   static constexpr size_t kLoadGeneratorBatchSize = 100;
 
-  // The dispatcher's queue on waiting requests to assign to workers.
-  std::deque<Request> dispatcher_queue_;
+  // The dispatchers' queues to hold waiting requests that will later be
+  // assigned to workers.
+  std::vector<std::deque<Request>> dispatcher_queue_;
 
-  // The dispatcher uses this to store idle SIDs. We make this a class member
+  // The dispatchers use this to store idle SIDs. We make this a class member
   // rather than a local variable in the 'Dispatcher' method to avoid repeatedly
-  // allocating memory for the list backing in the dispatcher common case, which
-  // is expensive.
-  std::list<uint32_t> idle_sids_;
+  // allocating memory for the list backing in the dispatchers' common case,
+  // which is expensive.
+  std::vector<std::list<uint32_t>> idle_sids_;
 };
 
 }  // namespace ghost_test

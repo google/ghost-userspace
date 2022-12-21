@@ -77,8 +77,10 @@ Options GetOptions() {
   options.throughput = 20'000.0;
   options.range_query_ratio = 0.005;
   // The background threads run on CPU 0, so run the load generator on CPU 1.
-  options.load_generator_cpu = 1;
-  options.cfs_dispatcher_cpu = 2;
+  options.load_generator_cpus =
+      ghost::MachineTopology()->ToCpuList(std::vector<int>{1});
+  options.cfs_dispatcher_cpus =
+      ghost::MachineTopology()->ToCpuList(std::vector<int>{2});
   options.num_workers = 2;
   options.cfs_wait_type = ThreadWait::WaitType::kSpin;
   options.worker_cpus =

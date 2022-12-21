@@ -29,8 +29,10 @@ Options GetOptions() {
   options.rocksdb_db_path = "/tmp/orch_db";
   options.throughput = 20'000.0;
   options.range_query_ratio = 0.005;
-  options.load_generator_cpu = 1;
-  options.cfs_dispatcher_cpu = 2;
+  options.load_generator_cpus =
+      ghost::MachineTopology()->ToCpuList(std::vector<int>{1});
+  options.cfs_dispatcher_cpus =
+      ghost::MachineTopology()->ToCpuList(std::vector<int>{2});
   options.num_workers = 2;
   options.cfs_wait_type = ThreadWait::WaitType::kSpin;
   options.worker_cpus =
@@ -52,7 +54,7 @@ Options GetOptions() {
 // their values in alphabetical order by option name.
 std::string GetExpectedOutput() {
   return R"(batch: 1
-cfs_dispatcher_cpu: 2
+cfs_dispatcher_cpus: 2
 cfs_wait_type: spin
 discard_duration: 2s
 experiment_duration: 15s
@@ -60,7 +62,7 @@ get_duration: 10us
 get_exponential_mean: 0
 ghost_qos: 2
 ghost_wait_type: futex
-load_generator_cpu: 1
+load_generator_cpus: 1
 num_workers: 2
 print_distribution: false
 print_format: pretty

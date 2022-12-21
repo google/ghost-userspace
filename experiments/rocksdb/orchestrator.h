@@ -56,12 +56,12 @@ struct Options {
   // are Get requests is '1 - range_query_ratio'.
   double range_query_ratio;
 
-  // The CPU that the load generator thread runs on.
-  int load_generator_cpu;
+  // The CPUs that the load generator threads run on.
+  ghost::CpuList load_generator_cpus = ghost::MachineTopology()->EmptyCpuList();
 
-  // For CFS (Linux Completely Fair Scheduler) experiments, the CPU that the
-  // dispatcher runs on.
-  int cfs_dispatcher_cpu;
+  // For CFS (Linux Completely Fair Scheduler) experiments, the CPUs that the
+  // dispatchers run on.
+  ghost::CpuList cfs_dispatcher_cpus = ghost::MachineTopology()->EmptyCpuList();
 
   // The number of workers. Each worker has one thread.
   size_t num_workers;
@@ -169,14 +169,6 @@ class Orchestrator {
   absl::Duration GetThreadCpuTime() const;
 
  protected:
-  // The SID (sched item identifier) of the load generator.
-  static constexpr uint32_t kLoadGeneratorSid = 0;
-
-  // The SID (sched item identifier) of the dispatcher. Note that the dispatcher
-  // only runs in the CFS (Linux Completely Fair Scheduler) experiments. In the
-  // ghOSt experiments, the global agent plays the role of the dispatcher.
-  static constexpr uint32_t kDispatcherSid = 1;
-
   // Constructs the orchestrator. 'options' is the experiment settings.
   // 'total_threads' is the total number of threads managed by the orchestrator,
   // including the load generator thread, the worker threads, and if relevant,
@@ -213,7 +205,7 @@ class Orchestrator {
 
   size_t total_threads() const { return total_threads_; }
 
-  SyntheticNetwork& network() { return network_; }
+  SyntheticNetwork& network(uint32_t sid) { return *network_[sid]; }
 
   ExperimentThreadPool& thread_pool() { return thread_pool_; }
 
@@ -277,9 +269,9 @@ class Orchestrator {
   // The RocksDB database.
   Database database_;
 
-  // The synthetic network that the load generator uses to generate synthetic
+  // The synthetic networks that the load generators use to generate synthetic
   // requests.
-  SyntheticNetwork network_;
+  std::vector<std::unique_ptr<SyntheticNetwork>> network_;
 
   // The time that the experiment started at (after initialization).
   absl::Time start_;

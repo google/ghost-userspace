@@ -36,11 +36,11 @@ ABSL_FLAG(
     "The share of requests that are range queries. This value must be greater "
     "than or equal to 0.0 and less than or equal to 1.0. The share of requests "
     "that are Get requests is '1 - range_query_ratio'. (default: 0.0).");
-ABSL_FLAG(int, load_generator_cpu, 10,
-          "The CPU that the load generator thread runs on (default: 10).");
-ABSL_FLAG(int, cfs_dispatcher_cpu, 11,
-          "For CFS (Linux Completely Fair Scheduler) experiments, the CPU that "
-          "the dispatcher runs on (default: 11).");
+ABSL_FLAG(std::string, load_generator_cpus, "10",
+          "The CPUs that the load generator threads run on (default: 10).");
+ABSL_FLAG(std::string, cfs_dispatcher_cpus, "11",
+          "For CFS (Linux Completely Fair Scheduler) experiments, the CPUs "
+          "that the dispatchers run on (default: 11).");
 ABSL_FLAG(size_t, num_workers, 6,
           "The number of workers. Each worker has one thread. (default: 6).");
 ABSL_FLAG(std::string, worker_cpus, "12-17",
@@ -106,8 +106,10 @@ ghost_test::Options GetOptions() {
   options.rocksdb_db_path = absl::GetFlag(FLAGS_rocksdb_db_path);
   options.throughput = absl::GetFlag(FLAGS_throughput);
   options.range_query_ratio = absl::GetFlag(FLAGS_range_query_ratio);
-  options.load_generator_cpu = absl::GetFlag(FLAGS_load_generator_cpu);
-  options.cfs_dispatcher_cpu = absl::GetFlag(FLAGS_cfs_dispatcher_cpu);
+  options.load_generator_cpus = ghost::MachineTopology()->ParseCpuStr(
+      absl::GetFlag(FLAGS_load_generator_cpus));
+  options.cfs_dispatcher_cpus = ghost::MachineTopology()->ParseCpuStr(
+      absl::GetFlag(FLAGS_cfs_dispatcher_cpus));
   options.num_workers = absl::GetFlag(FLAGS_num_workers);
   options.worker_cpus =
       ghost::MachineTopology()->ParseCpuStr(absl::GetFlag(FLAGS_worker_cpus));
