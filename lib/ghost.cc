@@ -318,19 +318,22 @@ static ctl_dir FindActiveEnclave() {
   return {-1, -1};
 }
 
-GhostThread::GhostThread(KernelScheduler ksched, std::function<void()> work)
+GhostThread::GhostThread(KernelScheduler ksched, std::function<void()> work,
+                         int dir_fd)
     : ksched_(ksched) {
   GhostThread::SetGlobalEnclaveFdsOnce();
 
-  thread_ = std::thread([this, w = std::move(work)] {
+  // `dir_fd` must only be set when the scheduler is ghOSt.
+  CHECK(ksched == KernelScheduler::kGhost || dir_fd == -1);
+
+  thread_ = std::thread([this, w = std::move(work), dir_fd] {
     tid_ = GetTID();
     gtid_ = Gtid::Current();
 
     started_.Notify();
 
     if (ksched_ == KernelScheduler::kGhost) {
-      const int ret =
-          GhostHelper()->SchedTaskEnterGhost(/*pid=*/0, /*dir_fd=*/-1);
+      const int ret = GhostHelper()->SchedTaskEnterGhost(/*pid=*/0, dir_fd);
       CHECK_EQ(ret, 0);
     }
     std::move(w)();

@@ -542,7 +542,8 @@ class GhostThread {
     kGhost,
   };
 
-  explicit GhostThread(KernelScheduler ksched, std::function<void()> work);
+  explicit GhostThread(KernelScheduler ksched, std::function<void()> work,
+                       int dir_fd = -1);
   explicit GhostThread(const GhostThread&) = delete;
   GhostThread& operator=(const GhostThread&) = delete;
   ~GhostThread();
