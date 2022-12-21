@@ -8,6 +8,7 @@
 #ifndef GHOST_LIB_SCHEDULER_H_
 #define GHOST_LIB_SCHEDULER_H_
 
+#include <atomic>
 #include <memory>
 #include <type_traits>
 #include <unordered_map>
@@ -19,6 +20,53 @@
 #include "lib/ghost.h"
 
 namespace ghost {
+
+// A minimal sequence number class implementation that wraps the atomic. There
+// are two different usages around this implementation:
+//
+// For operations where a user does not need any memory guarantees:
+//   // Memory writes here may be reordered to after the following line.
+//   uint32_t seqnum = task->seqnum;
+//
+//   task->seqnum = seqnum;
+//   // Memory writes here may be reordered to before the above line.
+//
+// For operations where a user needs memory guarantees, especially in message
+// draining loop (i.e., any task state changes before increasing the sequence
+// number should be visible to anyone who `load`s the updated sequence number):
+//   uint32_t seqnum = ...;
+//   // Memory writes here should be visible below the following line.
+//   task->seqnum.store(seqnum);
+//
+//   uint32_t seqnum = task->seqnum.load();
+//   // All memory writes before the most recent task->seqnum.store() should be
+//   // visible here.
+class Seqnum {
+ public:
+  // Loads the sequence number without memory ordering guarantee.
+  operator uint32_t() const {
+    return seqnum_.load(std::memory_order_relaxed);
+  }
+
+  // Stores the sequence number without memory ordering guarantee.
+  Seqnum& operator=(uint32_t seqnum) {
+    seqnum_.store(seqnum, std::memory_order_relaxed);
+    return *this;
+  }
+
+  // Loads the sequence number with acquire semantics.
+  uint32_t load() {
+    return seqnum_.load(std::memory_order_acquire);
+  }
+
+  // Stores the sequence number with release semantics.
+  void store(uint32_t seqnum) {
+    seqnum_.store(seqnum, std::memory_order_release);
+  }
+
+ private:
+  std::atomic<uint32_t> seqnum_{0};
+};
 
 // REQUIRES: All Task implementations should derive from Task.
 template <class StatusWordType = LocalStatusWord>
@@ -32,13 +80,14 @@ struct Task {
   // in-order and no messages were dropped.
   // REQUIRES: Should be invoked for each message associated with *this.
   inline void Advance(uint32_t next_seqnum) {
-    CHECK_EQ(seqnum + 1, next_seqnum);  // Assert no missed messages for now.
-    seqnum = next_seqnum;
+    // Assert no missed messages for now.
+    CHECK_EQ(seqnum+1, next_seqnum);
+    seqnum.store(next_seqnum);
   }
 
   Gtid gtid;
   StatusWordType status_word;
-  uint32_t seqnum = -1;
+  Seqnum seqnum;
 };
 
 // A minimal Scheduler-base class.  Contrary to its name, the majority of this
