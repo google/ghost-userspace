@@ -125,6 +125,9 @@ struct CfsTask : public Task<> {
   uint32_t weight;
   uint32_t inverse_weight;
 
+  // CPU affinity of this task.
+  CpuList cpu_affinity = MachineTopology()->EmptyCpuList();
+
   // Cfs sorts tasks by vruntime, so we need to keep track of how long a task
   // has been running.
   absl::Duration vruntime;

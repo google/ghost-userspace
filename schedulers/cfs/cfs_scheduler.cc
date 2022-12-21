@@ -293,6 +293,8 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
     eligible_cpus = cpus();
   }
 
+  task->cpu_affinity = eligible_cpus;
+
   // Get the intersection of the eligible CPUs and the enclave CPUs. If the
   // initial affinity of this task is successfully fetched but there is no
   // eligible CPU (i.e., this intersection being empty), we let SelectTaskRq
@@ -656,6 +658,8 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
     DPRINT_CFS(3, absl::StrFormat("[%s]: Cannot retrieve the CPU mask.",
       task->gtid.describe()));
   }
+
+  task->cpu_affinity = eligible_cpus;
 
   // Get the intersection of the eligible CPUs and the enclave CPUs.
   eligible_cpus.Intersection(cpus());
