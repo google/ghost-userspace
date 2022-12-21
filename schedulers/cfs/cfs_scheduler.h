@@ -452,4 +452,4 @@ class FullCfsAgent : public FullAgent<EnclaveType> {
 
 }  // namespace ghost
 
-#endif  // GHOST_SCHEDULERS_Cfs_Cfs_SCHEDULER_H_
+#endif  // GHOST_SCHEDULERS_CFS_CFS_SCHEDULER_H_
