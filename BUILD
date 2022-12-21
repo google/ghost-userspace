@@ -224,7 +224,6 @@ cc_binary(
     ],
     copts = compiler_flags,
     deps = [
-        ":agent",
         ":base",
         ":cfs_scheduler",
         ":ghost",
