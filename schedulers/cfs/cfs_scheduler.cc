@@ -279,7 +279,30 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
 
   PrintDebugTaskMessage("TaskNew", nullptr, task);
 
-  CpuList eligible_cpus = cpus();
+  CpuList eligible_cpus = MachineTopology()->EmptyCpuList();
+  if (GhostHelper()->SchedGetAffinity(task->gtid, eligible_cpus) != 0) {
+    // SchedGetAffinity can fail if the task does not exist at this point
+    // (ESRCH). One example of such condition is: (i) the task enters ghOSt,
+    // (ii) another task moves the task out of ghOSt via `sched_setscheduler`,
+    // (iii) the task dies and then (iv) this agent handles the TASK_NEW
+    // message.
+    DPRINT_CFS(3, absl::StrFormat(
+                      "[%s]: Cannot retrieve the CPU mask. Returned errno: %d.",
+                      task->gtid.describe(), errno));
+    // Fall back to having all the CPUs eligible.
+    eligible_cpus = cpus();
+  }
+
+  // Get the intersection of the eligible CPUs and the enclave CPUs. If the
+  // initial affinity of this task is successfully fetched but there is no
+  // eligible CPU (i.e., this intersection being empty), we let SelectTaskRq
+  // decide what to do with this empty CPU list.
+  eligible_cpus.Intersection(cpus());
+  if (eligible_cpus.Empty()) {
+    // Not able to migrate as the eligible CPUs are outside of the enclave.
+    DPRINT_CFS(3, absl::StrFormat("[%s]: No CPUs eligible for the new task.",
+                                  task->gtid.describe()));
+  }
 
   task->seqnum = msg.seqnum();
 
