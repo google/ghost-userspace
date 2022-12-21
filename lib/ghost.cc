@@ -33,6 +33,11 @@
 // too.
 ABSL_FLAG(int32_t, verbose, 0, "Verbosity level");
 
+// This flag is manually parsed on startup (see CheckVersion()), not within
+// absl::ParseCommandLine(). We have it here as an ABSL_FLAG just for
+// documentation reasons.
+ABSL_FLAG(bool, ghost_version, false, "Print UAPI ghOSt version and quit.");
+
 namespace ghost {
 
 namespace {

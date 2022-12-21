@@ -13,11 +13,13 @@
 
 #include <csignal>
 #include <cstdint>
+#include <fstream>
 #include <unordered_map>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
+#include "absl/strings/str_split.h"
 #include "kernel/ghost_uapi.h"
 #include "lib/base.h"
 #include "lib/logging.h"
@@ -271,11 +273,34 @@ class Ghost {
   // Returns the ghOSt abi versions supported by the kernel.
   static int GetSupportedVersions(std::vector<uint32_t>& versions);
 
+  // Check /proc/pid/cmdline for the --ghost_version flag and return true if it
+  // is present. This function is called by CheckVersion(), so it runs on
+  // startup when kVersionCheck is initialized.
+  // We check for the flag manually instead of using absl::ParseCommandLine()
+  // since we want to output the version and quit before possibly getting a
+  // versions mismatch error in CheckVersion().
+  static bool GetVersion() {
+    std::ifstream cmdline_file;
+    cmdline_file.open("/proc/self/cmdline");
+    std::string cmdline;
+    cmdline_file >> cmdline;
+    cmdline_file.close();
+
+    // The command-line stored in /proc/pid/cmdline is NULL char-delimited.
+    std::vector<absl::string_view> argv = absl::StrSplit(cmdline, '\0');
+    return std::find(argv.begin(), argv.end(), "--ghost_version") != argv.end();
+  }
+
   // Checks that the userspace ABI version matches the kernel ABI version.
   // This method performs a 'CHECK_EQ' so that the process dies if the versions
   // do not match. This is useful since this method runs on startup when
   // 'kVersionCheck' is initialized in the agent.
   static bool CheckVersion() {
+    if (GetVersion()) {
+      std::cerr << GHOST_VERSION << std::endl;
+      exit(0);
+    }
+
     std::vector<uint32_t> versions;
     CHECK_EQ(GetSupportedVersions(versions), 0);
 
