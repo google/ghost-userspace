@@ -336,7 +336,7 @@ void CfsScheduler::TaskRunnable(CfsTask* task, const Message& msg) {
       cpu_state(topology()->cpu(task->cpu >= 0 ? task->cpu : sched_getcpu())),
       task);
 
-  CpuList eligible_cpus = cpus();
+  CpuList eligible_cpus = task->cpu_affinity;
 
   // If this is our current task, then we will defer its proccessing until
   // PickNextTask. Otherwise, use the normal wakeup logic.

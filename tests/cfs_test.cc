@@ -4,18 +4,18 @@
 // license that can be found in the LICENSE file or at
 // https://developers.google.com/open-source/licenses/bsd
 
-#include <stdio.h>
 #include <sched.h>
+#include <stdio.h>
 
+#include <atomic>
 #include <memory>
 #include <vector>
 
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 #include "lib/base.h"
 #include "lib/ghost.h"
 #include "schedulers/cfs/cfs_scheduler.h"
-
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
 
 namespace ghost {
 namespace {
@@ -117,6 +117,79 @@ TEST_F(CfsTest, RespectsNewTaskAffinity) {
           EXPECT_THAT(sched_getcpu(), Eq(1));
         }));
   }
+
+  for (std::unique_ptr<GhostThread>& t : threads) {
+    t->Join();
+  }
+
+  // Even though the threads have joined it does not mean they are dead.
+  // pthread_join() can return before the dying task has made its way to
+  // TASK_DEAD. In this case, CfsAgent::ValidatePreExitState() triggers
+  // a CHECK failure because the runqueue is not empty. We spin here until
+  // there are no more tasks remaining.
+  int num_tasks;
+  do {
+    num_tasks = ap.Rpc(CfsScheduler::kCountAllTasks);
+    EXPECT_THAT(num_tasks, Ge(0));
+  } while (num_tasks > 0);
+
+  GhostHelper()->CloseGlobalEnclaveFds();
+}
+
+TEST_F(CfsTest, KeepsAffinityWhenBecomingRunnableFromBlocked) {
+  if (MachineTopology()->num_cpus() < 2) {
+    GTEST_SKIP() << "must have at least cpus";
+    return;
+  }
+
+  Topology* topology = MachineTopology();
+
+  // The enclave has two CPUs.
+  CfsConfig config(topology, topology->ToCpuList(std::vector<int>{0, 1}));
+
+  // Create the CFS agent process.
+  auto ap = AgentProcess<FullCfsAgent<LocalEnclave>, CfsConfig>(config);
+
+  std::atomic<uint32_t> num_threads_at_barrier{0};
+  Notification block;
+
+  // Create 10 threads.
+  constexpr uint32_t kNumThreads = 10;
+  std::vector<std::unique_ptr<GhostThread>> threads;
+  threads.reserve(kNumThreads);
+
+  for (uint32_t i = 0; i < kNumThreads; i++) {
+    threads.emplace_back(std::make_unique<GhostThread>(
+        GhostThread::KernelScheduler::kGhost,
+        [&block, &num_threads_at_barrier] {
+          // Migrate all the threads to CPU 1 by setting affinity.
+          EXPECT_THAT(GhostHelper()->SchedSetAffinity(
+                          Gtid::Current(),
+                          MachineTopology()->ToCpuList(std::vector<int>{1})),
+                      Eq(0));
+
+          // This task is setting its affinity synchronously and it is
+          // guaranteed that this task gets offcpu before returning to user via
+          // sched_setaffinity() -> do_set_cpus_allowed() -> set_curr_task() ->
+          // _set_curr_task_ghost() -> force_offcpu() kernel path. The task will
+          // not get oncpu again until the agent consumes TASK_AFFINITY_CHANGED
+          // message.
+          EXPECT_THAT(sched_getcpu(), Eq(1));
+
+          num_threads_at_barrier.fetch_add(1, std::memory_order_relaxed);
+          block.WaitForNotification();
+
+          SpinFor(absl::Milliseconds(500));
+
+          // This task should still be on CPU 1.
+          EXPECT_THAT(sched_getcpu(), Eq(1));
+        }));
+  }
+
+  while (num_threads_at_barrier.load(std::memory_order_relaxed) < kNumThreads) {
+    absl::SleepFor(absl::Milliseconds(10));
+  }
+  block.Notify();
 
   for (std::unique_ptr<GhostThread>& t : threads) {
     t->Join();
