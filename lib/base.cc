@@ -27,6 +27,7 @@
 #include "absl/debugging/symbolize.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_format.h"
+#include "absl/time/time.h"
 #include "kernel/ghost_uapi.h"
 #include "lib/logging.h"
 
@@ -318,6 +319,12 @@ void SpinFor(absl::Duration remaining) {
 
     for (int i = 0; i < 100; ++i) {
       delta = MonotonicNow() - start;
+
+      // If clock_gettime is slow, we don't want to mistake that for a
+      // preemption.
+      if (delta > absl::Microseconds(10)) {
+        break;
+      }
     }
 
     // Don't count preempted time; if we were off cpu, the large delta
