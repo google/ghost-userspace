@@ -10,41 +10,43 @@
 #include <iostream>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/str_format.h"
 #include "third_party/util/util.h"
-
-#if defined(GHOST_LOGGING)
 
 #ifndef GHOST_DEBUG
 #ifdef NDEBUG
 #define GHOST_DEBUG 0
 #else
 #define GHOST_DEBUG 1
-#endif
-#endif
+#endif  // !NDEBUG
+#endif  // !GHOST_DEBUG
 
+#ifndef VLOG
+#ifdef NDEBUG
+#define VLOG(level) LOG_IF(INFO, false)
 #else
+#define VLOG(level) LOG_IF(INFO, verbose() < level)
+#endif  // !NDEBUG
+#endif  // !VLOG
 
-#endif  // !GHOST_LOGGING
-
+// TODO: Consider deprecating GHOST_DPRINT once we migrate to VLOG.
 #define GHOST_DPRINT(level, target, fmt, ...)       \
   do {                                              \
     if (verbose() < level) break;                   \
     absl::FPrintF(target, fmt "\n", ##__VA_ARGS__); \
   } while (0)
 
-#define GHOST_ERROR(...)                                               \
-  do {                                                                 \
-    std::cerr << __FILE__ << ":" << __LINE__ << "(" << ghost::GetTID() \
-              << ") ERROR: ";                                          \
-    absl::FPrintF(stderr, __VA_ARGS__);                                \
-    absl::FPrintF(stderr, "\n");                                       \
-    ghost::Exit(1);                                                    \
+#define GHOST_ERROR(fmt, ...)                          \
+  do {                                                 \
+    LOG(FATAL) << "(" << ghost::GetTID() << ") "       \
+               << absl::StrFormat(fmt, ##__VA_ARGS__); \
   } while (0)
 
-#define GHOST_I_AM_HERE                                                      \
-  absl::FPrintF(stderr, "PID %d %s is in %s at line %d in %s\n", getpid(),   \
-                std::string(Gtid::Current().describe()), __func__, __LINE__, \
-                __FILE__)
+#define GHOST_I_AM_HERE                                                   \
+  do {                                                                    \
+    LOG(INFO) << "GHOST_I_AM_HERE: PID " << getpid() << " "               \
+              << ghost::Gtid::Current().describe() << " at " << __func__; \
+  } while (0)
 
 #endif  // GHOST_LIB_LOGGING_H_

@@ -29,8 +29,8 @@
 // conflict, we need to name our verbose flag differently outside of Google.
 //
 // All internal Google binaries have a `v` flag by default. To be consistent
-// with our open source project, we instead use the `verbose` flag internally,
-// too.
+// with our open source project, we can use the `verbose` flag internally too
+// as an alias.
 ABSL_FLAG(int32_t, verbose, 0, "Verbosity level");
 
 // This flag is manually parsed on startup (see CheckVersion()), not within
