@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/numeric/int128.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
@@ -717,11 +718,11 @@ void CfsTaskState::AssertValidTransition(State next) {
     }
 
     DPRINT_CFS(1, absl::StrFormat("[%s]: State trace:", task_name_));
-    for (const FullState& s : state_trace_) {
+    state_trace_.ForEach([this] (const FullState& s) {
       DPRINT_CFS(1, absl::StrFormat("[%s]: (%s, %s)", task_name_,
                                     absl::FormatStreamed(s.state),
                                     absl::FormatStreamed(s.on_rq)));
-    }
+    });
 
     // We want to crash since we tranisitioned to an invalid state.
     CHECK(false);
@@ -754,11 +755,11 @@ void CfsTaskState::AssertValidTransition(OnRq next) {
     }
 
     DPRINT_CFS(1, absl::StrFormat("[%s]: State trace:", task_name_));
-    for (const FullState& s : state_trace_) {
+    state_trace_.ForEach([this] (const FullState& s) {
       DPRINT_CFS(1, absl::StrFormat("[%s]: (%s, %s)", task_name_,
                                     absl::FormatStreamed(s.state),
                                     absl::FormatStreamed(s.on_rq)));
-    }
+    });
 
     // We want to crash since we tranisitioned to an invalid state.
     CHECK(false);

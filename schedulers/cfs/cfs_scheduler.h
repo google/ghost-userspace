@@ -9,13 +9,12 @@
 
 #include <climits>
 #include <cstdint>
-#include <deque>
 #include <iostream>
 #include <memory>
 #include <ostream>
 #include <set>
-#include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
@@ -89,7 +88,7 @@ class CfsTaskState {
   // states or run states but not both at the same time.
   void SetState(State state) {
 #ifndef NDEBUG
-    state_trace_.push_back({.state = state, .on_rq = on_rq_});
+    state_trace_.Insert({.state = state, .on_rq = on_rq_});
     AssertValidTransition(state);
 #endif
     state_ = state;
@@ -100,7 +99,7 @@ class CfsTaskState {
   // states or run states but not both at the same time.
   void SetOnRq(OnRq on_rq) {
 #ifndef NDEBUG
-    state_trace_.push_back({.state = state_, .on_rq = on_rq});
+    state_trace_.Insert({.state = state_, .on_rq = on_rq});
     AssertValidTransition(on_rq);
 #endif
     on_rq_ = on_rq;
@@ -110,6 +109,34 @@ class CfsTaskState {
   struct FullState {
     State state;
     OnRq on_rq;
+  };
+
+  // Minimalistic implementation of circular buffer for the state trace.
+  class StateTrace {
+   public:
+    static constexpr size_t kMaxSize = 20;
+
+    void Insert(const FullState& state) {
+      CHECK_LE(size_, array_.size());
+      if (size_ == array_.size()) {
+        array_[oldest_] = state;
+        oldest_ = (oldest_ + 1) % array_.size();
+      } else {
+        // oldest_ is always zero in this case.
+        array_[size_++] = state;
+      }
+    }
+
+    void ForEach(absl::AnyInvocable<void(const FullState&)> on_each) const {
+      for (size_t i = 0; i < size_; i++) {
+        on_each(array_[(oldest_ + i) % array_.size()]);
+      }
+    }
+
+   private:
+    std::array<FullState, kMaxSize> array_;
+    size_t oldest_ = 0;
+    size_t size_ = 0;
   };
 
 #ifndef NDEBUG
@@ -141,7 +168,8 @@ class CfsTaskState {
 
 #ifndef NDEBUG
   // TODO: Consider minimizing if(n)def NDEBUG blocks.
-  std::vector<FullState> state_trace_;
+  StateTrace state_trace_;
+
   // State Transition Map. Each kToBlah encodes valid states such that we can
   // transition to blah. To validate that we can go from kFoo to kBar, we check
   // that the correct bit it set. e.g. (kToFoo & (1 << kBar)) == 1 iff kBar ->
