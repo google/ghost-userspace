@@ -82,4 +82,15 @@ static inline bool is_traced_ghost(struct task_struct *p) {
 #define READ_ONCE(x) (*(volatile typeof(x) *)&(x))
 #define WRITE_ONCE(x, val) ((*(volatile typeof(x) *)&(x)) = val)
 
+/*
+ * Since this is in rodata, the verifier will drop all the bpf_printks, since
+ * they are dead code.  That allows us to pass verification if we lack the CAP
+ * to make a bpf_printk call.
+ */
+const volatile bool enable_bpf_printd;
+#define bpf_printd(...) ({						\
+	if (enable_bpf_printd)						\
+		bpf_printk(__VA_ARGS__);				\
+})
+
 #endif  // GHOST_LIB_BPF_COMMON_BPF_H_

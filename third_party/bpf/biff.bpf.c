@@ -97,16 +97,6 @@
 
 #include <asm-generic/errno.h>
 
-/*
- * Toggle this manually for debugging  bpf_printk requires CAP_PERFMON, which
- * agents might not have.
- *
- * TODO: it'd be nice to have libbpf compile this out if we don't have the right
- * CAP, instead of failing verification.
- */
-//#define bpf_printd bpf_printk
-#define bpf_printd(...)
-
 bool initialized;
 
 /*

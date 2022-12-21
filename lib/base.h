@@ -14,6 +14,7 @@
 #include <execinfo.h>
 #include <fcntl.h>
 #include <linux/futex.h>
+#include <sys/capability.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -47,6 +48,7 @@ void Exit(int code);
 size_t GetFileSize(int fd);
 void SpinFor(absl::Duration remaining);
 void PrintBacktrace(FILE* f, void* uctx = nullptr);
+bool CapHas(cap_value_t cap);
 
 // This is useful for reading non-atomic variables that may be changed by the
 // kernel or by other threads. There are three main advantages to wrapping a

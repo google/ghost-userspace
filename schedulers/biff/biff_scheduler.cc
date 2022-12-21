@@ -24,6 +24,8 @@ BiffScheduler::BiffScheduler(Enclave* enclave, CpuList cpulist,
   bpf_program__set_types(bpf_obj_->progs.biff_msg_send, BPF_PROG_TYPE_GHOST_MSG,
                          BPF_GHOST_MSG_SEND);
 
+  bpf_obj_->rodata->enable_bpf_printd = CapHas(CAP_PERFMON);
+
   CHECK_EQ(biff_bpf__load(bpf_obj_), 0);
 
   CHECK_EQ(agent_bpf_register(bpf_obj_->progs.biff_pnt, BPF_GHOST_SCHED_PNT),

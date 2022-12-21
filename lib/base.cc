@@ -296,6 +296,20 @@ void PrintBacktrace(FILE* f, void* uctx) {
   }
 }
 
+bool CapHas(cap_value_t cap) {
+  cap_t caps = cap_get_proc();
+  if (!caps) {
+    return false;
+  }
+  cap_flag_value_t set_or_clr;
+  int err = cap_get_flag(caps, cap, CAP_EFFECTIVE, &set_or_clr);
+  cap_free(caps);
+  if (err) {
+    return false;
+  }
+  return set_or_clr == CAP_SET;
+}
+
 void Exit(int code) {
   if (code != 0) {
     std::cerr << "PID " << Gtid::Current().tid() << " Backtrace:" << std::endl;
