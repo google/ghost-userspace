@@ -71,8 +71,11 @@ void GhostOrchestrator::InitPrioTable() {
 GhostOrchestrator::GhostOrchestrator(Options opts)
     // Add 1 to account for the load generator.
     : Orchestrator(opts, /*total_threads=*/opts.load_generator_cpus.Size() +
-                             opts.num_workers),
-      idle_sids_(/*count=*/opts.load_generator_cpus.Size()) {
+                             opts.num_workers) {
+  for (uint32_t i = 0; i < opts.load_generator_cpus.Size(); i++) {
+    idle_sids_.push_back(std::vector<uint32_t>());
+    idle_sids_.back().reserve(opts.num_workers);
+  }
   // We include a sched item for the load generator even though the load
   // generator is scheduled by CFS (Linux Completely Fair Scheduler) rather
   // than ghOSt. While the sched with SID 0 is unused, workers are able to
@@ -99,7 +102,7 @@ GhostOrchestrator::GhostOrchestrator(Options opts)
 }
 
 void GhostOrchestrator::Terminate() {
-  const absl::Duration runtime = absl::Now() - start();
+  const absl::Duration runtime = ghost::MonotonicNow() - start();
   // Do this check after calculating 'runtime' to avoid inflating 'runtime'.
   CHECK_GT(start(), absl::UnixEpoch());
 
@@ -182,14 +185,14 @@ void GhostOrchestrator::LoadGenerator(uint32_t sid) {
     printf("Load generator (SID %u, TID: %ld, affined to CPU %u)\n", sid,
            syscall(SYS_gettid), sched_getcpu());
     threads_ready_.WaitForNotification();
-    set_start(absl::Now());
+    set_start(ghost::MonotonicNow());
     network(sid).Start();
   }
 
   GetIdleWorkerSIDs(sid);
   uint32_t size = idle_sids_[sid].size();
   for (uint32_t i = 0; i < size; ++i) {
-    uint32_t worker_sid = idle_sids_[sid].front();
+    uint32_t worker_sid = idle_sids_[sid][i];
     // We can do a relaxed load rather than an acquire load because
     // 'GetIdleWorkerSIDs' already did an acquire load for 'num_requests'.
     CHECK_EQ(
@@ -214,7 +217,7 @@ void GhostOrchestrator::LoadGenerator(uint32_t sid) {
     Request request;
     for (size_t i = 0; i < options().batch; ++i) {
       if (network(sid).Poll(request)) {
-        request.request_assigned = absl::Now();
+        request.request_assigned = ghost::MonotonicNow();
         worker_work()[worker_sid]->requests.push_back(request);
       } else {
         // No more requests waiting in the ingress queue, so give the
@@ -224,7 +227,6 @@ void GhostOrchestrator::LoadGenerator(uint32_t sid) {
     }
     if (!worker_work()[worker_sid]->requests.empty()) {
       // Assign the batch of requests to the next worker
-      idle_sids_[sid].pop_front();
       CHECK_LE(worker_work()[worker_sid]->requests.size(), options().batch);
       worker_work()[worker_sid]->num_requests.store(
           worker_work()[worker_sid]->requests.size(),
@@ -276,12 +278,9 @@ void GhostOrchestrator::Worker(uint32_t sid) {
 
   for (size_t i = 0; i < num_requests; ++i) {
     Request& request = work->requests[i];
-    request.request_start = absl::Now();
-    HandleRequest(request, gen()[sid]);
-    request.request_finished = absl::Now();
-    // Clear the response so that we do not waste memory storing it along with
-    // the latency results.
-    request.response.clear();
+    request.request_start = ghost::MonotonicNow();
+    HandleRequest(request, work->response, gen()[sid]);
+    request.request_finished = ghost::MonotonicNow();
 
     requests()[sid].push_back(request);
   }

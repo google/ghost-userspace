@@ -134,7 +134,7 @@ TEST(IngressTest, LowThroughput) {
   SimulatedClock clock;
   Ingress ingress(kLowThroughput, clock);
 
-  clock.SetTime(absl::Now());
+  clock.SetTime(ghost::MonotonicNow());
   ingress.Start();
   clock.AdvanceTime(kGenerationDuration);
 
@@ -162,7 +162,7 @@ TEST(IngressTest, MediumThroughput) {
   SimulatedClock clock;
   Ingress ingress(kMediumThroughput, clock);
 
-  clock.SetTime(absl::Now());
+  clock.SetTime(ghost::MonotonicNow());
   ingress.Start();
   clock.AdvanceTime(kGenerationDuration);
 
@@ -190,7 +190,7 @@ TEST(IngressTest, HighThroughput) {
   SimulatedClock clock;
   Ingress ingress(kHighIngressThroughput, clock);
 
-  clock.SetTime(absl::Now());
+  clock.SetTime(ghost::MonotonicNow());
   ingress.Start();
   clock.AdvanceTime(kGenerationDuration);
 
@@ -221,7 +221,7 @@ TEST(SyntheticNetworkTest, LowThroughput) {
   SimulatedClock clock;
   SyntheticNetwork network(kLowThroughput, kNoRangeQueryRatio, clock);
 
-  clock.SetTime(absl::Now());
+  clock.SetTime(ghost::MonotonicNow());
   network.Start();
   clock.AdvanceTime(kGenerationDuration);
 
@@ -252,7 +252,7 @@ TEST(SyntheticNetworkTest, MediumThroughput) {
   SimulatedClock clock;
   SyntheticNetwork network(kMediumThroughput, kNoRangeQueryRatio, clock);
 
-  clock.SetTime(absl::Now());
+  clock.SetTime(ghost::MonotonicNow());
   network.Start();
   clock.AdvanceTime(kGenerationDuration);
 
@@ -284,7 +284,7 @@ TEST(SyntheticNetworkTest, HighThroughput) {
   SyntheticNetwork network(kHighSyntheticNetworkThroughput, kNoRangeQueryRatio,
                            clock);
 
-  clock.SetTime(absl::Now());
+  clock.SetTime(ghost::MonotonicNow());
   network.Start();
   clock.AdvanceTime(kGenerationDuration);
 
@@ -317,7 +317,7 @@ TEST(SyntheticNetworkTest, MediumThroughputLowRangeQueries) {
   SimulatedClock clock;
   SyntheticNetwork network(kMediumThroughput, kLowRangeQueryRatio, clock);
 
-  clock.SetTime(absl::Now());
+  clock.SetTime(ghost::MonotonicNow());
   network.Start();
   clock.AdvanceTime(kGenerationDuration);
 
@@ -348,7 +348,7 @@ TEST(SyntheticNetworkTest, MediumThroughputHighRangeQueries) {
   SimulatedClock clock;
   SyntheticNetwork network(kMediumThroughput, kHighRangeQueryRatio, clock);
 
-  clock.SetTime(absl::Now());
+  clock.SetTime(ghost::MonotonicNow());
   network.Start();
   clock.AdvanceTime(kGenerationDuration);
 

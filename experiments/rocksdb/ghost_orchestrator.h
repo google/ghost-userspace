@@ -104,7 +104,7 @@ class GhostOrchestrator final : public Orchestrator {
   // member rather than a local variable in the 'LoadGenerator' method to avoid
   // repeatedly allocating memory for the list backing in the load generators'
   // common case, which is expensive.
-  std::vector<std::list<uint32_t>> idle_sids_;
+  std::vector<std::vector<uint32_t>> idle_sids_;
 };
 
 }  // namespace ghost_test

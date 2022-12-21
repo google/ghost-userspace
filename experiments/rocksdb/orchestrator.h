@@ -153,6 +153,7 @@ class Orchestrator {
     std::atomic<size_t> num_requests;
     // The requests.
     std::vector<Request> requests;
+    std::string response;
     absl::Time last_finished;
   } ABSL_CACHELINE_ALIGNED;
 
@@ -196,7 +197,8 @@ class Orchestrator {
   // a random bit generator used for Get requests that have an exponential
   // service time. 'gen' is used to generate a sample from the exponential
   // distribution.
-  void HandleRequest(Request& request, absl::BitGen& gen);
+  void HandleRequest(Request& request, std::string& response,
+                     absl::BitGen& gen);
 
   // Prints all results (total numbers of requests, throughput, and latency
   // percentiles). 'experiment_duration' is the duration of the experiment.
@@ -224,13 +226,16 @@ class Orchestrator {
   ThreadTrigger& first_run() { return first_run_; }
 
  private:
+  // The bytes to pre-allocate on the heap for each response.
+  static constexpr size_t kResponseReservationSize = 4096;
+
   // Processes 'request', which must be a Get request (a CHECK will fail if
   // not).
-  void HandleGet(Request& request, absl::BitGen& gen);
+  void HandleGet(Request& request, std::string& response, absl::BitGen& gen);
 
   // Processes 'request', which must be a Range query (a CHECK will fail if
   // not).
-  void HandleRange(Request& request, absl::BitGen& gen);
+  void HandleRange(Request& request, std::string& response, absl::BitGen& gen);
 
   // Prints the results for 'requests' (total number of requests in 'requests',
   // throughput, and latency percentiles). 'results_name' is a name printed with

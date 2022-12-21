@@ -98,7 +98,7 @@ std::vector<Request> GetData(std::default_random_engine& random_engine) {
   constexpr size_t kNumRequests = 1000;
   std::vector<Request> requests;
   requests.reserve(kNumRequests);
-  absl::Time now = absl::Now();
+  absl::Time now = ghost::MonotonicNow();
   for (size_t i = 1; i <= kNumRequests; i++) {
     Request r;
     r.request_generated = now + 1 * absl::Microseconds(i);

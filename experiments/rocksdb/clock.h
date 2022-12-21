@@ -8,6 +8,7 @@
 #define GHOST_EXPERIMENTS_ROCKSDB_CLOCK_H_
 
 #include "absl/time/clock.h"
+#include "lib/base.h"
 
 // This is a pure virtual parent class that represents a clock.
 class Clock {
@@ -21,15 +22,15 @@ class Clock {
 inline Clock::~Clock() {}
 
 // This represents a real clock that returns the current time from
-// `absl::Now()`.
+// `ghost::MonotonicNow()`.
 //
 // Example:
 // RealClock clock;
 // absl::Time now = clock.TimeNow();
 class RealClock final : public Clock {
  public:
-  // Returns the current time (from `absl::Now()`).
-  absl::Time TimeNow() const final { return absl::Now(); }
+  // Returns the current time (from `ghost::MonotonicNow()`).
+  absl::Time TimeNow() const final { return ghost::MonotonicNow(); }
 };
 
 // This represents a simulated clock whose time can be arbitrarily changed. This
@@ -38,7 +39,7 @@ class RealClock final : public Clock {
 //
 // Example:
 // SimulatedClock clock;
-// clock.SetTime(absl::Now());
+// clock.SetTime(ghost::MonotonicNow());
 // clock.AdvanceTime(absl::Minutes(10));
 // absl::Time time = clock.TimeNow();
 // (`time` is equal to the time about 10 minutes from now.)

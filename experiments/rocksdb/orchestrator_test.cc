@@ -35,8 +35,9 @@ class TestOrchestrator : public Orchestrator {
   void Terminate() final {}
 
   void Handle(Request& request) {
+    static thread_local std::string response;
     absl::BitGen gen;
-    HandleRequest(request, gen);
+    HandleRequest(request, response, gen);
   }
 
  protected:

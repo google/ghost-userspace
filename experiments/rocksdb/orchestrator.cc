@@ -122,6 +122,8 @@ Orchestrator::Orchestrator(Options options, size_t total_threads)
        ++i) {
     worker_work_.push_back(std::make_unique<WorkerWork>());
     worker_work_.back()->num_requests = 0;
+    worker_work_.back()->requests.reserve(options_.batch);
+    worker_work_.back()->response.reserve(kResponseReservationSize);
 
     requests_.push_back(std::vector<Request>());
     // TODO: Can we make this smaller or use an 'std::deque' instead? I'm
@@ -157,12 +159,13 @@ Orchestrator::Orchestrator(Options options, size_t total_threads)
 
 Orchestrator::~Orchestrator() {}
 
-void Orchestrator::HandleRequest(Request& request, absl::BitGen& gen) {
+void Orchestrator::HandleRequest(Request& request, std::string& response,
+                                 absl::BitGen& gen) {
   if (request.IsGet()) {
-    HandleGet(request, gen);
+    HandleGet(request, response, gen);
   } else {
     CHECK(request.IsRange());
-    HandleRange(request, gen);
+    HandleRange(request, response, gen);
   }
 }
 
@@ -172,7 +175,8 @@ absl::Duration Orchestrator::GetThreadCpuTime() const {
   return absl::Seconds(ts.tv_sec) + absl::Nanoseconds(ts.tv_nsec);
 }
 
-void Orchestrator::HandleGet(Request& request, absl::BitGen& gen) {
+void Orchestrator::HandleGet(Request& request, std::string& response,
+                             absl::BitGen& gen) {
   CHECK(request.IsGet());
 
   absl::Duration start_duration = GetThreadCpuTime();
@@ -183,7 +187,7 @@ void Orchestrator::HandleGet(Request& request, absl::BitGen& gen) {
   }
 
   Request::Get& get = std::get<Request::Get>(request.work);
-  CHECK(database_.Get(get.entry, request.response));
+  CHECK(database_.Get(get.entry, response));
 
   absl::Duration now_duration = GetThreadCpuTime();
   if (now_duration - start_duration < service_time) {
@@ -191,14 +195,15 @@ void Orchestrator::HandleGet(Request& request, absl::BitGen& gen) {
   }
 }
 
-void Orchestrator::HandleRange(Request& request, absl::BitGen& gen) {
+void Orchestrator::HandleRange(Request& request, std::string& response,
+                               absl::BitGen& gen) {
   CHECK(request.IsRange());
 
   absl::Duration start_duration = GetThreadCpuTime();
   absl::Duration service_time = options_.range_duration;
 
   Request::Range& range = std::get<Request::Range>(request.work);
-  CHECK(database_.RangeQuery(range.start_entry, range.size, request.response));
+  CHECK(database_.RangeQuery(range.start_entry, range.size, response));
 
   absl::Duration now_duration = GetThreadCpuTime();
   if (now_duration - start_duration < service_time) {

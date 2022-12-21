@@ -69,7 +69,6 @@ struct Request {
 
   // The work to do. The request is either a Get request or a Range query.
   std::variant<Get, Range> work;
-  std::string response;
 };
 
 }  // namespace ghost_test

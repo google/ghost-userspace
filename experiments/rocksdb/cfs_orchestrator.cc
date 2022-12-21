@@ -55,7 +55,7 @@ CfsOrchestrator::CfsOrchestrator(Options opts)
 }
 
 void CfsOrchestrator::Terminate() {
-  const absl::Duration runtime = absl::Now() - start();
+  const absl::Duration runtime = ghost::MonotonicNow() - start();
   // Do this check after calculating 'runtime' to avoid inflating 'runtime'.
   CHECK_GT(start(), absl::UnixEpoch());
 
@@ -119,7 +119,7 @@ void CfsOrchestrator::LoadGenerator(uint32_t sid) {
     // us to report bad performance at the end of the experiment that solely
     // reflects initialization costs, which are irrelevant to the experiment.
     threads_ready_.Block();
-    set_start(absl::Now());
+    set_start(ghost::MonotonicNow());
     network(sid).Start();
   }
 
@@ -226,7 +226,7 @@ void CfsOrchestrator::Dispatcher(uint32_t sid) {
       }
       Request& r = dispatcher_queue_[sid].front();
 
-      r.request_assigned = absl::Now();
+      r.request_assigned = ghost::MonotonicNow();
       worker_work()[worker_sid]->requests.push_back(r);
       dispatcher_queue_[sid].pop_front();
     }
@@ -288,12 +288,9 @@ void CfsOrchestrator::Worker(uint32_t sid) {
 
   for (size_t i = 0; i < num_requests; ++i) {
     Request& request = work->requests[i];
-    request.request_start = absl::Now();
-    HandleRequest(request, gen()[sid]);
-    request.request_finished = absl::Now();
-    // Clear the response so that we do not waste memory storing it along with
-    // the latency results.
-    request.response.clear();
+    request.request_start = ghost::MonotonicNow();
+    HandleRequest(request, work->response, gen()[sid]);
+    request.request_finished = ghost::MonotonicNow();
 
     requests()[sid].push_back(request);
   }

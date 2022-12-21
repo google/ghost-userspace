@@ -32,7 +32,7 @@ bool SyntheticNetwork::Poll(Request& request) {
     return false;
   }
   // A request is in the ingress queue
-  absl::Time received = absl::Now();
+  absl::Time received = ghost::MonotonicNow();
   bool get = absl::Bernoulli(gen_, 1.0 - range_query_ratio_);
   if (get) {
     // Get request
