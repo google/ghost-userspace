@@ -262,6 +262,8 @@ class GlobalEdfAgent : public FullAgent<EnclaveType> {
   }
 
   ~GlobalEdfAgent() override {
+    this->enclave_.SetDeliverCpuAvailability(false);
+    this->enclave_.SetDeliverAgentRunnability(false);
     // Terminate global agent before satellites to avoid a false negative error
     // from ghost_run(). e.g. when the global agent tries to schedule on a CPU
     // without an active satellite agent.

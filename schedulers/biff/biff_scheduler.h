@@ -58,6 +58,7 @@ class FullBiffAgent : public FullAgent<EnclaveType> {
   }
 
   ~FullBiffAgent() override {
+    this->enclave_.SetDeliverCpuAvailability(false);
     this->TerminateAgentTasks();
   }
 
