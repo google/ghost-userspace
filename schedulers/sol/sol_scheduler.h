@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 
 #include "absl/time/time.h"
 #include "lib/agent.h"
@@ -280,8 +281,8 @@ class FullSolAgent : public FullAgent<EnclaveType> {
   }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
-    return absl::make_unique<SolAgent>(&this->enclave_, cpu,
-                                       global_scheduler_.get());
+    return std::make_unique<SolAgent>(&this->enclave_, cpu,
+                                      global_scheduler_.get());
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,

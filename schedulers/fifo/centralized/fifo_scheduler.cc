@@ -6,6 +6,8 @@
 
 #include "schedulers/fifo/centralized/fifo_scheduler.h"
 
+#include <memory>
+
 #include "absl/strings/str_format.h"
 
 namespace ghost {
@@ -444,7 +446,7 @@ std::unique_ptr<FifoScheduler> SingleThreadFifoScheduler(
     absl::Duration preemption_time_slice) {
   auto allocator =
       std::make_shared<SingleThreadMallocTaskAllocator<FifoTask>>();
-  auto scheduler = absl::make_unique<FifoScheduler>(
+  auto scheduler = std::make_unique<FifoScheduler>(
       enclave, std::move(cpulist), std::move(allocator), global_cpu,
       preemption_time_slice);
   return scheduler;

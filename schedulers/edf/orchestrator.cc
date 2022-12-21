@@ -6,6 +6,8 @@
 
 #include "schedulers/edf/orchestrator.h"
 
+#include <memory>
+
 namespace ghost {
 
 void Orchestrator::RefreshSchedParam(uint32_t sid,
@@ -136,7 +138,7 @@ bool Orchestrator::Init(pid_t remote) {
   if (ret) {
     num_sched_items_ = table_.NumSchedItems();
     num_work_classes_ = table_.NumWorkClasses();
-    cachedsids_ = absl::make_unique<SchedParams[]>(num_sched_items_);
+    cachedsids_ = std::make_unique<SchedParams[]>(num_sched_items_);
 
     for (uint32_t wcid = 0; wcid < num_work_classes_; wcid++) {
       const struct work_class* wc = table_.work_class(wcid);

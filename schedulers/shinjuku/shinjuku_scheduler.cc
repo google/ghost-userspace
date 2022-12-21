@@ -6,6 +6,8 @@
 
 #include "schedulers/shinjuku/shinjuku_scheduler.h"
 
+#include <memory>
+
 #include "absl/strings/str_format.h"
 
 namespace ghost {
@@ -869,7 +871,7 @@ std::unique_ptr<ShinjukuScheduler> SingleThreadShinjukuScheduler(
     absl::Duration preemption_time_slice) {
   auto allocator =
       std::make_shared<SingleThreadMallocTaskAllocator<ShinjukuTask>>();
-  auto scheduler = absl::make_unique<ShinjukuScheduler>(
+  auto scheduler = std::make_unique<ShinjukuScheduler>(
       enclave, std::move(cpulist), std::move(allocator), global_cpu,
       preemption_time_slice);
   return scheduler;

@@ -4,6 +4,8 @@
 // license that can be found in the LICENSE file or at
 // https://developers.google.com/open-source/licenses/bsd
 
+#include <memory>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "schedulers/edf/edf_scheduler.h"
@@ -120,7 +122,7 @@ class EdfTest : public testing::Test {
     CPU_SET(kTestCpu, &set);
     sched_setaffinity(0, sizeof(set), &set);
 
-    table_ = absl::make_unique<PrioTable>(
+    table_ = std::make_unique<PrioTable>(
         2000, static_cast<int>(WorkClass::kWcNum),
         PrioTable::StreamCapacity::kStreamCapacity19);
     SetupWorkClasses(table_.get());

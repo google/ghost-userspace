@@ -6,6 +6,8 @@
 
 #include "schedulers/sol/sol_scheduler.h"
 
+#include <memory>
+
 #include "absl/strings/str_format.h"
 
 namespace ghost {
@@ -511,7 +513,7 @@ std::unique_ptr<SolScheduler> SingleThreadSolScheduler(
     Enclave* enclave, CpuList cpulist, int32_t global_cpu,
     absl::Duration preemption_time_slice) {
   auto allocator = std::make_shared<SingleThreadMallocTaskAllocator<SolTask>>();
-  auto scheduler = absl::make_unique<SolScheduler>(
+  auto scheduler = std::make_unique<SolScheduler>(
       enclave, std::move(cpulist), std::move(allocator), global_cpu,
       preemption_time_slice);
   return scheduler;

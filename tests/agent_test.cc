@@ -9,6 +9,8 @@
 #include <sched.h>
 #include <sys/timerfd.h>
 
+#include <memory>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/container/flat_hash_map.h"
@@ -117,8 +119,8 @@ class FullSimpleAgent : public FullAgent<EnclaveType> {
   ~FullSimpleAgent() override { this->TerminateAgentTasks(); }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
-    return absl::make_unique<SimpleAgent<MAX_NOTIFICATIONS>>(&this->enclave_,
-                                                             cpu);
+    return std::make_unique<SimpleAgent<MAX_NOTIFICATIONS>>(&this->enclave_,
+                                                            cpu);
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
@@ -400,7 +402,7 @@ class FullTickAgent : public FullAgent<EnclaveType> {
   ~FullTickAgent() override { this->TerminateAgentTasks(); }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
-    return absl::make_unique<SpinningAgent>(&this->enclave_, cpu);
+    return std::make_unique<SpinningAgent>(&this->enclave_, cpu);
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
@@ -524,7 +526,7 @@ TEST(AgentTest, MsgTimerExpired) {
 
   // Boilerplate so we can create agents.
   auto enclave =
-      absl::make_unique<LocalEnclave>(AgentConfig(topology, agent_cpus));
+      std::make_unique<LocalEnclave>(AgentConfig(topology, agent_cpus));
 
   // Randomly assign one agent as the designated receiver of
   // CPU_TIMER_EXPIRED msg when timer expires.
@@ -580,7 +582,7 @@ TEST(AgentTest, MsgTimerExpired) {
     //
     // The channel is configured to wakeup the agent when the kernel produces
     // a message into it.
-    auto channel = absl::make_unique<LocalChannel>(
+    auto channel = std::make_unique<LocalChannel>(
         GHOST_MAX_QUEUE_ELEMS, numa_node, MachineTopology()->ToCpuList({cpu}));
     agents.emplace_back(
         new CallbackAgent(enclave.get(), cpu, channel.get(),
@@ -653,7 +655,7 @@ TEST(AgentTest, MsgCpuNotIdle) {
   ASSERT_THAT(agent_cpus.Size(), Gt(0));
 
   auto enclave =
-      absl::make_unique<LocalEnclave>(AgentConfig(topology, agent_cpus));
+      std::make_unique<LocalEnclave>(AgentConfig(topology, agent_cpus));
 
   // Randomly assign one agent as the designated receiver of MSG_CPU_NOT_IDLE.
   absl::BitGen rng;
@@ -682,7 +684,7 @@ TEST(AgentTest, MsgCpuNotIdle) {
   std::vector<std::unique_ptr<LocalChannel>> channels;
   std::vector<std::unique_ptr<CallbackAgent>> agents;
   for (const Cpu& cpu : agent_cpus) {
-    auto channel = absl::make_unique<LocalChannel>(
+    auto channel = std::make_unique<LocalChannel>(
         GHOST_MAX_QUEUE_ELEMS, numa_node, MachineTopology()->ToCpuList({cpu}));
     agents.emplace_back(new CallbackAgent(enclave.get(), cpu, channel.get(),
                                           {
@@ -784,7 +786,7 @@ TEST(AgentTest, SetSched) {
   // arbitrary but safe since there must be one cpu.
   constexpr int agent_cpu = 0;
   Topology* topology = MachineTopology();
-  auto enclave = absl::make_unique<LocalEnclave>(
+  auto enclave = std::make_unique<LocalEnclave>(
       AgentConfig(topology, topology->ToCpuList(std::vector<int>{agent_cpu})));
 
   LocalChannel default_channel(GHOST_MAX_QUEUE_ELEMS, /*node=*/0);
@@ -922,8 +924,8 @@ class FullBlockTestAgent : public FullAgent<EnclaveType> {
   ~FullBlockTestAgent() override { this->TerminateAgentTasks(); }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
-    return absl::make_unique<BlockTestAgent>(&this->enclave_, cpu,
-                                             &default_channel_, &runner_);
+    return std::make_unique<BlockTestAgent>(&this->enclave_, cpu,
+                                            &default_channel_, &runner_);
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
@@ -967,7 +969,7 @@ TEST(AgentTest, FailToBecomeAgent) {
   Topology* topology = MachineTopology();
 
   constexpr int kAgentCpu = 0;
-  auto enclave = absl::make_unique<LocalEnclave>(
+  auto enclave = std::make_unique<LocalEnclave>(
       AgentConfig(topology, topology->ToCpuList(std::vector<int>{kAgentCpu})));
 
   // Stash cpu affinity.

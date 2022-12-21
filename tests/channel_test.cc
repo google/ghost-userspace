@@ -6,6 +6,8 @@
 
 #include "lib/channel.h"
 
+#include <memory>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "lib/agent.h"
@@ -68,8 +70,8 @@ class TestAgent : public LocalAgent {
                 static_cast<const ghost_msg_payload_task_new*>(msg.payload());
 
             ASSERT_THAT(task, IsNull());
-            task = absl::make_unique<Task<>>(Gtid(payload->gtid),
-                                             payload->sw_info);
+            task =
+                std::make_unique<Task<>>(Gtid(payload->gtid), payload->sw_info);
             task->seqnum = msg.seqnum();
             runnable = payload->runnable;
 
@@ -151,7 +153,7 @@ TEST(ChannelTest, Wakeup) {
   // arbitrary but safe because there must be at least one cpu.
   const int cpu_num = 0;
   Topology* topology = MachineTopology();
-  auto enclave = absl::make_unique<LocalEnclave>(
+  auto enclave = std::make_unique<LocalEnclave>(
       AgentConfig(topology, topology->ToCpuList(std::vector<int>{cpu_num})));
   Cpu agent_cpu = topology->cpu(cpu_num);
 
@@ -182,7 +184,7 @@ TEST(ChannelTest, Associate) {
   // arbitrary but safe because there must be at least one cpu.
   const int cpu_num = 0;
   Topology* topology = MachineTopology();
-  auto enclave = absl::make_unique<LocalEnclave>(
+  auto enclave = std::make_unique<LocalEnclave>(
       AgentConfig(topology, topology->ToCpuList(std::vector<int>{cpu_num})));
   Cpu agent_cpu = topology->cpu(cpu_num);
 
@@ -220,7 +222,7 @@ TEST(ChannelTest, Associate) {
 TEST(ChannelTest, MaxElements) {
   // Need an enclave to make a channel.
   Topology* topology = MachineTopology();
-  auto enclave = absl::make_unique<LocalEnclave>(
+  auto enclave = std::make_unique<LocalEnclave>(
       AgentConfig(topology, topology->all_cpus()));
   for (int elems = GHOST_MAX_QUEUE_ELEMS; elems > 0; elems >>= 1) {
     LocalChannel chan(elems, /*node=*/0);

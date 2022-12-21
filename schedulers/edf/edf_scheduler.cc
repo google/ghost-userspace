@@ -6,6 +6,8 @@
 
 #include "schedulers/edf/edf_scheduler.h"
 
+#include <memory>
+
 #include "absl/strings/str_format.h"
 #include "bpf/user/agent.h"
 
@@ -166,7 +168,7 @@ void EdfScheduler::HandleNewGtid(EdfTask* task, pid_t tgid) {
   CHECK_GE(tgid, 0);
 
   if (orchs_.find(tgid) == orchs_.end()) {
-    auto orch = absl::make_unique<Orchestrator>();
+    auto orch = std::make_unique<Orchestrator>();
     if (!orch->Init(tgid)) {
       // If the task's group leader has already exited and closed the PrioTable
       // fd while we are handling TaskNew, it is possible that we cannot find
@@ -808,8 +810,8 @@ std::unique_ptr<EdfScheduler> SingleThreadEdfScheduler(Enclave* enclave,
                                                        CpuList cpulist,
                                                        GlobalConfig& config) {
   auto allocator = std::make_shared<SingleThreadMallocTaskAllocator<EdfTask>>();
-  auto scheduler = absl::make_unique<EdfScheduler>(
-      enclave, std::move(cpulist), std::move(allocator), config);
+  auto scheduler = std::make_unique<EdfScheduler>(enclave, std::move(cpulist),
+                                                  std::move(allocator), config);
   return scheduler;
 }
 

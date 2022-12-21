@@ -6,6 +6,8 @@
 
 #include "schedulers/shinjuku/shinjuku_orchestrator.h"
 
+#include <memory>
+
 namespace ghost {
 
 void ShinjukuOrchestrator::RefreshSchedParam(
@@ -112,7 +114,7 @@ bool ShinjukuOrchestrator::Init(pid_t remote) {
   if (ret) {
     num_sched_items_ = table_.NumSchedItems();
     num_work_classes_ = table_.NumWorkClasses();
-    cachedsids_ = absl::make_unique<ShinjukuSchedParams[]>(num_sched_items_);
+    cachedsids_ = std::make_unique<ShinjukuSchedParams[]>(num_sched_items_);
   }
   return ret;
 }

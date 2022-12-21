@@ -4,6 +4,8 @@
 // license that can be found in the LICENSE file or at
 // https://developers.google.com/open-source/licenses/bsd
 
+#include <memory>
+
 #include "absl/flags/parse.h"
 #include "absl/flags/usage.h"
 #include "schedulers/edf/edf_scheduler.h"
@@ -65,7 +67,7 @@ static void RunThreads(FILE* outfile, int nr_task_cpus, int nr_threads,
   // again before exiting the child.
   fflush(outfile);
   ForkedProcess fp([&]() {
-    std::unique_ptr<PrioTable> table = absl::make_unique<PrioTable>(
+    std::unique_ptr<PrioTable> table = std::make_unique<PrioTable>(
         nr_threads, static_cast<int>(WorkClass::kWcNum),
         PrioTable::StreamCapacity::kStreamCapacity19);
     SetupWorkClasses(table.get());

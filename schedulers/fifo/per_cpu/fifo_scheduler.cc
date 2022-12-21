@@ -6,6 +6,8 @@
 
 #include "schedulers/fifo/per_cpu/fifo_scheduler.h"
 
+#include <memory>
+
 namespace ghost {
 
 FifoScheduler::FifoScheduler(Enclave* enclave, CpuList cpulist,
@@ -381,8 +383,8 @@ void FifoRq::Erase(FifoTask* task) {
 std::unique_ptr<FifoScheduler> MultiThreadedFifoScheduler(Enclave* enclave,
                                                           CpuList cpulist) {
   auto allocator = std::make_shared<ThreadSafeMallocTaskAllocator<FifoTask>>();
-  auto scheduler = absl::make_unique<FifoScheduler>(enclave, std::move(cpulist),
-                                                    std::move(allocator));
+  auto scheduler = std::make_unique<FifoScheduler>(enclave, std::move(cpulist),
+                                                   std::move(allocator));
   return scheduler;
 }
 

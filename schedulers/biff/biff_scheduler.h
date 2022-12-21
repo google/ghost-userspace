@@ -8,6 +8,7 @@
 #define GHOST_SCHEDULERS_BIFF_BIFF_SCHEDULER_H_
 
 #include <cstdint>
+#include <memory>
 
 #include "third_party/bpf/biff_bpf.h"
 #include "lib/agent.h"
@@ -50,7 +51,7 @@ class FullBiffAgent : public FullAgent<EnclaveType> {
  public:
   explicit FullBiffAgent(AgentConfig config)
       : FullAgent<EnclaveType>(config) {
-    biff_sched_ = absl::make_unique<BiffScheduler>(
+    biff_sched_ = std::make_unique<BiffScheduler>(
         &this->enclave_, *this->enclave_.cpus(), config);
     this->StartAgentTasks();
     this->enclave_.Ready();
@@ -61,8 +62,8 @@ class FullBiffAgent : public FullAgent<EnclaveType> {
   }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
-    return absl::make_unique<BiffAgentTask>(&this->enclave_, cpu,
-                                            biff_sched_.get());
+    return std::make_unique<BiffAgentTask>(&this->enclave_, cpu,
+                                           biff_sched_.get());
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,

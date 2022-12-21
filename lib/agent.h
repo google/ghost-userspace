@@ -17,6 +17,7 @@
 #include <atomic>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <thread>
 
 #include "lib/base.h"
@@ -449,9 +450,9 @@ class AgentProcess {
   // Note the forked child's 'main' thread, which is in CFS, will never leave
   // the constructor.  It will create its own agent tasks.
   explicit AgentProcess(AgentConfigType config) {
-    sb_ = absl::make_unique<SharedBlob>();
+    sb_ = std::make_unique<SharedBlob>();
 
-    agent_proc_ = absl::make_unique<ForkedProcess>(config.stderr_fd_);
+    agent_proc_ = std::make_unique<ForkedProcess>(config.stderr_fd_);
     if (!agent_proc_->IsChild()) {
       sb_->agent_ready_.WaitForNotification();
       return;
@@ -461,7 +462,7 @@ class AgentProcess {
       CHECK_EQ(mlockall(MCL_CURRENT | MCL_FUTURE), 0);
     }
 
-    full_agent_ = absl::make_unique<FullAgentType>(config);
+    full_agent_ = std::make_unique<FullAgentType>(config);
     CHECK_EQ(prctl(PR_SET_NAME, "ap_child"), 0);
 
     GhostSignals::IgnoreCommon();

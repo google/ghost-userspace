@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <map>
+#include <memory>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/functional/bind_front.h"
@@ -364,8 +365,8 @@ class FullShinjukuAgent : public FullAgent<EnclaveType> {
   }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
-    return absl::make_unique<ShinjukuAgent>(&this->enclave_, cpu,
-                                            global_scheduler_.get());
+    return std::make_unique<ShinjukuAgent>(&this->enclave_, cpu,
+                                           global_scheduler_.get());
   }
 
   void RpcHandler(int64_t req, const AgentRpcArgs& args,
