@@ -308,8 +308,8 @@ cc_library(
         "//third_party:util/util.h",
     ],
     copts = compiler_flags,
+    linkopts = ["-lcap"],
     deps = [
-        "//third_party/libcap",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",

@@ -740,19 +740,20 @@ void CfsTaskState::AssertValidTransition(OnRq next) {
                                   absl::FormatStreamed(next)));
     DPRINT_CFS(1, absl::StrFormat("[%s]: Valid transitions -> %s are:",
                                   absl::FormatStreamed(task_name_),
-                                  absl::FormatStreamed(curr)));
+                                  absl::FormatStreamed(next)));
 
     // Extract all the valid from states.
     for (uint32_t i = 0;
          i < static_cast<uint32_t>(CfsTaskState::OnRq::kNumStates);
          ++i) {
-      DPRINT_CFS(
-          1, absl::StrFormat(
-                 "%s", absl::FormatStreamed(CfsTaskState::OnRq(i))));
+      if ((valid_states & (1 << static_cast<uint32_t>(i))) != 0) {
+        DPRINT_CFS(
+            1, absl::StrFormat(
+                "%s", absl::FormatStreamed(CfsTaskState::OnRq(i))));
+      }
     }
 
     DPRINT_CFS(1, absl::StrFormat("[%s]: State trace:", task_name_));
-
     for (const FullState& s : state_trace_) {
       DPRINT_CFS(1, absl::StrFormat("[%s]: (%s, %s)", task_name_,
                                     absl::FormatStreamed(s.state),
