@@ -113,8 +113,8 @@ void GhostShmem::CreateShmem(int64_t client_version, const char* suffix,
   // Prepend our header to the mapping.
   map_size_ = roundup2(size + kHeaderReservedBytes, kHugepageSize);
   CHECK_LE(map_size_, UINT32_MAX);
-  CHECK_ZERO(ftruncate(memfd_, map_size_));
-  CHECK_ZERO(fcntl(memfd_, F_ADD_SEALS, MFD_SEALS));
+  CHECK_EQ(ftruncate(memfd_, map_size_), 0);
+  CHECK_EQ(fcntl(memfd_, F_ADD_SEALS, MFD_SEALS), 0);
 
   shmem_ =
       mmap(nullptr, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED, memfd_, 0);
@@ -144,7 +144,7 @@ bool GhostShmem::ConnectShmem(int64_t client_version, const char* suffix,
   }
 
   struct stat sb;
-  CHECK_ZERO(fstat(memfd_, &sb));
+  CHECK_EQ(fstat(memfd_, &sb), 0);
 
   map_size_ = sb.st_size;
   shmem_ =
@@ -159,7 +159,7 @@ bool GhostShmem::ConnectShmem(int64_t client_version, const char* suffix,
   // on the same page.
   //
   // See b/173811264 for details.
-  CHECK_ZERO(mlock(shmem_, map_size_));
+  CHECK_EQ(mlock(shmem_, map_size_), 0);
 
   // Setup internal fields.
   hdr_ = static_cast<InternalHeader*>(shmem_);

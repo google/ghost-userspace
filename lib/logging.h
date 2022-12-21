@@ -39,7 +39,6 @@
 #define CHECK_GT(val1, val2) __LCHECK(>, <=, val1, val2)
 #define CHECK_GE(val1, val2) __LCHECK(>=, >, val1, val2)
 #define CHECK(val1) CHECK_NE(val1, 0)
-#define CHECK_ZERO(val1) CHECK_EQ(val1, 0)
 
 #ifndef NDEBUG
 #define DCHECK_EQ(val1, val2) CHECK_EQ(val1, val2)
@@ -49,7 +48,6 @@
 #define DCHECK_GT(val1, val2) CHECK_GT(val1, val2)
 #define DCHECK_GE(val1, val2) CHECK_GE(val1, val2)
 #define DCHECK(condition) CHECK(condition)
-#define DCHECK_ZERO(val1) CHECK_ZERO(val1)
 #else
 // `NDEBUG` is defined, so `DCHECK_EQ(x, y)` and so on do nothing.  However, we
 // still want the compiler to parse `x` and `y`, because we don't want to lose
@@ -65,7 +63,6 @@
 #define DCHECK_GT(val1, val2) GHOST_DCHECK_NOP(val1, val2)
 #define DCHECK_GE(val1, val2) GHOST_DCHECK_NOP(val1, val2)
 #define DCHECK(condition) GHOST_DCHECK_NOP(condition, 0)
-#define DCHECK_ZERO(val) GHOST_DCHECK_NOP(val, 0)
 #endif
 
 #ifndef GHOST_DEBUG

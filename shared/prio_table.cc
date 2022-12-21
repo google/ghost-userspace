@@ -25,7 +25,7 @@ static size_t shmem_size(uint32_t sched_items, uint32_t work_classes,
   // starts on a new cacheline
   // The three structs above are each aligned to a cacheline, so this check
   // should succeed
-  CHECK_ZERO(sz % ABSL_CACHELINE_SIZE);
+  CHECK_EQ(sz % ABSL_CACHELINE_SIZE, 0);
   sz += sizeof(struct PrioTable::stream) +
         sizeof(std::atomic<int>) * stream_capacity;
 
@@ -53,7 +53,7 @@ PrioTable::PrioTable(uint32_t num_items, uint32_t num_classes,
   // Check that the stream starts on an address aligned to the cacheline size
   // The header, sched items, and work classes are each aligned to a cacheline,
   // so this check should succeed
-  CHECK_ZERO(hdr()->st_off % ABSL_CACHELINE_SIZE);
+  CHECK_EQ(hdr()->st_off % ABSL_CACHELINE_SIZE, 0);
 
   std::atomic<int>* entries = stream()->entries;
   for (uint32_t i = 0; i < hdr()->st_cap; i++) {

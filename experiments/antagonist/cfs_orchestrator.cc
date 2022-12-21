@@ -34,8 +34,10 @@ void CfsOrchestrator::Worker(uint32_t sid) {
   if (!thread_triggers().Triggered(sid)) {
     thread_triggers().Trigger(sid);
     const ghost::Cpu cpu = options().cpus.GetNthCpu(sid);
-    CHECK_ZERO(ghost::GhostHelper()->SchedSetAffinity(
-        ghost::Gtid::Current(), ghost::MachineTopology()->ToCpuList({cpu})));
+    CHECK_EQ(
+        ghost::GhostHelper()->SchedSetAffinity(
+            ghost::Gtid::Current(), ghost::MachineTopology()->ToCpuList({cpu})),
+        0);
     printf("Worker (SID %u, TID: %ld, affined to CPU %u)\n", sid,
            syscall(SYS_gettid), cpu.id());
     threads_ready_.Block();

@@ -34,7 +34,7 @@ LocalChannel::LocalChannel(int elems, int node, CpuList cpulist)
   elems_ = header_->nelems;
 
   if (!cpulist.Empty()) {
-    CHECK_ZERO(GhostHelper()->ConfigQueueWakeup(fd_, cpulist, /*flags=*/0));
+    CHECK_EQ(GhostHelper()->ConfigQueueWakeup(fd_, cpulist, /*flags=*/0), 0);
   }
 };
 
