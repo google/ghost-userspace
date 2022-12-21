@@ -119,6 +119,12 @@ struct CfsTask : public Task<> {
       CfsTaskState(CfsTaskState::kBlocked, gtid.describe());
   int cpu = -1;
 
+  // Nice value and its corresponding weight/inverse-weight values for this
+  // task.
+  int nice;
+  uint32_t weight;
+  uint32_t inverse_weight;
+
   // Cfs sorts tasks by vruntime, so we need to keep track of how long a task
   // has been running.
   absl::Duration vruntime;
@@ -217,6 +223,39 @@ struct CpuState {
 
 class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
  public:
+  static constexpr int kMaxNice = 19;
+  static constexpr int kMinNice = -20;
+
+  // Pre-computed weight values for each nice value. The weight values are
+  // the same as ones defined in `/kernel/sched/core.c`. The values are
+  // scaled with respect to 1024 for nice value 0.
+  static constexpr uint32_t kNiceToWeight[40] = {
+      88761, 71755, 56483, 46273, 36291,  // -20 .. -16
+      29154, 23254, 18705, 14949, 11916,  // -15 .. -11
+      9548,  7620,  6100,  4904,  3906,   // -10 .. -6
+      3121,  2501,  1991,  1586,  1277,   // -5 .. -1
+      1024,  820,   655,   526,   423,    // 0 .. 4
+      335,   272,   215,   172,   137,    // 5 .. 9
+      110,   87,    70,    56,    45,     // 10 .. 14
+      36,    29,    23,    18,    15      // 15 .. 19
+  };
+
+  // Pre-computed inverse weight values for each nice value (2^32/weight). The
+  // inverse weight values are the same as ones defined in
+  // `/kernel/sched/core.c`. These values are to transform division by the
+  // weight values into multiplication by the inverse weights, which works
+  // better for integers.
+  static constexpr uint32_t kNiceToInverseWeight[40] = {
+      48388,     59856,     76040,     92818,     118348,    // -20 .. -16
+      147320,    184698,    229616,    287308,    360437,    // -15 .. -11
+      449829,    563644,    704093,    875809,    1099582,   // -10 .. -6
+      1376151,   1717300,   2157191,   2708050,   3363326,   // -5 .. -1
+      4194304,   5237765,   6557202,   8165337,   10153587,  // 0 .. 4
+      12820798,  15790321,  19976592,  24970740,  31350126,  // 5 .. 9
+      39045157,  49367440,  61356676,  76695844,  95443717,  // 10 .. 14
+      119304647, 148102320, 186737708, 238609294, 286331153  // 15 .. 19
+  };
+
   explicit CfsScheduler(Enclave* enclave, CpuList cpulist,
                         std::shared_ptr<TaskAllocator<CfsTask>> allocator,
                         absl::Duration min_granularity, absl::Duration latency);
@@ -261,6 +300,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   void TaskPreempted(CfsTask* task, const Message& msg) final;
   void TaskSwitchto(CfsTask* task, const Message& msg) final;
   void TaskAffinityChanged(CfsTask* task, const Message& msg) final;
+  void TaskPriorityChanged(CfsTask* task, const Message& msg) final;
   void CpuTick(const Message& msg) final;
 
  private:

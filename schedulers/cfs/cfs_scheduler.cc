@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/numeric/int128.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
@@ -285,6 +286,15 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
   // Our task does not have an rq assigned to it yet, so we do not need to hold
   // an rq lock to set the state.
   task->run_state.Set(CfsTaskState::kBlocked);
+
+  CHECK_GE(payload->nice, CfsScheduler::kMinNice);
+  CHECK_LE(payload->nice, CfsScheduler::kMaxNice);
+
+  task->nice = payload->nice;
+  task->weight =
+      CfsScheduler::kNiceToWeight[task->nice - CfsScheduler::kMinNice];
+  task->inverse_weight =
+      CfsScheduler::kNiceToInverseWeight[task->nice - CfsScheduler::kMinNice];
 
   if (payload->runnable) {
     Cpu cpu = SelectTaskRq(task, eligible_cpus);
@@ -558,8 +568,23 @@ void CfsScheduler::CfsSchedule(const Cpu& cpu, BarrierToken agent_barrier,
     if (req->Commit()) {
       GHOST_DPRINT(3, stderr, "Task %s oncpu %d", next->gtid.describe(),
                    cpu.id());
-      next->vruntime +=
-          absl::Nanoseconds(next->status_word.runtime() - before_runtime);
+      // Update task's vruntime, which is the physical runtime multiplied by
+      // the inverse of the weight for the task's nice value. We additionally
+      // divide the product by 2^22 (right shift by 22 bits) to make a nice
+      // value 0's vruntime equal to the wall runtime. This is because the
+      // pre-computed weight values are scaled up by 2^10 (the load weight for
+      // nice value = 0 becomes 1024). The weight values then get inverted
+      // (which turns scale-up to scale-down) and scaled up by 2^32 to
+      // pre-compute their inverse weights, leaving us the final scale up of
+      // 2^22.
+      //
+      // i.e., vruntime = wall_runtime / (precomputed_weight / 2^10)
+      //         = wall_runtime * 2^10 / precomputed_weight
+      //         = wall_runtime * 2^10 / (2^32 / precomputed_inverse_weight)
+      //         = wall_runtime * precomputed_inverse_weight / 2^22
+      uint64_t runtime = next->status_word.runtime() - before_runtime;
+      next->vruntime += absl::Nanoseconds(static_cast<uint64_t>(
+          static_cast<absl::uint128>(next->inverse_weight) * runtime >> 22));
     } else {
       GHOST_DPRINT(3, stderr, "CfsSchedule: commit failed (state=%d)",
                    req->state());
@@ -636,6 +661,22 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
   // after erasing the task, we need seqnum+1, otherwise the task enters a weird
   // state (no failures though, just hangs).
   Migrate(task, target_cpu, msg.seqnum()+1);
+}
+
+void CfsScheduler::TaskPriorityChanged(CfsTask* task, const Message& msg) {
+  const ghost_msg_payload_task_priority_changed* payload =
+      static_cast<const ghost_msg_payload_task_priority_changed*>(
+          msg.payload());
+
+  CHECK_EQ(task->gtid.id(), payload->gtid);
+  CHECK_GE(payload->nice, CfsScheduler::kMinNice);
+  CHECK_LE(payload->nice, CfsScheduler::kMaxNice);
+
+  task->nice = payload->nice;
+  task->weight =
+      CfsScheduler::kNiceToWeight[task->nice - CfsScheduler::kMinNice];
+  task->inverse_weight =
+      CfsScheduler::kNiceToInverseWeight[task->nice - CfsScheduler::kMinNice];
 }
 
 #ifndef NDEBUG
