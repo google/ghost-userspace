@@ -31,13 +31,12 @@
 #include "lib/logging.h"
 #include "lib/topology.h"
 
-#define DPRINT_CFS(level, message)                                           \
-  do {                                                                       \
-    if (ABSL_PREDICT_TRUE(verbose() < level)) break;                         \
-    std::cerr << absl::StrFormat("DCFS: [%.6f] cpu %d: ",                    \
-                                 absl::ToDoubleSeconds(absl::Now() - start), \
-                                 sched_getcpu())                             \
-              << message << std::endl;                                       \
+#define DPRINT_CFS(level, message)                               \
+  do {                                                           \
+    if (ABSL_PREDICT_TRUE(verbose() < level)) break;             \
+    absl::FPrintF(stderr, "DCFS: [%.6f] cpu %d: %s\n",           \
+                  absl::ToDoubleSeconds(MonotonicNow() - start), \
+                  sched_getcpu(), message);                      \
   } while (0)
 
 namespace ghost {
