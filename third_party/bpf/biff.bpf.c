@@ -279,12 +279,6 @@ static void enqueue_task(u64 gtid, u32 task_barrier)
 	}
 }
 
-/* Avoid the dreaded "dereference of modified ctx ptr R6 off=3 disallowed" */
-static void __attribute__((noinline)) set_dont_idle(struct bpf_ghost_sched *ctx)
-{
-	ctx->dont_idle = true;
-}
-
 SEC("ghost_sched/pnt")
 int biff_pnt(struct bpf_ghost_sched *ctx)
 {

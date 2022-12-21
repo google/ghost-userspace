@@ -93,4 +93,21 @@ const volatile bool enable_bpf_printd;
 		bpf_printk(__VA_ARGS__);				\
 })
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+/*
+ * No inline to avoid the dreaded:
+ * "dereference of modified ctx ptr R6 off=3 disallowed"
+ */
+static void __attribute__((noinline)) set_dont_idle(struct bpf_ghost_sched *ctx)
+{
+	ctx->dont_idle = true;
+}
+
+static void __attribute__((noinline)) clr_dont_idle(struct bpf_ghost_sched *ctx)
+{
+	ctx->dont_idle = false;
+}
+#pragma GCC diagnostic pop
+
 #endif  // GHOST_LIB_BPF_COMMON_BPF_H_
