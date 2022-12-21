@@ -44,6 +44,7 @@ void ParseSolConfig(SolConfig* config) {
   config->topology_ = topology;
   config->cpus_ = ghost_cpus;
   config->global_cpu_ = topology->cpu(globalcpu);
+  config->numa_node_ = ghost_cpus.Front().numa_node();
   config->preemption_time_slice_ = absl::GetFlag(FLAGS_preemption_time_slice);
 }
 

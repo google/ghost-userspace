@@ -376,7 +376,7 @@ void LocalEnclave::CommonInit() {
   CHECK_NE(data_region_, MAP_FAILED);
 
   GhostHelper()->SetGlobalStatusWordTable(
-      new LocalStatusWordTable(dir_fd_, 0, 0));
+      new LocalStatusWordTable(dir_fd_, /*id=*/0, config_.numa_node_));
 }
 
 // Initialize a CpuRep for each cpu in enclaves_cpus_ (aka, cpus()).

@@ -79,6 +79,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
   explicit SolScheduler(Enclave* enclave, CpuList cpulist,
                         std::shared_ptr<TaskAllocator<SolTask>> allocator,
                         int32_t global_cpu,
+                        int32_t numa_node,
                         absl::Duration preemption_time_slice);
   ~SolScheduler() final;
 
@@ -214,7 +215,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 // Initializes the task allocator and the Sol scheduler.
 std::unique_ptr<SolScheduler> SingleThreadSolScheduler(
     Enclave* enclave, CpuList cpulist, int32_t global_cpu,
-    absl::Duration preemption_time_slice);
+    int32_t numa_node, absl::Duration preemption_time_slice);
 
 // Operates as the Global or Satellite agent depending on input from the
 // global_scheduler->GetGlobalCPU callback.
@@ -251,7 +252,7 @@ class FullSolAgent : public FullAgent<EnclaveType> {
   explicit FullSolAgent(SolConfig config) : FullAgent<EnclaveType>(config) {
     global_scheduler_ = SingleThreadSolScheduler(
         &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id(),
-        config.preemption_time_slice_);
+        config.numa_node_, config.preemption_time_slice_);
     this->StartAgentTasks();
     this->enclave_.Ready();
   }

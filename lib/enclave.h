@@ -45,6 +45,7 @@ class AgentConfig {
   Topology* topology_;
   // If enclave_fd_ is set, then cpus_ is ignored.
   CpuList cpus_;
+  int numa_node_ = 0;
   int enclave_fd_ = -1;
   CpuTickConfig tick_config_ = CpuTickConfig::kNoTicks;
   int stderr_fd_ = 2;

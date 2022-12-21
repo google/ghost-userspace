@@ -19,10 +19,11 @@ void SolScheduler::CpuTimerExpired(const Message& msg) { CHECK(0); }
 SolScheduler::SolScheduler(Enclave* enclave, CpuList cpulist,
                            std::shared_ptr<TaskAllocator<SolTask>> allocator,
                            int32_t global_cpu,
+                           int32_t numa_node,
                            absl::Duration preemption_time_slice)
     : BasicDispatchScheduler(enclave, std::move(cpulist), std::move(allocator)),
       global_cpu_(global_cpu),
-      global_channel_(GHOST_MAX_QUEUE_ELEMS, /*node=*/0),
+      global_channel_(GHOST_MAX_QUEUE_ELEMS, numa_node),
       preemption_time_slice_(preemption_time_slice) {
   if (!cpus().IsSet(global_cpu_)) {
     Cpu c = cpus().Front();
@@ -511,11 +512,11 @@ found:
 
 std::unique_ptr<SolScheduler> SingleThreadSolScheduler(
     Enclave* enclave, CpuList cpulist, int32_t global_cpu,
-    absl::Duration preemption_time_slice) {
+    int32_t numa_node, absl::Duration preemption_time_slice) {
   auto allocator = std::make_shared<SingleThreadMallocTaskAllocator<SolTask>>();
   auto scheduler = std::make_unique<SolScheduler>(
       enclave, std::move(cpulist), std::move(allocator), global_cpu,
-      preemption_time_slice);
+      numa_node, preemption_time_slice);
   return scheduler;
 }
 
