@@ -50,11 +50,6 @@ bool SolScheduler::Available(const Cpu& cpu) {
   return false;
 }
 
-void SolScheduler::ValidatePreExitState() {
-  CHECK_EQ(num_tasks_, 0);
-  CHECK_EQ(RunqueueSize(), 0);
-}
-
 void SolScheduler::DumpStats() {
   fprintf(stderr, "\n------------------------------------------------\n");
 

@@ -124,9 +124,7 @@ TEST_F(CfsTest, RespectsNewTaskAffinity) {
 
   // Even though the threads have joined it does not mean they are dead.
   // pthread_join() can return before the dying task has made its way to
-  // TASK_DEAD. In this case, CfsAgent::ValidatePreExitState() triggers
-  // a CHECK failure because the runqueue is not empty. We spin here until
-  // there are no more tasks remaining.
+  // TASK_DEAD.
   int num_tasks;
   do {
     num_tasks = ap.Rpc(CfsScheduler::kCountAllTasks);
@@ -197,9 +195,7 @@ TEST_F(CfsTest, KeepsAffinityWhenBecomingRunnableFromBlocked) {
 
   // Even though the threads have joined it does not mean they are dead.
   // pthread_join() can return before the dying task has made its way to
-  // TASK_DEAD. In this case, CfsAgent::ValidatePreExitState() triggers
-  // a CHECK failure because the runqueue is not empty. We spin here until
-  // there are no more tasks remaining.
+  // TASK_DEAD.
   int num_tasks;
   do {
     num_tasks = ap.Rpc(CfsScheduler::kCountAllTasks);

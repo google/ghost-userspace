@@ -100,8 +100,6 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
     return cs->run_queue.Empty();
   }
 
-  void ValidatePreExitState();
-
   void DumpState(const Cpu& cpu, int flags) final;
   std::atomic<bool> debug_runqueue_ = false;
 
@@ -179,7 +177,6 @@ class FullFifoAgent : public FullAgent<EnclaveType> {
   }
 
   ~FullFifoAgent() override {
-    scheduler_->ValidatePreExitState();
     this->TerminateAgentTasks();
   }
 

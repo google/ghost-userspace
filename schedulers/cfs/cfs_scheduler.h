@@ -289,8 +289,6 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
     return res;
   }
 
-  void ValidatePreExitState();
-
   void DumpState(const Cpu& cpu, int flags) final;
   std::atomic<bool> debug_runqueue_ = false;
 
@@ -422,7 +420,6 @@ class FullCfsAgent : public FullAgent<EnclaveType> {
   }
 
   ~FullCfsAgent() override {
-    scheduler_->ValidatePreExitState();
     this->TerminateAgentTasks();
   }
 

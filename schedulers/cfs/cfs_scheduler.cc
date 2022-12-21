@@ -464,16 +464,6 @@ void CfsScheduler::TaskSwitchto(CfsTask* task, const Message& msg) {
   }
 }
 
-void CfsScheduler::ValidatePreExitState() {
-  for (const Cpu& cpu : cpus()) {
-    CpuState* cs = cpu_state(cpu);
-    {
-      absl::MutexLock l(&cs->run_queue.mu_);
-      CHECK(cs->run_queue.Empty());
-    }
-  }
-}
-
 void CfsScheduler::CheckPreemptTick(const Cpu& cpu) {
   CpuState* cs = cpu_state(cpu);
   if (cs->current) {

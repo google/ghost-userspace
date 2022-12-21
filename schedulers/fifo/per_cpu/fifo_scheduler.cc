@@ -215,12 +215,6 @@ void FifoScheduler::TaskSwitchto(FifoTask* task, const Message& msg) {
   TaskOffCpu(task, /*blocked=*/true, /*from_switchto=*/false);
 }
 
-void FifoScheduler::ValidatePreExitState() {
-  for (const Cpu& cpu : cpus()) {
-    CpuState* cs = cpu_state(cpu);
-    CHECK(cs->run_queue.Empty());
-  }
-}
 
 void FifoScheduler::TaskOffCpu(FifoTask* task, bool blocked,
                                bool from_switchto) {

@@ -49,11 +49,6 @@ bool FifoScheduler::Available(const Cpu& cpu) {
   return false;
 }
 
-void FifoScheduler::ValidatePreExitState() {
-  CHECK_EQ(num_tasks_, 0);
-  CHECK_EQ(RunqueueSize(), 0);
-}
-
 void FifoScheduler::DumpAllTasks() {
   fprintf(stderr, "task        state       rq_pos  P\n");
   allocator()->ForEachTask([](Gtid gtid, const FifoTask* task) {

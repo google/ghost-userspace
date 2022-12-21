@@ -1930,10 +1930,6 @@ TEST(ApiTest, GhostCloneGhost) {
   // Even though the threads have joined it does not mean they are dead.
   // pthread_join() can return before the dying task has made its way to
   // TASK_DEAD (CLONE_CHILD_CLEARTID sync via do_exit->exit_mm->mm_release).
-  //
-  // In this case FifoScheduler::ValidatePreExitState() can trigger a CHECK
-  // because the runqueue is not empty. We avoid this by spinning here until
-  // there are no more tasks remaining.
   int num_tasks;
   do {
     num_tasks = ap.Rpc(FifoScheduler::kCountAllTasks);
