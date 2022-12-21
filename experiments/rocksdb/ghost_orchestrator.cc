@@ -196,6 +196,14 @@ void GhostOrchestrator::LoadGenerator(uint32_t sid) {
         worker_work()[worker_sid]->num_requests.load(std::memory_order_relaxed),
         0);
 
+    // Do not assign work to a worker that finished recently since the worker
+    // could do a light wakeup, skipping the scheduler entirely.
+    if (UsesFutex() &&
+        ghost::MonotonicNow() - worker_work()[worker_sid]->last_finished <
+            absl::Microseconds(15)) {
+      continue;
+    }
+
     // We assign a deadline to the worker just in case we want to run the
     // experiment with the ghOSt EDF (Earliest-Deadline-First) scheduler. The
     // deadline is not needed and is ignored for the centralized queuing
@@ -292,6 +300,7 @@ void GhostOrchestrator::Worker(uint32_t sid) {
     prio_table_helper_->WaitUntilRunnable(sid);
   } else {
     CHECK(UsesFutex());
+    work->last_finished = ghost::MonotonicNow();
     thread_wait_->MarkIdle(sid);
     // Do this after `MarkIdle`. If the worker did it before calling `MarkIdle`,
     // the dispatcher could assign work to this worker and then mark it

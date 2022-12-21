@@ -153,6 +153,7 @@ class Orchestrator {
     std::atomic<size_t> num_requests;
     // The requests.
     std::vector<Request> requests;
+    absl::Time last_finished;
   } ABSL_CACHELINE_ALIGNED;
 
   // Affine all background threads to this CPU.
