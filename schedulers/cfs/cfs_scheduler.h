@@ -7,6 +7,7 @@
 #ifndef GHOST_SCHEDULERS_CFS_CFS_SCHEDULER_H_
 #define GHOST_SCHEDULERS_CFS_CFS_SCHEDULER_H_
 
+#include <climits>
 #include <cstdint>
 #include <deque>
 #include <iostream>
@@ -27,9 +28,6 @@ static const absl::Time start = absl::Now();
 
 namespace ghost {
 
-class CfsTaskState;
-std::ostream& operator<<(std::ostream& os, const CfsTaskState& state);
-
 // We could use just "enum class", but embedding an enum (which is implicitly
 // convertable to an int) makes a lot of the debugging code simpler. We could do
 // some hackery like static_cast<typename
@@ -38,63 +36,75 @@ std::ostream& operator<<(std::ostream& os, const CfsTaskState& state);
 // debugging asserts.
 class CfsTaskState {
  public:
-  enum State {
+  enum class RunState : uint32_t {
     kBlocked = 0,  // Task cannot run
     kRunnable,     // Task can run
     kRunning,      // Task is running (up to preemption by the agent itself)
     kDone,         // Task is dead or departed
     kNumStates,
   };
+  // Make sure state transition asserts work. i.e., Transition is represented
+  // as uint64_t bit mask.
+  static_assert(static_cast<uint32_t>(RunState::kNumStates) <
+                sizeof(uint64_t) * CHAR_BIT);
 
-  explicit CfsTaskState(State state) : state_(state), task_name_("") {}
-  explicit CfsTaskState(State state, absl::string_view task_name)
-      : state_(state), task_name_(task_name) {}
+  explicit CfsTaskState(RunState run_state)
+      : run_state_(run_state), task_name_("") {}
+  explicit CfsTaskState(RunState run_state, absl::string_view task_name)
+      : run_state_(run_state), task_name_(task_name) {}
 
   // Make sure no one accidentally does something that'll mess up tracking like
   // task.run_state = CfsTaskState::kBlocked.
   CfsTaskState(const CfsTaskState&) = delete;
   CfsTaskState& operator=(const CfsTaskState&) = delete;
 
-  State Get() const { return state_; }
-  void Set(State state) {
+  RunState Get() const { return run_state_; }
+  void Set(RunState run_state) {
 #ifndef NDEBUG
     // These assertions are expensive, relatively, so don't even try them unless
     // we are in debug mode.
-    state_trace_.push_back(state);
-    AssertValidTransition(state);
+    state_trace_.push_back(run_state);
+    AssertValidTransition(run_state);
 #endif
-    state_ = state;
+    run_state_ = run_state;
   }
 
  private:
 #ifndef NDEBUG
-  void AssertValidTransition(State next);
-  const std::map<State, uint64_t>& GetTransitionMap() {
+  void AssertValidTransition(RunState next);
+  const std::map<RunState, uint64_t>& GetTransitionMap() {
     static const auto* map =
-        new std::map<State, uint64_t>{{kBlocked, kToBlocked},
-                                      {kRunnable, kToRunnable},
-                                      {kRunning, kToRunning},
-                                      {kDone, kToDone}};
+        new std::map<RunState, uint64_t>{{RunState::kBlocked, kToBlocked},
+                                         {RunState::kRunnable, kToRunnable},
+                                         {RunState::kRunning, kToRunning},
+                                         {RunState::kDone, kToDone}};
     return *map;
   }
 #endif  // !NDEBUG
 
-  State state_;
+  RunState run_state_;
   absl::string_view task_name_;
 
 #ifndef NDEBUG
-  std::vector<State> state_trace_;
+  //TODO: Consider minimizing if(n)def NDEBUG blocks.
+  std::vector<RunState> state_trace_;
   // State Transition Map. Each kToBlah encodes valid states such that we can
   // transition to blah. To validate that we can go from kFoo to kBar, we check
   // that the correct bit it set. e.g. (kToFoo & (1 << kBar)) == 1 iff kBar ->
   // kFoo is valid.
   constexpr static uint64_t kToBlocked =
-      (1 << CfsTaskState::kRunning) + (1 << CfsTaskState::kBlocked);
-  constexpr static uint64_t kToRunnable = (1 << kBlocked) + (1 << kRunning);
-  constexpr static uint64_t kToRunning = (1 << kRunnable) + (1 << kRunning);
+      (1 << static_cast<uint32_t>(RunState::kRunning)) +
+      (1 << static_cast<uint32_t>(RunState::kBlocked));
+  constexpr static uint64_t kToRunnable =
+      (1 << static_cast<uint32_t>(RunState::kBlocked)) +
+      (1 << static_cast<uint32_t>(RunState::kRunning));
+  constexpr static uint64_t kToRunning =
+      (1 << static_cast<uint32_t>(RunState::kRunnable)) +
+      (1 << static_cast<uint32_t>(RunState::kRunning));
   constexpr static uint64_t kToDone =
-      (1 << kRunnable) + (1 << kBlocked) + (1 << kRunning);
-
+      (1 << static_cast<uint32_t>(RunState::kRunnable)) +
+      (1 << static_cast<uint32_t>(RunState::kBlocked)) +
+      (1 << static_cast<uint32_t>(RunState::kRunning));
 #endif
 };
 
@@ -116,7 +126,7 @@ struct CfsTask : public Task<> {
   }
 
   CfsTaskState run_state =
-      CfsTaskState(CfsTaskState::kBlocked, gtid.describe());
+      CfsTaskState(CfsTaskState::RunState::kBlocked, gtid.describe());
   int cpu = -1;
 
   // Nice value and its corresponding weight/inverse-weight values for this
@@ -139,6 +149,9 @@ struct CfsTask : public Task<> {
   // if a task has run for granularity_ yet.
   uint64_t runtime_at_first_pick_ns;
 };
+
+std::ostream& operator<<(std::ostream& os, CfsTaskState::RunState state);
+std::ostream& operator<<(std::ostream& os, const CfsTaskState& state);
 
 class CfsRq {
  public:
