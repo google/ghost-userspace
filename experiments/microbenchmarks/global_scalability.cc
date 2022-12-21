@@ -322,7 +322,9 @@ int main(int argc, char* argv[]) {
         break;
       }
       case Sched::kSol: {
-        ghost::SolConfig cfg(t, cpus, t->cpu(global_cpu));
+        ghost::SolConfig cfg(
+            t, cpus, t->cpu(global_cpu),
+            /*preemption_time_slice=*/absl::InfiniteDuration());
         ghost::RunSol(outfile, cfg, nr_task_cpus, nr_threads, nr_loops);
         break;
       }

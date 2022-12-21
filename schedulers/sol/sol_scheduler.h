@@ -77,7 +77,8 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
  public:
   explicit SolScheduler(Enclave* enclave, CpuList cpulist,
                         std::shared_ptr<TaskAllocator<SolTask>> allocator,
-                        int32_t global_cpu);
+                        int32_t global_cpu,
+                        absl::Duration preemption_time_slice);
   ~SolScheduler() final;
 
   void EnclaveReady() final;
@@ -157,6 +158,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
     SolTask* current = nullptr;
     SolTask* next = nullptr;
     const Agent* agent = nullptr;
+    absl::Time last_commit;
   } ABSL_CACHELINE_ALIGNED;
 
   bool SyncCpuState(const Cpu& cpu);
@@ -198,6 +200,8 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
   LocalChannel global_channel_;
   int num_tasks_ = 0;
 
+  const absl::Duration preemption_time_slice_;
+
   std::deque<SolTask*> run_queue_;
   std::vector<SolTask*> yielding_tasks_;
 
@@ -207,9 +211,9 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 };
 
 // Initializes the task allocator and the Sol scheduler.
-std::unique_ptr<SolScheduler> SingleThreadSolScheduler(Enclave* enclave,
-                                                       CpuList cpulist,
-                                                       int32_t global_cpu);
+std::unique_ptr<SolScheduler> SingleThreadSolScheduler(
+    Enclave* enclave, CpuList cpulist, int32_t global_cpu,
+    absl::Duration preemption_time_slice);
 
 // Operates as the Global or Satellite agent depending on input from the
 // global_scheduler->GetGlobalCPU callback.
@@ -228,10 +232,14 @@ class SolAgent : public LocalAgent {
 class SolConfig : public AgentConfig {
  public:
   SolConfig() {}
-  SolConfig(Topology* topology, CpuList cpulist, Cpu global_cpu)
-      : AgentConfig(topology, std::move(cpulist)), global_cpu_(global_cpu) {}
+  SolConfig(Topology* topology, CpuList cpulist, Cpu global_cpu,
+            absl::Duration preemption_time_slice)
+      : AgentConfig(topology, std::move(cpulist)),
+        global_cpu_(global_cpu),
+        preemption_time_slice_(preemption_time_slice) {}
 
   Cpu global_cpu_{Cpu::UninitializedType::kUninitialized};
+  absl::Duration preemption_time_slice_ = absl::InfiniteDuration();
 };
 
 // An global agent scheduler.  It runs a single-threaded Sol scheduler on the
@@ -241,7 +249,8 @@ class FullSolAgent : public FullAgent<EnclaveType> {
  public:
   explicit FullSolAgent(SolConfig config) : FullAgent<EnclaveType>(config) {
     global_scheduler_ = SingleThreadSolScheduler(
-        &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id());
+        &this->enclave_, *this->enclave_.cpus(), config.global_cpu_.id(),
+        config.preemption_time_slice_);
     this->StartAgentTasks();
     this->enclave_.Ready();
   }
