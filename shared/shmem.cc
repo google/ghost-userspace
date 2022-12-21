@@ -42,9 +42,6 @@ namespace ghost {
 constexpr size_t kHugepageSize = 2 * 1024 * 1024;
 static const char* kMemFdPrefix = "ghost-shmem-";
 
-#define MFD_GOOGLE_SPECIFIC_BASE 0x0200U
-#define MFD_HUGEPAGE (MFD_GOOGLE_SPECIFIC_BASE << 0)
-
 // Please don't use "0" as a header version, it's not distinguishable from
 // an uninitialized header.
 static constexpr int64_t kHeaderVersion = 1;
