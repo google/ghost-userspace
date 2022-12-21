@@ -264,15 +264,22 @@ TEST_F(EnclaveTest, CpuListComma) {
       std::vector<int>{0, 5, 10, 15, 16, 21, 26, 31, 32});
   std::string comma_str = comma_list.CpuMaskStr();
 
-  if (!WriteEnclaveCpus(cpumask_fd, comma_str)) {
-    // We can legitimately fail if we're on a machine with too few cpus, but
-    // EOVERFLOW means our cpumask wasn't parsed by the kernel.
-    CHECK_NE(errno, EOVERFLOW);
+  // If we have more than 32 cpus, setting the cpumask should succeed.
+  if (MachineTopology()->num_cpus() > comma_list.Back().id()) {
+    EXPECT_TRUE(WriteEnclaveCpus(cpumask_fd, comma_str));
+  } else if (!WriteEnclaveCpus(cpumask_fd, comma_str)) {
+    // If WriteEnclaveCpus fails with 32 or less CPUs, the test case should
+    // fail with EOVERFLOW indicating the given CPU mask contains a mask bit
+    // set for a CPU whose ID is larger than the number of possible CPUs on
+    // this machine. WriteEnclaveCpus may succeed if NR_CPUS and nmaskbits
+    // are fixed to some large enough numbers - in that case, we do
+    // not have to check anything.
+    EXPECT_EQ(errno, EOVERFLOW);
   }
 
   close(cpumask_fd);
-
   close(enclave_fd);
+
   LocalEnclave::DestroyEnclave(ctl_fd);
   close(ctl_fd);
 }
