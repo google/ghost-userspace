@@ -31,12 +31,12 @@ http_archive(
 load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
 rules_foreign_cc_dependencies()
 
-# Abseil LTS 20220623.1
+# Abseil live HEAD (Nov 17, 2022)
 http_archive(
   name = "com_google_absl",
-  url = "https://github.com/abseil/abseil-cpp/archive/8c0b94e793a66495e0b1f34a5eb26bd7dc672db0.zip",
-  sha256 = "b9f490fae1c0d89a19073a081c3c588452461e5586e4ae31bc50a8f36339135e",
-  strip_prefix = "abseil-cpp-8c0b94e793a66495e0b1f34a5eb26bd7dc672db0",
+  url = "https://github.com/abseil/abseil-cpp/archive/ebab79b5783b3298ee2f31251174c660c322d7ef.zip",
+  sha256 = "c3b9d19cd38cd475f60b5756db1bdc6d10ed43e5c7ce7374eae9a57d763d0597",
+  strip_prefix = "abseil-cpp-ebab79b5783b3298ee2f31251174c660c322d7ef",
 )
 
 # GoogleTest release-1.12.1 (Jun 27 2022)

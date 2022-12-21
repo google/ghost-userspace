@@ -9,61 +9,11 @@
 
 #include <iostream>
 
+#include "absl/log/check.h"
 #include "absl/strings/str_format.h"
 #include "third_party/util/util.h"
 
 #if defined(GHOST_LOGGING)
-
-#define __LCHECK(op, invop, expr1, expr2)                                      \
-  do {                                                                         \
-    auto __val1 = expr1;                                                       \
-    auto __val2 = expr2;                                                       \
-    if (!(__val1 op __val2)) {                                                 \
-      int __errno = errno;                                                     \
-      std::cerr << __FILE__ << ":" << __LINE__ << "(" << ghost::GetTID()       \
-                << ") "                                                        \
-                << "CHECK FAILED: " << #expr1 << " " #op " " << #expr2 << " [" \
-                << __val1 << " " #invop " " << __val2 << "]" << std::endl;     \
-      if (__errno) {                                                           \
-        std::cerr << "errno: " << __errno << " [" << std::strerror(__errno)    \
-                  << "]" << std::endl;                                         \
-      }                                                                        \
-      ghost::Exit(1);                                                          \
-    }                                                                          \
-  } while (0)
-
-#define CHECK_EQ(val1, val2) __LCHECK(==, !=, val1, val2)
-#define CHECK_NE(val1, val2) __LCHECK(!=, ==, val1, val2)
-#define CHECK_LT(val1, val2) __LCHECK(<, >=, val1, val2)
-#define CHECK_LE(val1, val2) __LCHECK(<=, <, val1, val2)
-#define CHECK_GT(val1, val2) __LCHECK(>, <=, val1, val2)
-#define CHECK_GE(val1, val2) __LCHECK(>=, >, val1, val2)
-#define CHECK(val1) CHECK_NE(val1, 0)
-
-#ifndef NDEBUG
-#define DCHECK_EQ(val1, val2) CHECK_EQ(val1, val2)
-#define DCHECK_NE(val1, val2) CHECK_NE(val1, val2)
-#define DCHECK_LT(val1, val2) CHECK_LT(val1, val2)
-#define DCHECK_LE(val1, val2) CHECK_LE(val1, val2)
-#define DCHECK_GT(val1, val2) CHECK_GT(val1, val2)
-#define DCHECK_GE(val1, val2) CHECK_GE(val1, val2)
-#define DCHECK(condition) CHECK(condition)
-#else
-// `NDEBUG` is defined, so `DCHECK_EQ(x, y)` and so on do nothing.  However, we
-// still want the compiler to parse `x` and `y`, because we don't want to lose
-// potentially useful errors and warnings.
-//
-// (cribbed from ABSL_LOGGING_INTERNAL_DCHECK_NOP)
-#define GHOST_DCHECK_NOP(x, y) while (false && ((void)(x), (void)(y), 0))
-
-#define DCHECK_EQ(val1, val2) GHOST_DCHECK_NOP(val1, val2)
-#define DCHECK_NE(val1, val2) GHOST_DCHECK_NOP(val1, val2)
-#define DCHECK_LT(val1, val2) GHOST_DCHECK_NOP(val1, val2)
-#define DCHECK_LE(val1, val2) GHOST_DCHECK_NOP(val1, val2)
-#define DCHECK_GT(val1, val2) GHOST_DCHECK_NOP(val1, val2)
-#define DCHECK_GE(val1, val2) GHOST_DCHECK_NOP(val1, val2)
-#define DCHECK(condition) GHOST_DCHECK_NOP(condition, 0)
-#endif
 
 #ifndef GHOST_DEBUG
 #ifdef NDEBUG
