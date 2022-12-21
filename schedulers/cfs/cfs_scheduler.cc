@@ -657,6 +657,12 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
 
   task->cpu_affinity = cpu_affinity;
 
+  // Short-circuit if the current CPU is an eligible CPU. In this case, we do
+  // not even need to remove the task from the current CPU.
+  if (task->cpu_affinity.IsSet(task->cpu)) {
+    return;
+  }
+
   // Make sure to remove the task from the current cpu.
   CpuState* cs = cpu_state_of(task);
   CHECK_EQ(cs->current, task);
