@@ -14,6 +14,9 @@
 
 ABSL_FLAG(std::string, print_format, "pretty",
           "Results print format (\"pretty\" or \"csv\", default: \"pretty\")");
+ABSL_FLAG(bool, print_last, false,
+          "If true, only prints the end-to-end results, rather than the "
+          "results for each stage (default: false)");
 ABSL_FLAG(bool, print_distribution, false,
           "Prints every request's results (default: false)");
 ABSL_FLAG(bool, print_ns, false,
@@ -98,6 +101,7 @@ ghost_test::Options GetOptions() {
   CHECK(print_format == "pretty" || print_format == "csv");
   options.print_options.pretty = (print_format == "pretty");
 
+  options.print_options.print_last = absl::GetFlag(FLAGS_print_last);
   options.print_options.distribution = absl::GetFlag(FLAGS_print_distribution);
   options.print_options.ns = absl::GetFlag(FLAGS_print_ns);
   options.print_options.os = &std::cout;

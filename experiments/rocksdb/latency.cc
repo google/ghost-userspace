@@ -216,14 +216,16 @@ void Print(const std::vector<Request>& requests, absl::Duration runtime,
     PrintPrettyPreface(options);
   }
 
-  HANDLE_STAGE("Ingress Queue Time", requests, runtime, request_generated,
-               request_received, options);
-  HANDLE_STAGE("Repeatable Handle Time", requests, runtime, request_received,
-               request_assigned, options);
-  HANDLE_STAGE("Worker Queue Time", requests, runtime, request_assigned,
-               request_start, options);
-  HANDLE_STAGE("Worker Handle Time", requests, runtime, request_start,
-               request_finished, options);
+  if (!options.print_last) {
+    HANDLE_STAGE("Ingress Queue Time", requests, runtime, request_generated,
+                 request_received, options);
+    HANDLE_STAGE("Repeatable Handle Time", requests, runtime, request_received,
+                 request_assigned, options);
+    HANDLE_STAGE("Worker Queue Time", requests, runtime, request_assigned,
+                 request_start, options);
+    HANDLE_STAGE("Worker Handle Time", requests, runtime, request_start,
+                 request_finished, options);
+  }
   // Total time in system
   HANDLE_STAGE("Total", requests, runtime, request_generated, request_finished,
                options);

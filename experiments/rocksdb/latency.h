@@ -18,6 +18,9 @@ struct PrintOptions {
   // If true, prints the results in human-readable form. Otherwise, prints the
   // results in CSV form.
   bool pretty;
+  // If true, only prints the end-to-end results, rather than the results for
+  // each stage.
+  bool print_last;
   // If true, prints the entire distribution.
   bool distribution;
   // If true, prints the latencies in units of nanoseconds. If false, prints the
