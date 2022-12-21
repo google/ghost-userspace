@@ -70,6 +70,7 @@ bpf_program(
     name = "schedghostidle_bpf",
     src = "schedghostidle.bpf.c",
     hdrs = [
+        "common.bpf.h",
         "//:kernel/vmlinux_ghost_5_11.h",
         "//third_party:iovisor_bcc/bits.bpf.h",
     ],

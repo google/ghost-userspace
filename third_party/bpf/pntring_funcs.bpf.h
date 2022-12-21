@@ -34,11 +34,7 @@
 
 #ifdef __BPF__
 
-/*
- * Part of the ghost UAPI.  vmlinux.h doesn't include #defines, so we need to
- * add it manually.
- */
-#define SEND_TASK_LATCHED (1 << 10)
+#include "third_party/bpf/common.bpf.h"
 
 #define PNT_NR_RING_RETRY 5
 

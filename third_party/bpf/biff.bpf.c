@@ -107,12 +107,6 @@
 //#define bpf_printd bpf_printk
 #define bpf_printd(...)
 
-/*
- * Part of the ghost UAPI.  vmlinux.h doesn't include #defines, so we need to
- * add it manually.
- */
-#define SEND_TASK_LATCHED (1 << 10)
-
 bool initialized;
 
 /*

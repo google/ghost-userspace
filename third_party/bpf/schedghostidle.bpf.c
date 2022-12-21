@@ -17,6 +17,7 @@
 #include "libbpf/bpf_tracing.h"
 // clang-format on
 
+#include "third_party/bpf/common.bpf.h"
 #include "third_party/iovisor_bcc/bits.bpf.h"
 
 #define MAX_CPUS 512
@@ -97,8 +98,6 @@ static void update_hist(u64 nsec)
 		return;
 	*count += 1;
 }
-
-#define SEND_TASK_LATCHED (1 << 10)
 
 SEC("tp_btf/sched_ghost_latched")
 int BPF_PROG(sched_ghost_latched, struct task_struct *old,

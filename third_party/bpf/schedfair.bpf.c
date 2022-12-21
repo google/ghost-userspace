@@ -130,13 +130,6 @@
  * you're looking at these raw numbers, 10^9 millicpu-usec is 1 cpu-sec.
  */
 
-#define TASK_RUNNING 0
-#define TASK_DEAD 0x0080
-#define MAX_RT_PRIO 100
-
-#define READ_ONCE(x) (*(volatile typeof(x) *)&(x))
-#define WRITE_ONCE(x, val) ((*(volatile typeof(x) *)&(x)) = val)
-
 /* Set by userspace before loading. */
 const volatile uint32_t nr_milli_cpus;
 uint64_t accum_fair_share;	/* a.k.a. F(last_update_time), weight=1. */

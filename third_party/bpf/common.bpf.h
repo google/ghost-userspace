@@ -39,6 +39,8 @@ static long (*bpf_ghost_resched_cpu)(__u32 cpu, __u64 cpu_seqnum) = (void *) 300
 #define SCHED_GHOST 18
 #define TASK_RUNNING 0
 #define TASK_DEAD 0x0080
+#define MAX_RT_PRIO 100
+#define SEND_TASK_LATCHED (1 << 10)
 
 static inline u64 min(u64 x, u64 y)
 {
@@ -76,5 +78,8 @@ static inline bool is_agent(struct task_struct *p)
 static inline bool is_traced_ghost(struct task_struct *p) {
   return task_has_ghost_policy(p) && !is_agent(p);
 }
+
+#define READ_ONCE(x) (*(volatile typeof(x) *)&(x))
+#define WRITE_ONCE(x, val) ((*(volatile typeof(x) *)&(x)) = val)
 
 #endif  // GHOST_LIB_BPF_COMMON_BPF_H_
