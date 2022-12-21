@@ -32814,6 +32814,7 @@ struct ghost_msg_payload_task_new {
 	uint64_t gtid;
 	uint64_t runtime;
 	uint16_t runnable;
+	int nice;
 	struct ghost_sw_info sw_info;
 };
 
@@ -32853,6 +32854,11 @@ struct ghost_msg_payload_task_switchto {
 
 struct ghost_msg_payload_task_affinity_changed {
 	uint64_t gtid;
+};
+
+struct ghost_msg_payload_task_priority_changed {
+	uint64_t gtid;
+	int nice;
 };
 
 struct ghost_msg_payload_task_latched {
@@ -32905,6 +32911,7 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_task_departed departed;
 		struct ghost_msg_payload_task_switchto switchto;
 		struct ghost_msg_payload_task_affinity_changed affinity;
+		struct ghost_msg_payload_task_priority_changed	priority;
 		struct ghost_msg_payload_task_latched latched;
 		struct ghost_msg_payload_cpu_tick cpu_tick;
 		struct ghost_msg_payload_timer timer;
@@ -33003,6 +33010,7 @@ enum {
 	MSG_TASK_SWITCHTO = 71,
 	MSG_TASK_AFFINITY_CHANGED = 72,
 	MSG_TASK_LATCHED = 73,
+	MSG_TASK_PRIORITY_CHANGED = 74,
 	MSG_CPU_TICK = 128,
 	MSG_CPU_TIMER_EXPIRED = 129,
 	MSG_CPU_NOT_IDLE = 130,
