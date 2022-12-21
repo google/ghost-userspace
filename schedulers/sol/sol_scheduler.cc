@@ -55,6 +55,28 @@ void SolScheduler::ValidatePreExitState() {
   CHECK_EQ(RunqueueSize(), 0);
 }
 
+void SolScheduler::DumpStats() {
+  fprintf(stderr, "\n------------------------------------------------\n");
+
+  float t_d = absl::ToDoubleMicroseconds(dispatch_durations_total_) /
+                iterations_;
+  float t_t = absl::ToDoubleMicroseconds(schedule_durations_total_) /
+                iterations_;
+  float t_a = t_t - t_d;
+  float msg_per_iter = 1.0 * nr_msgs_ / iterations_;
+  float A = msg_per_iter / t_t;
+
+  fprintf(stderr, "global iterations: %lu, nr_msgs %lu, msg/iter %.2f, "
+          "total msg rate (A) %.2f\n",
+          iterations_, nr_msgs_, msg_per_iter, A);
+  fprintf(stderr, "T_d: %.2f, T_a: %.2f, T_t: %.2f\n", t_d, t_a, t_t);
+  fprintf(stderr,
+          "A/S = T_d/T_t: %.2f, Computed S: %.2f, L: %.2f\n",
+          t_d / t_t, A * t_t / t_d, t_a * A);
+
+  fprintf(stderr, "------------------------------------------------\n");
+}
+
 void SolScheduler::DumpAllTasks() {
   fprintf(stderr, "task        state       rq_pos  P\n");
   allocator()->ForEachTask([](Gtid gtid, const SolTask* task) {
@@ -549,15 +571,24 @@ void SolAgent::AgentThread() {
 
       global_scheduler_->EnterSchedule();
 
+      global_scheduler_->EnterDispatch();
       Message msg;
+      uint64_t nr_msgs = 0;
       while (!(msg = global_channel.Peek()).empty()) {
         global_scheduler_->DispatchMessage(msg);
         global_channel.Consume(msg);
+        nr_msgs++;
       }
+      global_scheduler_->ExitDispatch(nr_msgs);
 
       global_scheduler_->GlobalSchedule(status_word(), agent_barrier);
 
       global_scheduler_->ExitSchedule();
+
+      if (global_scheduler_->dump_stats_) {
+        global_scheduler_->dump_stats_ = false;
+        global_scheduler_->DumpStats();
+      }
 
       if (verbose() && debug_out.Edge()) {
         static const int flags =

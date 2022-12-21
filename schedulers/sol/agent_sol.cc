@@ -100,6 +100,7 @@ int main(int argc, char* argv[]) {
   // TODO: this is racy - uap could be deleted already
   ghost::GhostSignals::AddHandler(SIGUSR1, [uap](int) {
     uap->Rpc(ghost::SolScheduler::kDebugRunqueue);
+    uap->Rpc(ghost::SolScheduler::kDumpStats);
     return false;
   });
 

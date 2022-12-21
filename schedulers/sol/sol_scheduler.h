@@ -130,9 +130,24 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 
   void ExitSchedule() {
     CHECK_NE(schedule_timer_start_, absl::UnixEpoch());
-    schedule_durations_ += MonotonicNow() - schedule_timer_start_;
+    absl::Duration iter_time = MonotonicNow() - schedule_timer_start_;
+    schedule_durations_ += iter_time;
+    schedule_durations_total_ += iter_time;
     schedule_timer_start_ = absl::UnixEpoch();
     ++iterations_;
+  }
+
+  // Dispatch is a subset of Schedule.  See AgentThread for details.
+  void EnterDispatch() {
+    CHECK_EQ(dispatch_timer_start_, absl::UnixEpoch());
+    dispatch_timer_start_ = MonotonicNow();
+  }
+
+  void ExitDispatch(uint64_t nr_msgs) {
+    CHECK_NE(dispatch_timer_start_, absl::UnixEpoch());
+    dispatch_durations_total_ += MonotonicNow() - dispatch_timer_start_;
+    dispatch_timer_start_ = absl::UnixEpoch();
+    nr_msgs_ += nr_msgs;
   }
 
   absl::Duration SchedulingOverhead() {
@@ -152,8 +167,13 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
   void DumpState(const Cpu& cpu, int flags) final;
   std::atomic<bool> debug_runqueue_ = false;
 
-  static const int kDebugRunqueue = 1;
-  static const int kGetSchedOverhead = 2;
+  // Triggered via the SIGUSR1 handler.
+  void DumpStats();
+  std::atomic<bool> dump_stats_ = false;
+
+  static constexpr int kDebugRunqueue = 1;
+  static constexpr int kGetSchedOverhead = 2;
+  static constexpr int kDumpStats = 3;
 
  private:
   struct CpuState {
@@ -209,7 +229,11 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 
   absl::Time schedule_timer_start_;
   absl::Duration schedule_durations_;
+  absl::Duration schedule_durations_total_;
   uint64_t iterations_ = 0;
+  absl::Time dispatch_timer_start_;
+  absl::Duration dispatch_durations_total_;
+  uint64_t nr_msgs_ = 0;
 };
 
 // Initializes the task allocator and the Sol scheduler.
@@ -296,6 +320,10 @@ class FullSolAgent : public FullAgent<EnclaveType> {
       case SolScheduler::kGetSchedOverhead:
         response.response_code = absl::ToInt64Nanoseconds(
             global_scheduler_->SchedulingOverhead());
+        return;
+      case SolScheduler::kDumpStats:
+        global_scheduler_->dump_stats_ = true;
+        response.response_code = 0;
         return;
       default:
         response.response_code = -1;
