@@ -325,7 +325,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
 
   // Migrate takes task and places it on cpu's run queue.
   void Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum);
-  Cpu SelectTaskRq(CfsTask* task, const CpuList& eligible_cpus);
+  Cpu SelectTaskRq(CfsTask* task);
   void DumpAllTasks();
 
   void PingCpu(const Cpu& cpu);

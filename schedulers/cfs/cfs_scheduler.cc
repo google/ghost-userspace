@@ -154,11 +154,20 @@ void CfsScheduler::EnclaveReady() {
 // robust.
 // NOTE: This is inherently racy, since we only synchronize on individual rq's
 // we are not guaranteed to see a consistent view of rq loads.
-Cpu CfsScheduler::SelectTaskRq(CfsTask* task, const CpuList& eligible_cpus) {
+Cpu CfsScheduler::SelectTaskRq(CfsTask* task) {
   PrintDebugTaskMessage("SelectTaskRq", nullptr, task);
 
   uint64_t min_load = UINT64_MAX;
   Cpu min_load_cpu = topology()->cpu(MyCpu());
+
+  // Get the intersection of the CPUs in this enclave and the CPU affinity
+  // stored for this task.
+  CpuList eligible_cpus = cpus();
+  eligible_cpus.Intersection(task->cpu_affinity);
+  if (eligible_cpus.Empty()) {
+    DPRINT_CFS(3, absl::StrFormat("[%s]: No CPUs eligible for this task.",
+                                  task->gtid.describe()));
+  }
 
   // Updates the min cpu load variables and returns true if empty.
   auto update_min = [&min_load, &min_load_cpu, &eligible_cpus](uint64_t this_load,
@@ -279,8 +288,8 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
 
   PrintDebugTaskMessage("TaskNew", nullptr, task);
 
-  CpuList eligible_cpus = MachineTopology()->EmptyCpuList();
-  if (GhostHelper()->SchedGetAffinity(task->gtid, eligible_cpus) != 0) {
+  CpuList cpu_affinity = MachineTopology()->EmptyCpuList();
+  if (GhostHelper()->SchedGetAffinity(task->gtid, cpu_affinity) != 0) {
     // SchedGetAffinity can fail if the task does not exist at this point
     // (ESRCH). One example of such condition is: (i) the task enters ghOSt,
     // (ii) another task moves the task out of ghOSt via `sched_setscheduler`,
@@ -290,22 +299,10 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
                       "[%s]: Cannot retrieve the CPU mask. Returned errno: %d.",
                       task->gtid.describe(), errno));
     // Fall back to having all the CPUs eligible.
-    eligible_cpus = cpus();
+    cpu_affinity = cpus();
   }
 
-  task->cpu_affinity = eligible_cpus;
-
-  // Get the intersection of the eligible CPUs and the enclave CPUs. If the
-  // initial affinity of this task is successfully fetched but there is no
-  // eligible CPU (i.e., this intersection being empty), we let SelectTaskRq
-  // decide what to do with this empty CPU list.
-  eligible_cpus.Intersection(cpus());
-  if (eligible_cpus.Empty()) {
-    // Not able to migrate as the eligible CPUs are outside of the enclave.
-    DPRINT_CFS(3, absl::StrFormat("[%s]: No CPUs eligible for the new task.",
-                                  task->gtid.describe()));
-  }
-
+  task->cpu_affinity = cpu_affinity;
   task->seqnum = msg.seqnum();
 
   // Our task does not have an rq assigned to it yet, so we do not need to hold
@@ -322,7 +319,7 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
       CfsScheduler::kNiceToInverseWeight[task->nice - CfsScheduler::kMinNice];
 
   if (payload->runnable) {
-    Cpu cpu = SelectTaskRq(task, eligible_cpus);
+    Cpu cpu = SelectTaskRq(task);
     Migrate(task, cpu, msg.seqnum());
   } else {
     // Wait until task becomes runnable to avoid race between migration
@@ -336,8 +333,6 @@ void CfsScheduler::TaskRunnable(CfsTask* task, const Message& msg) {
       cpu_state(topology()->cpu(task->cpu >= 0 ? task->cpu : sched_getcpu())),
       task);
 
-  CpuList eligible_cpus = task->cpu_affinity;
-
   // If this is our current task, then we will defer its proccessing until
   // PickNextTask. Otherwise, use the normal wakeup logic.
   if (task->cpu >= 0) {
@@ -348,7 +343,7 @@ void CfsScheduler::TaskRunnable(CfsTask* task, const Message& msg) {
     }
   }
 
-  Cpu cpu = SelectTaskRq(task, eligible_cpus);
+  Cpu cpu = SelectTaskRq(task);
   Migrate(task, cpu, msg.seqnum());
 }
 
@@ -653,22 +648,14 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
   CHECK_EQ(task->gtid.id(), payload->gtid);
   CHECK_EQ(task->run_state.Get(), CfsTaskState::kRunning);
 
-  CpuList eligible_cpus = MachineTopology()->EmptyCpuList();
-  if (GhostHelper()->SchedGetAffinity(task->gtid, eligible_cpus) != 0) {
+  CpuList cpu_affinity = MachineTopology()->EmptyCpuList();
+  if (GhostHelper()->SchedGetAffinity(task->gtid, cpu_affinity) != 0) {
     DPRINT_CFS(3, absl::StrFormat("[%s]: Cannot retrieve the CPU mask.",
       task->gtid.describe()));
+    cpu_affinity  = cpus();
   }
 
-  task->cpu_affinity = eligible_cpus;
-
-  // Get the intersection of the eligible CPUs and the enclave CPUs.
-  eligible_cpus.Intersection(cpus());
-  if (eligible_cpus.Empty()) {
-    // Not able to migrate as the eligible CPUs are outside of the enclave.
-    DPRINT_CFS(3, absl::StrFormat("[%s]: No CPUs eligible for migration.",
-      task->gtid.describe()));
-    return;
-  }
+  task->cpu_affinity = cpu_affinity;
 
   // Make sure to remove the task from the current cpu.
   CpuState* cs = cpu_state_of(task);
@@ -680,7 +667,7 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
   }
 
   // Get a target CPU from the eligible CPU list.
-  Cpu target_cpu = SelectTaskRq(task, eligible_cpus);
+  Cpu target_cpu = SelectTaskRq(task);
 
   // When not removing the task from the current RQ, seqnum+1 is necessary
   // because migrating a running task generates a new message, which increments
