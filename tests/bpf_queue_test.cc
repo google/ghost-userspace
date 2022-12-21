@@ -163,6 +163,26 @@ TEST_F(BpfQueueTest, InsertAfterLast) {
   assert_list_is(&list, {0, 1, 2, 3, 7});
 }
 
+TEST_F(BpfQueueTest, PopFirst) {
+  arr_list list = ARR_LIST_HEAD_INITIALIZER;
+  for (int i = 0; i < 5; ++i) {
+    arr_list_insert_tail(elems, kNrElems, &list, &elems[i], link);
+  }
+  assert_list_is(&list, {0, 1, 2, 3, 4});
+
+  std::vector<int> should_be = {0, 1, 2, 3, 4};
+  elem *first;
+  for (int i : {0, 1, 2, 3, 4}) {
+        first = arr_list_pop_first(elems, kNrElems, &list, link);
+        ASSERT_NE(first, nullptr);
+        EXPECT_EQ(first->x, i);
+        should_be.erase(should_be.begin());
+        assert_list_is(&list, should_be);
+  }
+  first = arr_list_pop_first(elems, kNrElems, &list, link);
+  EXPECT_EQ(first, nullptr);
+}
+
 TEST_F(BpfQueueTest, ForEach) {
   static const int kNrIters = 20;  // testing foreach with < kNrElems
   arr_list list = ARR_LIST_HEAD_INITIALIZER;

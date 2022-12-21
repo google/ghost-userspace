@@ -166,6 +166,21 @@ struct arr_list_entry {
 	(elem)->field.next = 0;						\
 })
 
+#define arr_list_pop_first(arr, arr_sz, head, field) ({			\
+	typeof(&arr[0]) first = arr_list_first(arr, arr_sz, head);	\
+	unsigned int id = (head)->first;				\
+	if (first) {							\
+		typeof(&arr[0]) next = arr_list_next(arr, arr_sz, first, field);\
+		if (next)						\
+			next->field.prev = 0;				\
+		(head)->first = (first)->field.next;			\
+		if ((head)->last == id)					\
+			(head)->last = 0;				\
+		first->field.next = 0;					\
+	}								\
+	first;								\
+})
+
 /*
  * Foreach iterators, bounded by 'max' loops to ensure the loop terminates.
  * var and _i must be declared outside the loop.  If 'var' != NULL after the
