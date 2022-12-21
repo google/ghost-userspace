@@ -46,7 +46,7 @@ void PrintDebugTaskMessage(std::string message_name, CpuState* cs,
   DPRINT_CFS(2, absl::StrFormat(
                     "[%s]: %s with state %s, %scurrent", message_name,
                     task->gtid.describe(),
-                    absl::FormatStreamed(CfsTaskState(task->run_state.Get())),
+                    absl::FormatStreamed(task->task_state),
                     (cs && cs->current == task) ? "" : "!"));
 }
 
@@ -80,8 +80,9 @@ CfsScheduler::CfsScheduler(Enclave* enclave, CpuList cpulist,
 void CfsScheduler::DumpAllTasks() {
   fprintf(stderr, "task        state   cpu\n");
   allocator()->ForEachTask([](Gtid gtid, const CfsTask* task) {
-    absl::FPrintF(stderr, "%-12s%-8d%-8d\n", gtid.describe(),
-                  task->run_state.Get(), task->cpu);
+    absl::FPrintF(stderr, "%-12s%-8d%-8d%-8d\n", gtid.describe(),
+                  static_cast<uint32_t>(task->task_state.GetState()),
+                  static_cast<uint32_t>(task->task_state.GetOnRq()), task->cpu);
     return true;
   });
 }
@@ -306,7 +307,7 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
 
   // Our task does not have an rq assigned to it yet, so we do not need to hold
   // an rq lock to set the state.
-  task->run_state.Set(CfsTaskState::RunState::kBlocked);
+  task->task_state.SetState(CfsTaskState::State::kBlocked);
 
   CHECK_GE(payload->nice, CfsScheduler::kMinNice);
   CHECK_LE(payload->nice, CfsScheduler::kMaxNice);
@@ -343,6 +344,7 @@ void CfsScheduler::TaskRunnable(CfsTask* task, const Message& msg) {
   }
 
   Cpu cpu = SelectTaskRq(task);
+  task->task_state.SetOnRq(CfsTaskState::OnRq::kMigrating);
   Migrate(task, cpu, msg.seqnum());
 }
 
@@ -353,12 +355,12 @@ void CfsScheduler::HandleTaskDone(CfsTask* task, bool from_switchto) {
   // TaskRunnable(T1) CPU 1: T1->state = runnable CPU 5: TaskDeparted(T1) CPU
   // 5: rq->erase(T1) - bad because T1 has not been inserted into the rq yet.
   absl::MutexLock l(&cs->run_queue.mu_);
-  CfsTaskState::RunState prev_state = task->run_state.Get();
-  task->run_state.Set(CfsTaskState::RunState::kDone);
+  CfsTaskState::State prev_state = task->task_state.GetState();
+  task->task_state.SetState(CfsTaskState::State::kDone);
 
-  if ((prev_state == CfsTaskState::RunState::kRunning || from_switchto) ||
-      prev_state == CfsTaskState::RunState::kRunnable ||
-      prev_state == CfsTaskState::RunState::kBlocked) {
+  if ((prev_state == CfsTaskState::State::kRunning || from_switchto) ||
+      prev_state == CfsTaskState::State::kRunnable ||
+      prev_state == CfsTaskState::State::kBlocked) {
     if (cs->current != task) {
       // Remove from the rq and free it.
       cs->run_queue.Erase(task);
@@ -367,11 +369,12 @@ void CfsScheduler::HandleTaskDone(CfsTask* task, bool from_switchto) {
     }
     // if cs->current == task, then we will take care of it in PickNextTask.
   } else {
-    // Our assertion in ->run_state.Set(), should keep this from every
+    // Our assertion in ->task_state.Set(), should keep this from every
     // happening.
-    DPRINT_CFS(1, absl::StrFormat(
-                      "TaskDeparted/Dead cases were not exhaustive, got %s",
-                      absl::FormatStreamed(CfsTaskState(prev_state))));
+    DPRINT_CFS(1,
+               absl::StrFormat(
+                   "TaskDeparted/Dead cases were not exhaustive, got %s",
+                   absl::FormatStreamed(CfsTaskState::State(prev_state))));
   }
 }
 
@@ -404,7 +407,7 @@ void CfsScheduler::TaskYield(CfsTask* task, const Message& msg) {
   {
     absl::MutexLock l(&cs->run_queue.mu_);
     // Setting to runnable will trigger a PutPrevTask.
-    task->run_state.Set(CfsTaskState::RunState::kRunnable);
+    task->task_state.SetState(CfsTaskState::State::kRunnable);
   }
 
   if (payload->from_switchto) {
@@ -424,7 +427,7 @@ void CfsScheduler::TaskBlocked(CfsTask* task, const Message& msg) {
 
   {
     absl::MutexLock l(&cs->run_queue.mu_);
-    task->run_state.Set(CfsTaskState::RunState::kBlocked);
+    task->task_state.SetState(CfsTaskState::State::kBlocked);
   }
 
   if (payload->from_switchto) {
@@ -460,7 +463,7 @@ void CfsScheduler::TaskSwitchto(CfsTask* task, const Message& msg) {
 
   {
     absl::MutexLock l(&cs->run_queue.mu_);
-    task->run_state.Set(CfsTaskState::RunState::kBlocked);
+    task->task_state.SetState(CfsTaskState::State::kBlocked);
   }
 }
 
@@ -502,25 +505,25 @@ void CfsScheduler::CfsSchedule(const Cpu& cpu, BarrierToken agent_barrier,
     // queue.
     if (prev) {
       absl::MutexLock l(&cs->run_queue.mu_);
-      switch (prev->run_state.Get()) {
-        case CfsTaskState::RunState::kNumStates:
+      switch (prev->task_state.GetState()) {
+        case CfsTaskState::State::kNumStates:
           CHECK(false);
           break;
-        case CfsTaskState::RunState::kBlocked:
+        case CfsTaskState::State::kBlocked:
           break;
-        case CfsTaskState::RunState::kDone:
+        case CfsTaskState::State::kDone:
           cs->run_queue.Erase(prev);
           allocator()->FreeTask(prev);
           break;
-        case CfsTaskState::RunState::kRunnable:
+        case CfsTaskState::State::kRunnable:
           // This case exclusively handles a task yield:
           // - TaskYield: task->state goes from kRunning -> kRunnable
           // - PickNextTask: we need to put the task back in the rq.
           cs->run_queue.PutPrevTask(prev);
           break;
-        case CfsTaskState::RunState::kRunning:
+        case CfsTaskState::State::kRunning:
           cs->run_queue.PutPrevTask(prev);
-          prev->run_state.Set(CfsTaskState::RunState::kRunnable);
+          prev->task_state.SetState(CfsTaskState::State::kRunnable);
           break;
       }
 
@@ -635,7 +638,7 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
     static_cast<const ghost_msg_payload_task_affinity_changed*>(msg.payload());
 
   CHECK_EQ(task->gtid.id(), payload->gtid);
-  CHECK_EQ(task->run_state.Get(), CfsTaskState::RunState::kRunning);
+  CHECK_EQ(task->task_state.GetState(), CfsTaskState::State::kRunning);
 
   CpuList cpu_affinity = MachineTopology()->EmptyCpuList();
   if (GhostHelper()->SchedGetAffinity(task->gtid, cpu_affinity) != 0) {
@@ -669,6 +672,7 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
   // seqnum and fails Migrate (passed seqnum less than the current seqnum). Even
   // after erasing the task, we need seqnum+1, otherwise the task enters a weird
   // state (no failures though, just hangs).
+  task->task_state.SetOnRq(CfsTaskState::OnRq::kMigrating);
   Migrate(task, target_cpu, msg.seqnum()+1);
 }
 
@@ -689,38 +693,77 @@ void CfsScheduler::TaskPriorityChanged(CfsTask* task, const Message& msg) {
 }
 
 #ifndef NDEBUG
-void CfsTaskState::AssertValidTransition(RunState next) {
-  uint64_t validStates = GetTransitionMap().at(next);
+void CfsTaskState::AssertValidTransition(State next) {
+  State curr = state_;
+  uint64_t valid_states = GetStateTransitionMap().at(next);
 
   // Check if next is actually a valid state to come from.
-  if ((validStates & (1 << static_cast<uint32_t>(run_state_))) == 0) {
-      DPRINT_CFS(1, absl::StrFormat("[%s]: Cannot go from %s -> %s",
-                                    absl::FormatStreamed(task_name_),
-                                    absl::FormatStreamed(run_state_),
-                                    absl::FormatStreamed(next)));
-      DPRINT_CFS(1, absl::StrFormat("[%s]: Valid transitions -> %s are:",
-                                    absl::FormatStreamed(task_name_),
-                                    absl::FormatStreamed(next)));
+  if ((valid_states & (1 << static_cast<uint32_t>(curr))) == 0) {
+    DPRINT_CFS(1, absl::StrFormat("[%s]: Cannot go from %s -> %s",
+                                  absl::FormatStreamed(task_name_),
+                                  absl::FormatStreamed(curr),
+                                  absl::FormatStreamed(next)));
+    DPRINT_CFS(1, absl::StrFormat("[%s]: Valid transitions -> %s are:",
+                                  absl::FormatStreamed(task_name_),
+                                  absl::FormatStreamed(next)));
 
-      // Extract all the valid from states.
-      for (uint32_t i = 0; i < static_cast<uint32_t>(RunState::kNumStates);
-           i++) {
-      if ((validStates & (1 << int(i))) != 0) {
+    // Extract all the valid from states.
+    for (uint32_t i = 0;
+         i < static_cast<uint32_t>(CfsTaskState::State::kNumStates); ++i) {
+      if ((valid_states & (1 << static_cast<uint32_t>(i))) != 0) {
         DPRINT_CFS(1, absl::StrFormat("%s", absl::FormatStreamed(
-                                                CfsTaskState(RunState(i)))));
+            CfsTaskState::State(i))));
       }
-      }
+    }
 
     DPRINT_CFS(1, absl::StrFormat("[%s]: State trace:", task_name_));
-    for (auto s : state_trace_) {
-      DPRINT_CFS(1, absl::StrFormat("[%s]: %s", task_name_,
-                                    absl::FormatStreamed(CfsTaskState(s))));
+    for (const FullState& s : state_trace_) {
+      DPRINT_CFS(1, absl::StrFormat("[%s]: (%s, %s)", task_name_,
+                                    absl::FormatStreamed(s.state),
+                                    absl::FormatStreamed(s.on_rq)));
     }
 
     // We want to crash since we tranisitioned to an invalid state.
     CHECK(false);
   }
 }
+
+void CfsTaskState::AssertValidTransition(OnRq next) {
+  OnRq curr = on_rq_;
+  uint64_t valid_states = GetOnRqTransitionMap().at(next);
+
+  // Check if next is actually a valid state to come from.
+  if ((valid_states & (1 << static_cast<uint32_t>(curr))) == 0) {
+    DPRINT_CFS(1, absl::StrFormat("[%s]: Cannot go from %s -> %s",
+                                  absl::FormatStreamed(task_name_),
+                                  absl::FormatStreamed(curr),
+                                  absl::FormatStreamed(next)));
+    DPRINT_CFS(1, absl::StrFormat("[%s]: Valid transitions -> %s are:",
+                                  absl::FormatStreamed(task_name_),
+                                  absl::FormatStreamed(curr)));
+
+    // Extract all the valid from states.
+    for (uint32_t i = 0;
+         i < static_cast<uint32_t>(CfsTaskState::OnRq::kNumStates);
+         ++i) {
+      DPRINT_CFS(
+          1, absl::StrFormat(
+                 "%s", absl::FormatStreamed(CfsTaskState::OnRq(i))));
+    }
+
+    DPRINT_CFS(1, absl::StrFormat("[%s]: State trace:", task_name_));
+
+    for (const FullState& s : state_trace_) {
+      DPRINT_CFS(1, absl::StrFormat("[%s]: (%s, %s)", task_name_,
+                                    absl::FormatStreamed(s.state),
+                                    absl::FormatStreamed(s.on_rq)));
+    }
+
+    // We want to crash since we tranisitioned to an invalid state.
+    CHECK(false);
+  }
+}
+
 #endif  // !NDEBUG
 
 CfsRq::CfsRq() : min_vruntime_(absl::ZeroDuration()), rq_(&CfsTask::Less) {}
@@ -738,7 +781,8 @@ void CfsRq::EnqueueTask(CfsTask* task) {
   // TODO: come up with more logical way of handling new tasks with
   // existing vruntimes (e.g. migration from another rq).
   task->vruntime = std::max(min_vruntime_, task->vruntime);
-  task->run_state.Set(CfsTaskState::RunState::kRunnable);
+  task->task_state.SetState(CfsTaskState::State::kRunnable);
+  task->task_state.SetOnRq(CfsTaskState::OnRq::kQueued);
   InsertTaskIntoRq(task);
 }
 
@@ -754,8 +798,7 @@ void CfsRq::PutPrevTask(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
 CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
                              CpuState* cs) {
   // Check if we can just keep running the current task.
-  if (prev && prev->run_state.Get() == CfsTaskState::RunState::kRunning &&
-      !cs->preempt_curr) {
+  if (prev && prev->task_state.IsRunning() && !cs->preempt_curr) {
     return prev;
   }
 
@@ -768,24 +811,24 @@ CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
   // it does not, we just transact prev if it does, then we go through to
   // PickNextTask.
   if (prev) {
-    switch (prev->run_state.Get()) {
-      case CfsTaskState::RunState::kNumStates:
+    switch (prev->task_state.GetState()) {
+      case CfsTaskState::State::kNumStates:
         CHECK(false);
         break;
-      case CfsTaskState::RunState::kBlocked:
+      case CfsTaskState::State::kBlocked:
         break;
-      case CfsTaskState::RunState::kDone:
+      case CfsTaskState::State::kDone:
         Erase(prev);
         allocator->FreeTask(prev);
         break;
-      case CfsTaskState::RunState::kRunnable:
+      case CfsTaskState::State::kRunnable:
         PutPrevTask(prev);
         break;
-      case CfsTaskState::RunState::kRunning:
+      case CfsTaskState::State::kRunning:
         // We had the preempt curr flag set, so we need to put our current task
         // back into the rq.
         PutPrevTask(prev);
-        prev->run_state.Set(CfsTaskState::RunState::kRunnable);
+        prev->task_state.SetState(CfsTaskState::State::kRunnable);
         break;
     }
   }
@@ -802,7 +845,7 @@ CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
   auto start_it = rq_.begin();
   CfsTask* task = *start_it;
 
-  task->run_state.Set(CfsTaskState::RunState::kRunning);
+  task->task_state.SetState(CfsTaskState::State::kRunning);
   task->runtime_at_first_pick_ns = task->status_word.runtime();
 
   // Remove the task from the timeline.
@@ -827,7 +870,7 @@ void CfsRq::Erase(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     // DPRINT_CFS(
     //     1, absl::StrFormat(
     //            "[%s] Attempted to remove task with state %d while not in rq",
-    //            task->gtid.describe(), task->run_state.Get()));
+    //            task->gtid.describe(), task->task_state.Get()));
     // CHECK(false);
   }
 }
@@ -847,8 +890,7 @@ void CfsRq::UpdateMinVruntime(CpuState* cs) {
   // If our curr task should/is on the rq then it should be in contention
   // for the min vruntime.
   if (curr) {
-    if (curr->run_state.Get() == CfsTaskState::RunState::kRunnable ||
-        curr->run_state.Get() == CfsTaskState::RunState::kRunning) {
+    if (curr->task_state.IsRunnable() || curr->task_state.IsRunning()) {
       vruntime = curr->vruntime;
     } else {
       curr = nullptr;
@@ -933,23 +975,36 @@ void CfsAgent::AgentThread() {
   }
 }
 
-std::ostream& operator<<(std::ostream& os, CfsTaskState::RunState state) {
+std::ostream& operator<<(std::ostream& os, CfsTaskState::State state) {
   switch (state) {
-    case CfsTaskState::RunState::kBlocked:
+    case CfsTaskState::State::kBlocked:
       return os << "kBlocked";
-    case CfsTaskState::RunState::kDone:
+    case CfsTaskState::State::kDone:
       return os << "kDone";
-    case CfsTaskState::RunState::kRunning:
+    case CfsTaskState::State::kRunning:
       return os << "kRunning";
-    case CfsTaskState::RunState::kRunnable:
+    case CfsTaskState::State::kRunnable:
       return os << "kRunnable";
-    case CfsTaskState::RunState::kNumStates:
+    case CfsTaskState::State::kNumStates:
+      return os << "SENTINEL";
+  }
+}
+
+std::ostream& operator<<(std::ostream& os, CfsTaskState::OnRq state) {
+  switch (state) {
+    case CfsTaskState::OnRq::kQueued:
+      return os << "kQueued";
+    case CfsTaskState::OnRq::kMigrating:
+      return os << "kMigrating";
+    case CfsTaskState::OnRq::kNumStates:
       return os << "SENTINEL";
   }
 }
 
 std::ostream& operator<<(std::ostream& os, const CfsTaskState& state) {
-  return os << state.Get();
+  return os << absl::StrFormat(
+             "(%s, %s)", absl::FormatStreamed(state.GetState()),
+             absl::FormatStreamed(state.GetOnRq()));
 }
 
 }  //  namespace ghost

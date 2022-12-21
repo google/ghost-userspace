@@ -36,77 +36,140 @@ namespace ghost {
 // debugging asserts.
 class CfsTaskState {
  public:
-  enum class RunState : uint32_t {
+  enum class State : uint32_t {
     kBlocked = 0,  // Task cannot run
     kRunnable,     // Task can run
     kRunning,      // Task is running (up to preemption by the agent itself)
     kDone,         // Task is dead or departed
     kNumStates,
   };
+
+  enum class OnRq : uint32_t {
+    kQueued = 0,  // Task is not migrating and can be migrated.
+    kMigrating,   // Task is currently migrating and on a migration
+                  // queue.
+    kNumStates,
+  };
+
   // Make sure state transition asserts work. i.e., Transition is represented
   // as uint64_t bit mask.
-  static_assert(static_cast<uint32_t>(RunState::kNumStates) <
+  static_assert(static_cast<uint32_t>(State::kNumStates) <=
+                sizeof(uint64_t) * CHAR_BIT);
+  static_assert(static_cast<uint32_t>(OnRq::kNumStates) <=
                 sizeof(uint64_t) * CHAR_BIT);
 
-  explicit CfsTaskState(RunState run_state)
-      : run_state_(run_state), task_name_("") {}
-  explicit CfsTaskState(RunState run_state, absl::string_view task_name)
-      : run_state_(run_state), task_name_(task_name) {}
+  explicit CfsTaskState(State state)
+      : CfsTaskState(state, OnRq::kMigrating, "") {}
+  explicit CfsTaskState(State state, absl::string_view task_name)
+      : CfsTaskState(state, OnRq::kMigrating, task_name) {}
+  explicit CfsTaskState(State state, OnRq on_rq, absl::string_view task_name)
+      : state_(state), on_rq_(on_rq), task_name_(task_name) {}
 
   // Make sure no one accidentally does something that'll mess up tracking like
-  // task.run_state = CfsTaskState::kBlocked.
+  // task.task_state = CfsTaskState(CfsTaskState::kBlocked)
   CfsTaskState(const CfsTaskState&) = delete;
   CfsTaskState& operator=(const CfsTaskState&) = delete;
 
-  RunState Get() const { return run_state_; }
-  void Set(RunState run_state) {
+  // Convenience functions for accessing running state.
+  inline bool IsBlocked() const { return state_ == State::kBlocked; }
+  inline bool IsRunning() const { return state_ == State::kRunning; }
+  inline bool IsRunnable() const { return state_ == State::kRunnable; }
+  inline bool IsDone() const { return state_ == State::kDone; }
+
+  // Convenience functions for accessing on_rq state.
+  inline bool OnRqQueued() const { return on_rq_ == OnRq::kQueued; }
+  inline bool OnRqMigrating() const { return on_rq_ == OnRq::kMigrating; }
+
+  // Accessors.
+  State GetState() const { return state_; }
+  OnRq GetOnRq() const { return on_rq_; }
+
+  // Only sets the run state without manipulating the migration state. For
+  // simplicity, we let a task to make transition either between migration
+  // states or run states but not both at the same time.
+  void SetState(State state) {
 #ifndef NDEBUG
-    // These assertions are expensive, relatively, so don't even try them unless
-    // we are in debug mode.
-    state_trace_.push_back(run_state);
-    AssertValidTransition(run_state);
+    state_trace_.push_back({.state = state, .on_rq = on_rq_});
+    AssertValidTransition(state);
 #endif
-    run_state_ = run_state;
+    state_ = state;
+  }
+
+  // Only sets the migration state without manipulating the run state. For
+  // simplicity, we let a task to make transition either between migration
+  // states or run states but not both at the same time.
+  void SetOnRq(OnRq on_rq) {
+#ifndef NDEBUG
+    state_trace_.push_back({.state = state_, .on_rq = on_rq});
+    AssertValidTransition(on_rq);
+#endif
+    on_rq_ = on_rq;
   }
 
  private:
+  struct FullState {
+    State state;
+    OnRq on_rq;
+  };
+
 #ifndef NDEBUG
-  void AssertValidTransition(RunState next);
-  const std::map<RunState, uint64_t>& GetTransitionMap() {
+  void AssertValidTransition(State next);
+  void AssertValidTransition(OnRq next);
+  const std::map<State, uint64_t>& GetStateTransitionMap() {
     static const auto* map =
-        new std::map<RunState, uint64_t>{{RunState::kBlocked, kToBlocked},
-                                         {RunState::kRunnable, kToRunnable},
-                                         {RunState::kRunning, kToRunning},
-                                         {RunState::kDone, kToDone}};
+        new std::map<State, uint64_t>{{State::kBlocked, kToBlocked},
+                                      {State::kRunnable, kToRunnable},
+                                      {State::kRunning, kToRunning},
+                                      {State::kDone, kToDone}};
+    return *map;
+  }
+
+  const std::map<OnRq, uint64_t>& GetOnRqTransitionMap() {
+    static const auto* map =
+        new std::map<OnRq, uint64_t>{{OnRq::kQueued, kToQueued},
+                                     {OnRq::kMigrating, kToMigrating}};
     return *map;
   }
 #endif  // !NDEBUG
 
-  RunState run_state_;
+  // Tracks the running state of this task.
+  State state_;
+  // Tracks the run queue state of this task.
+  OnRq on_rq_;
+
   absl::string_view task_name_;
 
 #ifndef NDEBUG
-  //TODO: Consider minimizing if(n)def NDEBUG blocks.
-  std::vector<RunState> state_trace_;
+  // TODO: Consider minimizing if(n)def NDEBUG blocks.
+  std::vector<FullState> state_trace_;
   // State Transition Map. Each kToBlah encodes valid states such that we can
   // transition to blah. To validate that we can go from kFoo to kBar, we check
   // that the correct bit it set. e.g. (kToFoo & (1 << kBar)) == 1 iff kBar ->
   // kFoo is valid.
   constexpr static uint64_t kToBlocked =
-      (1 << static_cast<uint32_t>(RunState::kRunning)) +
-      (1 << static_cast<uint32_t>(RunState::kBlocked));
+      (1 << static_cast<uint32_t>(State::kRunning)) +
+      (1 << static_cast<uint32_t>(State::kBlocked));
   constexpr static uint64_t kToRunnable =
-      (1 << static_cast<uint32_t>(RunState::kBlocked)) +
-      (1 << static_cast<uint32_t>(RunState::kRunning));
+      (1 << static_cast<uint32_t>(State::kBlocked)) +
+      (1 << static_cast<uint32_t>(State::kRunning));
   constexpr static uint64_t kToRunning =
-      (1 << static_cast<uint32_t>(RunState::kRunnable)) +
-      (1 << static_cast<uint32_t>(RunState::kRunning));
+      (1 << static_cast<uint32_t>(State::kRunnable)) +
+      (1 << static_cast<uint32_t>(State::kRunning));
   constexpr static uint64_t kToDone =
-      (1 << static_cast<uint32_t>(RunState::kRunnable)) +
-      (1 << static_cast<uint32_t>(RunState::kBlocked)) +
-      (1 << static_cast<uint32_t>(RunState::kRunning));
+      (1 << static_cast<uint32_t>(State::kRunnable)) +
+      (1 << static_cast<uint32_t>(State::kBlocked)) +
+      (1 << static_cast<uint32_t>(State::kRunning));
+
+  constexpr static uint64_t kToQueued =
+      1 << static_cast<uint32_t>(OnRq::kMigrating);
+  constexpr static uint64_t kToMigrating =
+      1 << static_cast<uint32_t>(OnRq::kQueued);
 #endif
 };
+
+std::ostream& operator<<(std::ostream& os, CfsTaskState::State state);
+std::ostream& operator<<(std::ostream& os, CfsTaskState::OnRq state);
+std::ostream& operator<<(std::ostream& os, const CfsTaskState& state);
 
 struct CpuState;
 
@@ -125,8 +188,10 @@ struct CfsTask : public Task<> {
     return a->vruntime < b->vruntime;
   }
 
-  CfsTaskState run_state =
-      CfsTaskState(CfsTaskState::RunState::kBlocked, gtid.describe());
+  CfsTaskState task_state =
+      CfsTaskState(CfsTaskState::State::kBlocked,
+                   CfsTaskState::OnRq::kMigrating,
+                   gtid.describe());
   int cpu = -1;
 
   // Nice value and its corresponding weight/inverse-weight values for this
@@ -150,7 +215,7 @@ struct CfsTask : public Task<> {
   uint64_t runtime_at_first_pick_ns;
 };
 
-std::ostream& operator<<(std::ostream& os, CfsTaskState::RunState state);
+std::ostream& operator<<(std::ostream& os, CfsTaskState::State state);
 std::ostream& operator<<(std::ostream& os, const CfsTaskState& state);
 
 class CfsRq {
@@ -419,9 +484,7 @@ class FullCfsAgent : public FullAgent<EnclaveType> {
     this->enclave_.Ready();
   }
 
-  ~FullCfsAgent() override {
-    this->TerminateAgentTasks();
-  }
+  ~FullCfsAgent() override { this->TerminateAgentTasks(); }
 
   std::unique_ptr<Agent> MakeAgent(const Cpu& cpu) override {
     return std::make_unique<CfsAgent>(&this->enclave_, cpu, scheduler_.get());
