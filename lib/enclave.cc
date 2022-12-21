@@ -616,6 +616,10 @@ bool LocalEnclave::CompleteRunRequest(RunRequest* req) {
     case GHOST_TXN_POISONED:
       break;
 
+    // txn aborted.
+    case GHOST_TXN_ABORTED:
+      break;
+
     // target already on cpu
     case GHOST_TXN_TARGET_ONCPU:
       if (req->allow_txn_target_on_cpu()) {
