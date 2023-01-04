@@ -106,7 +106,6 @@ cc_binary(
 cc_library(
     name = "cfs_scheduler",
     srcs = [
-        "schedulers/cfs/cfs_agent.cc",
         "schedulers/cfs/cfs_scheduler.cc",
         "schedulers/cfs/cfs_scheduler.h",
     ],
