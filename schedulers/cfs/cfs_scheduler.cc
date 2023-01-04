@@ -238,7 +238,7 @@ Cpu CfsScheduler::SelectTaskRq(CfsTask* task) {
   return min_load_cpu;
 }
 
-void CfsScheduler::Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum) {
+bool CfsScheduler::Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum) {
   // The task is not visible to anyone except the agent currently proccessing
   // the task as the only way to get to migrate is if the task is not
   // currently on a rq, so it would be impossible for anyone else to touch the
@@ -256,6 +256,17 @@ void CfsScheduler::Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum) {
   CpuState* cs = cpu_state(cpu);
   const Channel* channel = cs->channel.get();
 
+  // Short-circuit if we are trying to migrate to the same cpu.
+  if (task->cpu == cpu.id()) {
+    absl::MutexLock l(&cs->run_queue.mu_);
+    task->task_state.SetOnRq(CfsTaskState::OnRq::kQueued);
+    if (task->task_state.IsRunnable()) {
+      cs->run_queue.EnqueueTask(task);
+    }
+
+    return true;
+  }
+
   // There is a dangerous interleaving where we hang inside AssociateTask, after
   // changing the task's queue from the current CPU A to the target CPU B (the
   // one we are migrating to). Once this happens, we will recieve messages on
@@ -269,18 +280,46 @@ void CfsScheduler::Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum) {
                    "Could not associate task %s to cpu %d. This is only "
                    "correct if a TaskDeparted message follows.",
                    task->gtid.describe(), cpu.id());
-      return;
+      return false;
     }
 
     GHOST_DPRINT(3, stderr, "Migrating task %s to cpu %d",
                  task->gtid.describe(), cpu.id());
     task->cpu = cpu.id();
 
-    cs->run_queue.EnqueueTask(task);
+    task->task_state.SetOnRq(CfsTaskState::OnRq::kQueued);
+    if (task->task_state.IsRunnable()) {
+      cs->run_queue.EnqueueTask(task);
+    }
   }
 
   // Get the agent's attention so it notices the new task.
   PingCpu(cpu);
+
+  return true;
+}
+
+void CfsScheduler::MigrateTasks(CpuState* cs) {
+  // In MigrateTasks, this agent iterates over the tasks in the migration queue
+  // and removes tasks whose migrations succeed. If a task fails to migrate,
+  // mostly due to new messages for that task, the task will not be removed
+  // from the migration queue and this agent will try to migrate it after the
+  // next draining loop.
+  if (ABSL_PREDICT_TRUE(cs->migration_queue.Empty())) {
+    return;
+  }
+
+  cs->migration_queue.EraseIf([this] (const CfsMq::MigrationArg& arg) {
+    CfsTask* task = arg.task;
+
+    CHECK_NE(task, nullptr);
+    CHECK(task->task_state.OnRqMigrating()) << task->gtid.describe();
+
+    Cpu cpu =
+        arg.dst_cpu < 0 ? SelectTaskRq(task) : topology()->cpu(arg.dst_cpu);
+
+    return Migrate(task, cpu, task->seqnum);
+  });
 }
 
 void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
@@ -303,6 +342,7 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
     cpu_affinity = cpus();
   }
 
+  task->cpu = MyCpu();
   task->cpu_affinity = cpu_affinity;
   task->seqnum = msg.seqnum();
 
@@ -320,8 +360,9 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
       CfsScheduler::kNiceToInverseWeight[task->nice - CfsScheduler::kMinNice];
 
   if (payload->runnable) {
-    Cpu cpu = SelectTaskRq(task);
-    Migrate(task, cpu, msg.seqnum());
+    CpuState *cs = cpu_state_of(task);
+    task->task_state.SetState(CfsTaskState::State::kRunnable);
+    cs->migration_queue.EnqueueTask(task);
   } else {
     // Wait until task becomes runnable to avoid race between migration
     // and MSG_TASK_WAKEUP showing up on the default channel.
@@ -329,28 +370,30 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
 }
 
 void CfsScheduler::TaskRunnable(CfsTask* task, const Message& msg) {
-  PrintDebugTaskMessage(
-      "TaskRunnable",
-      cpu_state(topology()->cpu(task->cpu >= 0 ? task->cpu : sched_getcpu())),
-      task);
+  CpuState *cs = &cpu_states_[task->cpu];
+  PrintDebugTaskMessage("TaskRunnable", cs, task);
 
   // If this is our current task, then we will defer its proccessing until
   // PickNextTask. Otherwise, use the normal wakeup logic.
   if (task->cpu >= 0) {
-    CpuState* cs = cpu_state_of(task);
     if (cs->current == task) {
       absl::MutexLock l(&cs->run_queue.mu_);
       cs->current = nullptr;
     }
   }
 
-  Cpu cpu = SelectTaskRq(task);
+  task->task_state.SetState(CfsTaskState::State::kRunnable);
   task->task_state.SetOnRq(CfsTaskState::OnRq::kMigrating);
-  Migrate(task, cpu, msg.seqnum());
+
+  cs->migration_queue.EnqueueTask(task);
 }
 
 void CfsScheduler::HandleTaskDone(CfsTask* task, bool from_switchto) {
   CpuState* cs = cpu_state_of(task);
+
+  // Remove any pending migration on this task.
+  cs->migration_queue.Erase(task);
+
   // We might pair the state transition with pulling task of its rq, so lock
   // it. If we don't, we run the risk of the following race: CPU 1:
   // TaskRunnable(T1) CPU 1: T1->state = runnable CPU 5: TaskDeparted(T1) CPU
@@ -623,7 +666,7 @@ void CfsScheduler::Schedule(const Cpu& cpu, const StatusWord& agent_sw) {
     DispatchMessage(msg);
     Consume(cs->channel.get(), msg);
   }
-
+  MigrateTasks(cs);
   CfsSchedule(cpu, agent_barrier, agent_sw.boosted_priority());
 }
 
@@ -658,23 +701,19 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
 
   // Make sure to remove the task from the current cpu.
   CpuState* cs = cpu_state_of(task);
+  // TODO: We need to support handling affinity changed messages that
+  // are runnable or blocked.
   CHECK_EQ(cs->current, task);
   {
-      absl::MutexLock l(&cs->run_queue.mu_);
-      cs->current = nullptr;
-      cs->run_queue.Erase(task);
+    // TODO: Consider moving this to TaskPreempted message handling.
+    absl::MutexLock l(&cs->run_queue.mu_);
+    cs->current = nullptr;
+    cs->run_queue.Erase(task);
+    task->task_state.SetState(CfsTaskState::State::kRunnable);
   }
 
-  // Get a target CPU from the eligible CPU list.
-  Cpu target_cpu = SelectTaskRq(task);
-
-  // When not removing the task from the current RQ, seqnum+1 is necessary
-  // because migrating a running task generates a new message, which increments
-  // seqnum and fails Migrate (passed seqnum less than the current seqnum). Even
-  // after erasing the task, we need seqnum+1, otherwise the task enters a weird
-  // state (no failures though, just hangs).
   task->task_state.SetOnRq(CfsTaskState::OnRq::kMigrating);
-  Migrate(task, target_cpu, msg.seqnum()+1);
+  cs->migration_queue.EnqueueTask(task);
 }
 
 void CfsScheduler::TaskPriorityChanged(CfsTask* task, const Message& msg) {
@@ -783,8 +822,6 @@ void CfsRq::EnqueueTask(CfsTask* task) {
   // TODO: come up with more logical way of handling new tasks with
   // existing vruntimes (e.g. migration from another rq).
   task->vruntime = std::max(min_vruntime_, task->vruntime);
-  task->task_state.SetState(CfsTaskState::State::kRunnable);
-  task->task_state.SetOnRq(CfsTaskState::OnRq::kQueued);
   InsertTaskIntoRq(task);
 }
 

@@ -93,6 +93,7 @@ cc_binary(
     deps = [
         ":agent",
         ":base",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/functional:any_invocable",
@@ -116,6 +117,7 @@ cc_library(
     deps = [
         ":agent",
         ":base",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/functional:any_invocable",

@@ -14,6 +14,7 @@
 #include <ostream>
 #include <set>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
@@ -317,6 +318,52 @@ class CfsRq {
   std::set<CfsTask*, decltype(&CfsTask::Less)> rq_ ABSL_GUARDED_BY(mu_);
 };
 
+// Migration queue. Neither copyable nor movable.
+class CfsMq {
+ public:
+  // Defines migration request of a CFS task.
+  struct MigrationArg {
+    // Which task should be migrated.
+    CfsTask* task;
+    // To which CPU this migration should happen. -1 if CPU selection can
+    // be deferred to the point we are actually doing the migration.
+    int dst_cpu = -1;
+  };
+  using TryMigrateFn = absl::AnyInvocable<bool(const MigrationArg&)>;
+
+  CfsMq() = default;
+  CfsMq(const CfsMq&) = delete;
+  CfsMq& operator=(CfsMq&) = delete;
+
+  void EnqueueTask(CfsTask* task) {
+    mq_[task->gtid.id()] = { .task = task };
+  }
+
+  void EnqueueTask(CfsTask* task, int dst_cpu) {
+    mq_[task->gtid.id()] = { .task = task, .dst_cpu = dst_cpu };
+  }
+
+  void Erase(CfsTask* task) {
+    mq_.erase(task->gtid.id());
+  }
+
+  void EraseIf(TryMigrateFn try_migrate) {
+    absl::erase_if(mq_, [&try_migrate] (const auto& p) {
+      const CfsMq::MigrationArg& arg = p.second;
+      return try_migrate(arg);
+    });
+  }
+
+  size_t Size() const {
+    return mq_.size();
+  }
+
+  bool Empty() const { return Size() == 0; }
+
+ private:
+  absl::flat_hash_map<int64_t, MigrationArg> mq_;
+};
+
 struct CpuState {
   // current points to the CfsTask that we most recently picked to run on the
   // cpu. Note, we say most recently picked as a txn could fail leaving us with
@@ -326,6 +373,12 @@ struct CpuState {
   std::unique_ptr<Channel> channel = nullptr;
   // the run queue responsible from scheduling tasks on this cpu.
   CfsRq run_queue;
+  // The migration queue that contains tasks whose migrations are in progress.
+  // A non-blocked task can be either on `run_queue` or `migration_queue` but
+  // cannot be on the both queues. Blocked tasks can only be on `migration
+  // queue`. Tasks in this migration queue should be in kMigrating OnRq state
+  // and can be in any run states but kRunning.
+  CfsMq migration_queue;
   // Should we keep running the current task.
   bool preempt_curr = false;
 } ABSL_CACHELINE_ALIGNED;
@@ -428,7 +481,9 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   void HandleTaskDone(CfsTask* task, bool from_switchto);
 
   // Migrate takes task and places it on cpu's run queue.
-  void Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum);
+  bool Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum);
+  // Migrates pending tasks in the migration queue.
+  void MigrateTasks(CpuState* cs);
   Cpu SelectTaskRq(CfsTask* task);
   void DumpAllTasks();
 
