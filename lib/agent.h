@@ -139,7 +139,7 @@ class LocalAgent : public Agent {
 // Otherwise, it is not guaranteed that two arbitrary processes will be able
 // to serialize/deserialize the data in a consistent manner (for instance, due
 // to differences in struct padding, endianness, etc.).
-template <size_t BufferBytes = 1024 /* 1 KiB */>
+template <size_t BufferBytes = 16384 /* 16 KiB */>
 struct AgentRpcBuffer {
   // Converts the input to raw bytes and stores them in the internal data array.
   // Note that T shouldn't contain any pointers, since these pointers will not
