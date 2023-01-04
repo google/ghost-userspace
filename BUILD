@@ -296,7 +296,11 @@ cc_test(
 )
 
 # Makes vmlinux_ghost_*.h files visible to eBPF code.
-exports_files(glob(["kernel/vmlinux_ghost_*.h"]))
+exports_files(glob([
+    "kernel/vmlinux_ghost_*.h",
+]) + [
+    "lib/queue.bpf.h",
+])
 
 cc_library(
     name = "base",
@@ -405,6 +409,60 @@ cc_test(
     copts = compiler_flags,
     deps = [
         ":biff_scheduler",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_binary(
+    name = "agent_cfs_bpf",
+    srcs = [
+        "schedulers/cfs_bpf/agent_cfs.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        ":cfs_bpf_scheduler",
+        "@com_google_absl//absl/debugging:symbolize",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+bpf_skeleton(
+    name = "cfs_bpf_skel",
+    bpf_object = "//third_party/bpf:cfs_bpf",
+    skel_hdr = "schedulers/cfs_bpf/cfs_bpf.skel.h",
+)
+
+cc_library(
+    name = "cfs_bpf_scheduler",
+    srcs = [
+        "schedulers/cfs_bpf/cfs_scheduler.cc",
+    ],
+    hdrs = [
+        "lib/queue.bpf.h",
+        "schedulers/cfs_bpf/cfs_bpf.skel.h",
+        "schedulers/cfs_bpf/cfs_scheduler.h",
+        "//third_party/bpf:cfs_bpf.h",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_absl//absl/strings:str_format",
+        "@linux//:libbpf",
+    ],
+)
+
+cc_test(
+    name = "cfs_bpf_test",
+    size = "small",
+    srcs = [
+        "tests/cfs_bpf_test.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":cfs_bpf_scheduler",
         "@com_google_googletest//:gtest",
     ],
 )

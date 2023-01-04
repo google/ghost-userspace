@@ -13,6 +13,7 @@ licenses(["restricted"])
 
 exports_files([
     "biff_bpf.h",
+    "cfs_bpf.h",
     "common.bpf.h",
     "edf.h",
     "pntring.bpf.h",
@@ -31,6 +32,18 @@ bpf_program(
         "//:kernel/vmlinux_ghost_5_11.h",
     ],
     bpf_object = "biff_bpf.o",
+)
+
+bpf_program(
+    name = "cfs_bpf",
+    src = "cfs.bpf.c",
+    hdrs = [
+        "cfs_bpf.h",
+        "common.bpf.h",
+        "//:kernel/vmlinux_ghost_5_11.h",
+        "//:lib/queue.bpf.h",
+    ],
+    bpf_object = "cfs_bpf.o",
 )
 
 bpf_program(
