@@ -80,6 +80,8 @@ constexpr int kPingAgents = 2;
 constexpr int kRpcSerialize = 3;
 constexpr int kRpcDeserializeArgs = 4;
 constexpr int kGetStatusWordInfo = 5;
+constexpr int kRpcSerializeStatus = 6;
+constexpr int kRpcSerializeStatusOr = 7;
 
 template <size_t MAX_NOTIFICATIONS = 1, class EnclaveType = LocalEnclave>
 class FullSimpleAgent : public FullAgent<EnclaveType> {
@@ -161,6 +163,13 @@ class FullSimpleAgent : public FullAgent<EnclaveType> {
                                              args.arg1, info) != 0) {
           response_code = errno;
         }
+        break;
+      case kRpcSerializeStatus:
+        ASSERT_EQ(response.buffer.SerializeStatus(absl::OkStatus()),
+                  absl::OkStatus());
+        break;
+      case kRpcSerializeStatusOr:
+        ASSERT_EQ(response.buffer.SerializeStatusOr<int>(42), absl::OkStatus());
         break;
       default:
         response_code = -1;
@@ -345,6 +354,34 @@ TEST(AgentTest, RpcArgSerialization) {
 
   int64_t response = ap.Rpc(kRpcDeserializeArgs, args);
   EXPECT_EQ(response, arg_data.three);
+}
+
+// Test serialization of absl::Status.
+TEST(AgentTest, RpcStatusSerialization) {
+  auto ap = AgentProcess<FullSimpleAgent<>, AgentConfig>(
+      AgentConfig(MachineTopology(), MachineTopology()->all_cpus()));
+
+  const AgentRpcResponse& response = ap.RpcWithResponse(kRpcSerializeStatus);
+  ASSERT_EQ(response.response_code, 0);
+
+  absl::StatusOr<absl::Status> status_or = response.buffer.DeserializeStatus();
+  ASSERT_EQ(status_or.status(), absl::OkStatus());
+  EXPECT_EQ(status_or.value(), absl::OkStatus());
+}
+
+// Test serialization of absl::StatusOr.
+TEST(AgentTest, RpcStatusOrSerialization) {
+  auto ap = AgentProcess<FullSimpleAgent<>, AgentConfig>(
+      AgentConfig(MachineTopology(), MachineTopology()->all_cpus()));
+
+  const AgentRpcResponse& response = ap.RpcWithResponse(kRpcSerializeStatusOr);
+  ASSERT_EQ(response.response_code, 0);
+
+  absl::StatusOr<absl::StatusOr<int>> status_or =
+      response.buffer.DeserializeStatusOr<int>();
+  ASSERT_EQ(status_or.status(), absl::OkStatus());
+  ASSERT_EQ(status_or.value().status(), absl::OkStatus());
+  EXPECT_EQ(status_or.value().value(), 42);
 }
 
 TEST(AgentTest, ExitHandler) {

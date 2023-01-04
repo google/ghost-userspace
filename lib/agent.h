@@ -28,6 +28,7 @@
 #include "lib/enclave.h"
 #include "lib/ghost.h"
 #include "lib/topology.h"
+#include "lib/trivial_status.h"
 #include "shared/shmem.h"
 
 namespace ghost {
@@ -203,6 +204,15 @@ struct AgentRpcBuffer {
     return absl::OkStatus();
   }
 
+  absl::Status SerializeStatus(const absl::Status& status) {
+    return Serialize<TrivialStatus>(TrivialStatus(status));
+  }
+
+  template <class T>
+  absl::Status SerializeStatusOr(const absl::StatusOr<T>& status_or) {
+    return Serialize<TrivialStatusOr<T>>(TrivialStatusOr<T>(status_or));
+  }
+
   // See comment above for `Serialize<T>(const T& t, size_t size)`. This
   // function does the same thing but assumes that the size of `T` is
   // `sizeof(T)`. In some cases, such as array pointers, this is not true. In
@@ -287,6 +297,25 @@ struct AgentRpcBuffer {
           "Deserialize using invalid string length: %zu", string_length));
     }
     return std::string(reinterpret_cast<const char*>(&data[0]), string_length);
+  }
+
+  absl::StatusOr<absl::Status> DeserializeStatus() const {
+    absl::StatusOr<TrivialStatus> deserialize_status =
+        Deserialize<TrivialStatus>();
+    if (!deserialize_status.ok()) {
+      return deserialize_status.status();
+    }
+    return deserialize_status.value().ToStatus();
+  }
+
+  template <class T>
+  absl::StatusOr<absl::StatusOr<T>> DeserializeStatusOr() const {
+    absl::StatusOr<TrivialStatusOr<T>> deserialize_status =
+        Deserialize<TrivialStatusOr<T>>();
+    if (!deserialize_status.ok()) {
+      return deserialize_status.status();
+    }
+    return deserialize_status.value().ToStatusOr();
   }
 
   // This is a region where arbitrary bytes of data can be written (ie. when the

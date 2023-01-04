@@ -57,6 +57,7 @@ cc_library(
         ":base",
         ":ghost",
         ":shared",
+        ":trivial_status",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -67,6 +68,17 @@ cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
         "@linux//:libbpf",
+    ],
+)
+
+cc_library(
+    name = "trivial_status",
+    srcs = ["lib/trivial_status.cc"],
+    hdrs = ["lib/trivial_status.h"],
+    deps = [
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
     ],
 )
 
