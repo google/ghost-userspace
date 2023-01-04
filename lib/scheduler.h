@@ -124,13 +124,19 @@ class Scheduler {
   virtual Channel& GetDefaultChannel() = 0;
 
   // Returns a (const) pointer to this scheduler's topology.
-  const Topology* SchedTopology() const { return enclave_->topology(); }
+  const Topology* SchedTopology() const { return topology(); }
 
   virtual void DumpState(const Cpu& cpu, int flags) {}
 
  protected:
   Enclave* enclave() const { return enclave_; }
-  Topology* topology() const { return enclave_->topology(); }
+  Topology* topology() const {
+    if (enclave_) {
+      return enclave_->topology();
+    } else {
+      return MachineTopology();
+    }
+  }
   const CpuList& cpus() const { return cpus_; }
 
  private:
