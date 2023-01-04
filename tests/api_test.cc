@@ -14,6 +14,7 @@
 #include "gtest/gtest.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/random/random.h"
+#include "absl/status/status.h"
 #include "lib/agent.h"
 #include "lib/ghost.h"
 #include "lib/scheduler.h"
@@ -2180,7 +2181,8 @@ class FullMessageAgent final : public FullAgent<EnclaveType> {
         message = message_store_.At(index);
       }
 
-      response.buffer.Serialize(*message.msg(), message.length());
+      ASSERT_EQ(response.buffer.Serialize(*message.msg(), message.length()),
+                absl::OkStatus());
       response.response_code = 0;
       return;
     }

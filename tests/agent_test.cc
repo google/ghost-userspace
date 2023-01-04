@@ -15,6 +15,7 @@
 #include "gtest/gtest.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/random/random.h"
+#include "absl/status/status.h"
 #include "lib/channel.h"
 #include "lib/scheduler.h"
 
@@ -143,11 +144,16 @@ class FullSimpleAgent : public FullAgent<EnclaveType> {
         }
         break;
       case kRpcSerialize:
-        response.buffer.Serialize<RpcTestData>(kRpcTestData);
+        ASSERT_EQ(response.buffer.Serialize<RpcTestData>(kRpcTestData),
+                  absl::OkStatus());
         break;
-      case kRpcDeserializeArgs:
-        response_code = args.buffer.Deserialize<RpcTestData>().three;
+      case kRpcDeserializeArgs: {
+        absl::StatusOr<RpcTestData> deserialized =
+            args.buffer.Deserialize<RpcTestData>();
+        ASSERT_EQ(deserialized.status(), absl::OkStatus());
+        response_code = deserialized.value().three;
         break;
+      }
       case kGetStatusWordInfo:
         ghost_sw_info info;
         response_code = 0;
@@ -203,12 +209,14 @@ TEST(AgentTest, RpcSerializationSimple) {
     .z = INT_MIN,
   };
   AgentRpcResponse response;
-  response.buffer.Serialize<MyStruct>(s);
-  MyStruct deserialized = response.buffer.Deserialize<MyStruct>();
+  ASSERT_EQ(response.buffer.Serialize<MyStruct>(s), absl::OkStatus());
+  absl::StatusOr<MyStruct> deserialized =
+      response.buffer.Deserialize<MyStruct>();
+  ASSERT_EQ(deserialized.status(), absl::OkStatus());
 
-  EXPECT_EQ(s.x, deserialized.x);
-  EXPECT_EQ(s.y, deserialized.y);
-  EXPECT_EQ(s.z, deserialized.z);
+  EXPECT_EQ(s.x, deserialized.value().x);
+  EXPECT_EQ(s.y, deserialized.value().y);
+  EXPECT_EQ(s.z, deserialized.value().z);
 }
 
 // Basic test of serialization/deserialization, doing these operations in-place
@@ -224,11 +232,13 @@ TEST(AgentTest, RpcSerializationSimpleSize) {
       .z = INT_MIN,
   };
   AgentRpcResponse response;
-  response.buffer.Serialize<MyStruct>(s, sizeof(s));
+  ASSERT_EQ(response.buffer.Serialize<MyStruct>(s, sizeof(s)),
+            absl::OkStatus());
 
   MyStruct deserialized;
   memset(&deserialized, 0, sizeof(deserialized));
-  response.buffer.Deserialize<MyStruct>(deserialized, sizeof(s));
+  ASSERT_EQ(response.buffer.Deserialize<MyStruct>(deserialized, sizeof(s)),
+                                                  absl::OkStatus());
 
   EXPECT_EQ(s.x, deserialized.x);
   EXPECT_EQ(s.y, deserialized.y);
@@ -247,14 +257,16 @@ TEST(AgentTest, RpcSerializationSimpleVector) {
     to_serialize.push_back({.x = i, .y = i + 2, .z = INT_MIN + i});
   }
   AgentRpcResponse response;
-  response.buffer.SerializeVector<MyStruct>(to_serialize);
+  ASSERT_EQ(response.buffer.SerializeVector<MyStruct>(to_serialize),
+            absl::OkStatus());
 
-  std::vector<MyStruct> deserialized =
+  absl::StatusOr<std::vector<MyStruct>> deserialized =
       response.buffer.DeserializeVector<MyStruct>(kNumIterations);
+  ASSERT_EQ(deserialized.status(), absl::OkStatus());
   for (int i = 0; i < kNumIterations; i++) {
-    EXPECT_EQ(to_serialize[i].x, deserialized[i].x);
-    EXPECT_EQ(to_serialize[i].y, deserialized[i].y);
-    EXPECT_EQ(to_serialize[i].z, deserialized[i].z);
+    EXPECT_EQ(to_serialize[i].x, deserialized.value()[i].x);
+    EXPECT_EQ(to_serialize[i].y, deserialized.value()[i].y);
+    EXPECT_EQ(to_serialize[i].z, deserialized.value()[i].z);
   }
 }
 
@@ -262,8 +274,11 @@ TEST(AgentTest, RpcSerializationString) {
   std::vector<std::string> strings = {"Hello World", "World", "", "Hello"};
   AgentRpcResponse response;
   for (const std::string& s : strings) {
-    response.buffer.SerializeString(s);
-    EXPECT_EQ(response.buffer.DeserializeString(), s);
+    ASSERT_EQ(response.buffer.SerializeString(s), absl::OkStatus());
+    absl::StatusOr<std::string> deserialized =
+        response.buffer.DeserializeString();
+    ASSERT_EQ(deserialized.status(), absl::OkStatus());
+    EXPECT_EQ(deserialized.value(), s);
   }
 }
 
@@ -275,9 +290,10 @@ TEST(AgentTest, RpcSerialization) {
   const AgentRpcResponse& response = ap.RpcWithResponse(kRpcSerialize);
   ASSERT_EQ(response.response_code, 0);
 
-  FullSimpleAgent<>::RpcTestData data =
+  absl::StatusOr<FullSimpleAgent<>::RpcTestData> data =
       response.buffer.Deserialize<FullSimpleAgent<>::RpcTestData>();
-  EXPECT_EQ(data, FullSimpleAgent<>::kRpcTestData);
+  ASSERT_EQ(data.status(), absl::OkStatus());
+  EXPECT_EQ(data.value(), FullSimpleAgent<>::kRpcTestData);
 }
 
 // Test serialization of an object the same size as the buffer.
@@ -291,9 +307,29 @@ TEST(AgentTest, RpcSerializationMaxSize) {
   const LargeStruct s = {
     .arr = {val},
   };
-  response.Serialize<LargeStruct>(s);
-  LargeStruct deserialized = response.Deserialize<LargeStruct>();
-  EXPECT_EQ(s.arr, deserialized.arr);
+  ASSERT_EQ(response.Serialize<LargeStruct>(s), absl::OkStatus());
+  absl::StatusOr<LargeStruct> deserialized =
+      response.Deserialize<LargeStruct>();
+  ASSERT_EQ(deserialized.status(), absl::OkStatus());
+  EXPECT_EQ(s.arr, deserialized.value().arr);
+}
+
+TEST(AgentTest, RpcSerializationExceedMaxSize) {
+  constexpr size_t kResponseSize = 100;
+  struct LargeStruct {
+    std::array<std::byte, kResponseSize + 1> arr;
+  };
+  AgentRpcBuffer<kResponseSize> response;
+  constexpr std::byte val{10};
+  constexpr LargeStruct s = {
+    .arr = {val},
+  };
+  EXPECT_NE(response.Serialize<LargeStruct>(s, kResponseSize + 1),
+            absl::OkStatus());
+
+  LargeStruct l;
+  EXPECT_NE(response.Deserialize<LargeStruct>(l, kResponseSize + 1),
+            absl::OkStatus());
 }
 
 // Test serialization of RPC arguments.
@@ -304,7 +340,8 @@ TEST(AgentTest, RpcArgSerialization) {
   const FullSimpleAgent<>::RpcTestData arg_data =
       FullSimpleAgent<>::kRpcTestData;
   AgentRpcArgs args;
-  args.buffer.Serialize<FullSimpleAgent<>::RpcTestData>(arg_data);
+  EXPECT_EQ(args.buffer.Serialize<FullSimpleAgent<>::RpcTestData>(arg_data),
+            absl::OkStatus());
 
   int64_t response = ap.Rpc(kRpcDeserializeArgs, args);
   EXPECT_EQ(response, arg_data.three);

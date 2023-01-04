@@ -20,6 +20,10 @@
 #include <memory>
 #include <thread>
 
+#include "absl/base/optimization.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_format.h"
 #include "lib/base.h"
 #include "lib/enclave.h"
 #include "lib/ghost.h"
@@ -144,36 +148,49 @@ struct AgentRpcBuffer {
   // of the type T. We have `size` as a parameter rather than use `sizeof(T)`
   // since `sizeof(T)` does not produce the correct size for array pointers.
   template <class T>
-  void Serialize(const T& t, size_t size) {
+  absl::Status Serialize(const T& t, size_t size) {
     static_assert(std::is_trivially_copyable<T>::value,
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,
                   "Template type must not be a pointer.");
     // Template type cannot be larger than the buffer.
-    CHECK_LE(size, BufferBytes);
+    if (ABSL_PREDICT_FALSE(size > BufferBytes)) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Serialize used with too large of a type: %zu", size));
+    }
 
     const std::byte* serialized =
         reinterpret_cast<const std::byte*>(&t);
     std::copy_n(serialized, size, std::begin(data));
+    return absl::OkStatus();
   }
 
   template <class T>
-  void SerializeVector(const std::vector<T>& vt) {
+  absl::Status SerializeVector(const std::vector<T>& vt) {
     static_assert(std::is_trivially_copyable<T>::value,
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,
                   "Template type must not be a pointer.");
     // Template type cannot be larger than the buffer.
-    CHECK_LE(sizeof(T) * vt.size(), BufferBytes);
+    if (ABSL_PREDICT_FALSE(sizeof(T) * vt.size() > BufferBytes)) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "SerializeVector used with too large of a type: %zu items: %zu",
+          sizeof(T), vt.size()));
+    }
 
     for (size_t i = 0; i < vt.size(); i++) {
       const std::byte* serialized = reinterpret_cast<const std::byte*>(&vt[i]);
       std::copy_n(serialized, sizeof(T), std::begin(data) + (sizeof(T) * i));
     }
+    return absl::OkStatus();
   }
 
-  void SerializeString(absl::string_view s) {
-    CHECK_LE(s.size(), BufferBytes - 1);
+  absl::Status SerializeString(absl::string_view s) {
+    if (ABSL_PREDICT_FALSE(s.size() > BufferBytes - 1)) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "SerializeString used with too large of a string: %zu", s.size()));
+    }
+
     std::transform(s.begin(), s.end(), std::begin(data), [](char c) {
       return std::byte(c);
     });
@@ -182,6 +199,8 @@ struct AgentRpcBuffer {
 
     // See DeserializeString().
     string_length = s.size();
+
+    return absl::OkStatus();
   }
 
   // See comment above for `Serialize<T>(const T& t, size_t size)`. This
@@ -190,10 +209,10 @@ struct AgentRpcBuffer {
   // those cases, call `Serialize<T>(const T& t, size_t size)` above and pass
   // the size to the `size` parameter.
   template <class T>
-  void Serialize(const T& t) {
+  absl::Status Serialize(const T& t) {
     static_assert(sizeof(T) <= BufferBytes,
                   "Template type cannot be larger than the buffer.");
-    Serialize(t, sizeof(T));
+    return Serialize(t, sizeof(T));
   }
 
   // Converts the raw bytes in the internal data array to the given type.
@@ -202,26 +221,35 @@ struct AgentRpcBuffer {
   // as a parameter rather than use `sizeof(T)` since `sizeof(T)` does not
   // produce the correct size for array pointers.
   template <class T>
-  void Deserialize(T& t, size_t size) const {
+  absl::Status Deserialize(T& t, size_t size) const {
     static_assert(std::is_trivially_copyable<T>::value,
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,
                   "Template type must not be a pointer.");
     // Template type cannot be larger than the buffer.
-    CHECK_LE(size, BufferBytes);
+    if (ABSL_PREDICT_FALSE(size > BufferBytes)) {
+      return absl::InvalidArgumentError(
+          absl::StrFormat("Deserialize failed; too large of type: %zu", size));
+    }
 
     std::byte* deserialized = reinterpret_cast<std::byte*>(&t);
     std::copy_n(std::begin(data), size, deserialized);
+
+    return absl::OkStatus();
   }
 
   template <class T>
-  std::vector<T> DeserializeVector(size_t num_elements) const {
+  absl::StatusOr<std::vector<T>> DeserializeVector(size_t num_elements) const {
     static_assert(std::is_trivially_copyable<T>::value,
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,
                   "Template type must not be a pointer.");
     // Template type cannot be larger than the buffer.
-    CHECK_LE(sizeof(T) * num_elements, BufferBytes);
+    if (ABSL_PREDICT_FALSE(sizeof(T) * num_elements > BufferBytes)) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "DeserializeVector failed; too large of type: %zu items: %zu",
+          sizeof(T), num_elements));
+    }
 
     // Note that this construct `num_elements` instance of `T` using the default
     // constructor for `T`.
@@ -239,19 +267,25 @@ struct AgentRpcBuffer {
   // `Deserialize<T>(size_t size)` above and pass the size to the `size`
   // parameter.
   template <class T>
-  T Deserialize() const {
+  absl::StatusOr<T> Deserialize() const {
     static_assert(sizeof(T) <= BufferBytes,
                   "Template type cannot be larger than the buffer.");
     T t;
-    Deserialize<T>(t, sizeof(T));
+    absl::Status status = Deserialize<T>(t, sizeof(T));
+    if (!status.ok()) {
+      return status;
+    }
     return t;
   }
 
-  std::string DeserializeString() const {
+  absl::StatusOr<std::string> DeserializeString() const {
     // We need to use the cached string length, because it is possible that we
     // have serialized a string that contains internal null bytes (for example,
     // this occurs with a proto serialized as a string).
-    CHECK(string_length >= 0 && string_length < BufferBytes);
+    if (ABSL_PREDICT_FALSE(string_length > BufferBytes - 1)) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Deserialize using invalid string length: %zu", string_length));
+    }
     return std::string(reinterpret_cast<const char*>(&data[0]), string_length);
   }
 
