@@ -324,10 +324,10 @@ struct AgentRpcBuffer {
   // of typing this as a templated type, since a given agent might want
   // different RPCs to return different types of responses (all of which must
   // fit within the shared memory region).
-  std::array<std::byte, BufferBytes> data;
+  std::array<std::byte, BufferBytes> data = {};
 
   // For internal use only.
-  size_t string_length;
+  size_t string_length = 0;
 };
 
 // Encapsulation for any arguments that might need to be passed as part of an
@@ -343,6 +343,19 @@ struct AgentRpcArgs {
   // This buffer may be used to serialize arbitrary plain-old-data as part of
   // the RPC arguments.
   AgentRpcBuffer<> buffer;
+
+  bool operator==(const AgentRpcArgs& compare) const {
+    if (this->arg0 != compare.arg0) {
+      return false;
+    }
+    if (this->arg1 != compare.arg1) {
+      return false;
+    }
+    if (this->buffer.data != compare.buffer.data) {
+      return false;
+    }
+    return true;
+  }
 };
 
 // Encapsulates the response for an RPC.
@@ -576,7 +589,7 @@ class AgentProcess {
     _exit(0);
   }
 
-  ~AgentProcess() {
+  virtual ~AgentProcess() {
     sb_->kill_agent_.Notify();
     agent_proc_->WaitForChildExit();
   }
@@ -601,8 +614,8 @@ class AgentProcess {
   // DISCLAIMER: This RPC mechanism is naturally only meant to be used for the
   // shared memory region on a single machine. See AgentRpcBuffer for more
   // details.
-  AgentRpcResponse RpcWithResponse(uint64_t req,
-                                   const AgentRpcArgs& args = AgentRpcArgs()) {
+  virtual AgentRpcResponse RpcWithResponse(
+      uint64_t req, const AgentRpcArgs& args = AgentRpcArgs()) {
     absl::MutexLock lock(&rpc_mutex_);
 
     PerformRpc(req, args);
