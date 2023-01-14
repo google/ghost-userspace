@@ -62,12 +62,13 @@ http_archive(
     strip_prefix = "gflags-827c769e5fc98e0f2a34c47cef953cc6328abced",
 )
 
+# OneTBB live HEAD (Jan 2 2023)
 # A dependency of rocksdb that is required for rocksdb::ClockCache.
 http_archive(
     name = "tbb",
-    url = "https://github.com/oneapi-src/oneTBB/archive/d1667d514df697f05d771602b268e92560c434c4.tar.gz",
-    sha256 = "b5936aac1ffbc3767cae2377199647d663159a597f8e5958c5979bbf3b8d6384",
-    strip_prefix = "oneTBB-d1667d514df697f05d771602b268e92560c434c4",
+    url = "https://github.com/oneapi-src/oneTBB/archive/e6e493f96ec8b7e2e2b4d048ed49356eb54ec2a0.tar.gz",
+    sha256 = "42f11cb14215043b9e49cbce6b22b5bec9f3e59deb14047100b52a1eee34c514",
+    strip_prefix = "oneTBB-e6e493f96ec8b7e2e2b4d048ed49356eb54ec2a0",
 )
 
 http_archive(
