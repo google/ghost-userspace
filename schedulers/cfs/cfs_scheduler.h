@@ -451,6 +451,8 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   static constexpr int kCountAllTasks = 2;
 
  protected:
+  // Note: this CPU's rq lock is held during the draining callbacks listed
+  // below.
   void TaskNew(CfsTask* task, const Message& msg) final;
   void TaskRunnable(CfsTask* task, const Message& msg) final;
   void TaskDeparted(CfsTask* task, const Message& msg) final;
@@ -468,6 +470,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   void DrainChannel(const Cpu& cpu);
 
   // Checks if we should preempt the current task. If so, sets preempt_curr_.
+  // Note: Should be called with this CPU's rq mutex lock held.
   void CheckPreemptTick(const Cpu& cpu);
 
   // CfsSchedule looks at the current cpu state and its run_queue, decides what
@@ -478,6 +481,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   // HandleTaskDone is responsible for remvoing a task from the run queue and
   // freeing it if it is currently !cs->current, otherwise, it defers the
   // freeing to PickNextTask.
+  // Note: Should be called with this CPU's rq mutex lock held.
   void HandleTaskDone(CfsTask* task, bool from_switchto);
 
   // Migrate takes task and places it on cpu's run queue.

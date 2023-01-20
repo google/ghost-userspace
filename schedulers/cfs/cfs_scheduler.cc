@@ -361,6 +361,7 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
 
   if (payload->runnable) {
     CpuState *cs = cpu_state_of(task);
+    cs->run_queue.mu_.AssertHeld();
     task->task_state.SetState(CfsTaskState::State::kRunnable);
     cs->migration_queue.EnqueueTask(task);
   } else {
@@ -372,12 +373,12 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
 void CfsScheduler::TaskRunnable(CfsTask* task, const Message& msg) {
   CpuState *cs = &cpu_states_[task->cpu];
   PrintDebugTaskMessage("TaskRunnable", cs, task);
+  cs->run_queue.mu_.AssertHeld();
 
   // If this is our current task, then we will defer its proccessing until
   // PickNextTask. Otherwise, use the normal wakeup logic.
   if (task->cpu >= 0) {
     if (cs->current == task) {
-      absl::MutexLock l(&cs->run_queue.mu_);
       cs->current = nullptr;
     }
   }
@@ -388,8 +389,13 @@ void CfsScheduler::TaskRunnable(CfsTask* task, const Message& msg) {
   cs->migration_queue.EnqueueTask(task);
 }
 
-void CfsScheduler::HandleTaskDone(CfsTask* task, bool from_switchto) {
+// Disable thread safety analysis as this function is called with rq lock held
+// but it's hard for the compiler to infer. Without this annotation, the
+// compiler raises safety analysis error.
+void CfsScheduler::HandleTaskDone(CfsTask* task, bool from_switchto)
+  ABSL_NO_THREAD_SAFETY_ANALYSIS {
   CpuState* cs = cpu_state_of(task);
+  cs->run_queue.mu_.AssertHeld();
 
   // Remove any pending migration on this task.
   cs->migration_queue.Erase(task);
@@ -398,7 +404,6 @@ void CfsScheduler::HandleTaskDone(CfsTask* task, bool from_switchto) {
   // it. If we don't, we run the risk of the following race: CPU 1:
   // TaskRunnable(T1) CPU 1: T1->state = runnable CPU 5: TaskDeparted(T1) CPU
   // 5: rq->erase(T1) - bad because T1 has not been inserted into the rq yet.
-  absl::MutexLock l(&cs->run_queue.mu_);
   CfsTaskState::State prev_state = task->task_state.GetState();
   task->task_state.SetState(CfsTaskState::State::kDone);
 
@@ -425,7 +430,9 @@ void CfsScheduler::HandleTaskDone(CfsTask* task, bool from_switchto) {
 void CfsScheduler::TaskDeparted(CfsTask* task, const Message& msg) {
   const ghost_msg_payload_task_departed* payload =
       static_cast<const ghost_msg_payload_task_departed*>(msg.payload());
-  PrintDebugTaskMessage("TaskDeparted", cpu_state_of(task), task);
+  CpuState* cs = cpu_state_of(task);
+  PrintDebugTaskMessage("TaskDeparted", cs, task);
+  cs->run_queue.mu_.AssertHeld();
 
   HandleTaskDone(task, payload->from_switchto);
 
@@ -436,7 +443,10 @@ void CfsScheduler::TaskDeparted(CfsTask* task, const Message& msg) {
 }
 
 void CfsScheduler::TaskDead(CfsTask* task, const Message& msg) {
-  PrintDebugTaskMessage("TaskDead", cpu_state_of(task), task);
+  CpuState* cs = cpu_state_of(task);
+  PrintDebugTaskMessage("TaskDead", cs, task);
+  cs->run_queue.mu_.AssertHeld();
+
   HandleTaskDone(task, false);
 }
 
@@ -446,13 +456,11 @@ void CfsScheduler::TaskYield(CfsTask* task, const Message& msg) {
   Cpu cpu = topology()->cpu(payload->cpu);
   CpuState* cs = cpu_state(cpu);
   PrintDebugTaskMessage("TaskYield", cs, task);
+  cs->run_queue.mu_.AssertHeld();
 
   CHECK_EQ(cs->current, task);
-  {
-    absl::MutexLock l(&cs->run_queue.mu_);
-    // Setting to runnable will trigger a PutPrevTask.
-    task->task_state.SetState(CfsTaskState::State::kRunnable);
-  }
+  // Setting to runnable will trigger a PutPrevTask.
+  task->task_state.SetState(CfsTaskState::State::kRunnable);
 
   if (payload->from_switchto) {
     Cpu cpu = topology()->cpu(payload->cpu);
@@ -466,13 +474,10 @@ void CfsScheduler::TaskBlocked(CfsTask* task, const Message& msg) {
   Cpu cpu = topology()->cpu(payload->cpu);
   CpuState* cs = cpu_state(cpu);
   PrintDebugTaskMessage("TaskBlocked", cs, task);
+  cs->run_queue.mu_.AssertHeld();
 
   CHECK_EQ(cs->current, task);
-
-  {
-    absl::MutexLock l(&cs->run_queue.mu_);
-    task->task_state.SetState(CfsTaskState::State::kBlocked);
-  }
+  task->task_state.SetState(CfsTaskState::State::kBlocked);
 
   if (payload->from_switchto) {
     Cpu cpu = topology()->cpu(payload->cpu);
@@ -486,6 +491,7 @@ void CfsScheduler::TaskPreempted(CfsTask* task, const Message& msg) {
   Cpu cpu = topology()->cpu(payload->cpu);
   CpuState* cs = cpu_state(cpu);
   PrintDebugTaskMessage("TaskPreempted", cs, task);
+  cs->run_queue.mu_.AssertHeld();
 
   // Skip the check in case cs->current == nullptr. TaskPreempted
   // invoked after the task has been removed from the RQ.
@@ -502,19 +508,22 @@ void CfsScheduler::TaskPreempted(CfsTask* task, const Message& msg) {
 }
 
 void CfsScheduler::TaskSwitchto(CfsTask* task, const Message& msg) {
-  PrintDebugTaskMessage("TaskSwitchTo", cpu_state_of(task), task);
   CpuState* cs = cpu_state_of(task);
+  PrintDebugTaskMessage("TaskSwitchTo", cs, task);
+  cs->run_queue.mu_.AssertHeld();
 
-  {
-    absl::MutexLock l(&cs->run_queue.mu_);
-    task->task_state.SetState(CfsTaskState::State::kBlocked);
-  }
+  task->task_state.SetState(CfsTaskState::State::kBlocked);
 }
 
-void CfsScheduler::CheckPreemptTick(const Cpu& cpu) {
+// Disable thread safety analysis as this function is called with rq lock held
+// but it's hard for the compiler to infer. Without this annotation, the
+// compiler raises safety analysis error.
+void CfsScheduler::CheckPreemptTick(const Cpu& cpu)
+  ABSL_NO_THREAD_SAFETY_ANALYSIS {
   CpuState* cs = cpu_state(cpu);
+  cs->run_queue.mu_.AssertHeld();
+
   if (cs->current) {
-    absl::MutexLock l(&cs->run_queue.mu_);
     // If we were on cpu, check if we have run for longer than
     // Granularity(). If so, force picking another task via setting current
     // to nullptr.
@@ -529,12 +538,16 @@ void CfsScheduler::CheckPreemptTick(const Cpu& cpu) {
 void CfsScheduler::CpuTick(const Message& msg) {
   const ghost_msg_payload_cpu_tick* payload =
       static_cast<const ghost_msg_payload_cpu_tick*>(msg.payload());
+  Cpu cpu = topology()->cpu(payload->cpu);
+  CpuState* cs = cpu_state(cpu);
+  cs->run_queue.mu_.AssertHeld();
+
   // We do not actually need any logic in CpuTick for preemption. Since
   // CpuTick messages wake up the agent, CfsSchedule will eventually be
   // called, which contains the logic for figuring out if we should run the
   // task that was running before we got preempted the agent or if we should
   // reach into our rb tree.
-  CheckPreemptTick(topology()->cpu(payload->cpu));
+  CheckPreemptTick(cpu);
 }
 
 void CfsScheduler::CfsSchedule(const Cpu& cpu, BarrierToken agent_barrier,
@@ -662,9 +675,12 @@ void CfsScheduler::Schedule(const Cpu& cpu, const StatusWord& agent_sw) {
                agent_barrier);
 
   Message msg;
-  while (!(msg = Peek(cs->channel.get())).empty()) {
-    DispatchMessage(msg);
-    Consume(cs->channel.get(), msg);
+  {
+    absl::MutexLock l(&cs->run_queue.mu_);
+    while (!(msg = Peek(cs->channel.get())).empty()) {
+      DispatchMessage(msg);
+      Consume(cs->channel.get(), msg);
+    }
   }
   MigrateTasks(cs);
   CfsSchedule(cpu, agent_barrier, agent_sw.boosted_priority());
@@ -677,7 +693,11 @@ void CfsScheduler::PingCpu(const Cpu& cpu) {
   }
 }
 
-void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
+// Disable thread safety analysis as this function is called with rq lock held
+// but it's hard for the compiler to infer. Without this annotation, the
+// compiler raises safety analysis error.
+void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg)
+  ABSL_NO_THREAD_SAFETY_ANALYSIS {
   const ghost_msg_payload_task_affinity_changed* payload =
     static_cast<const ghost_msg_payload_task_affinity_changed*>(msg.payload());
 
@@ -701,16 +721,16 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg) {
 
   // Make sure to remove the task from the current cpu.
   CpuState* cs = cpu_state_of(task);
+  cs->run_queue.mu_.AssertHeld();
+
   // TODO: We need to support handling affinity changed messages that
   // are runnable or blocked.
   CHECK_EQ(cs->current, task);
-  {
-    // TODO: Consider moving this to TaskPreempted message handling.
-    absl::MutexLock l(&cs->run_queue.mu_);
-    cs->current = nullptr;
-    cs->run_queue.Erase(task);
-    task->task_state.SetState(CfsTaskState::State::kRunnable);
-  }
+
+  // TODO: Consider moving this to TaskPreempted message handling.
+  cs->current = nullptr;
+  cs->run_queue.Erase(task);
+  task->task_state.SetState(CfsTaskState::State::kRunnable);
 
   task->task_state.SetOnRq(CfsTaskState::OnRq::kMigrating);
   cs->migration_queue.EnqueueTask(task);
@@ -720,6 +740,9 @@ void CfsScheduler::TaskPriorityChanged(CfsTask* task, const Message& msg) {
   const ghost_msg_payload_task_priority_changed* payload =
       static_cast<const ghost_msg_payload_task_priority_changed*>(
           msg.payload());
+
+  CpuState* cs = cpu_state_of(task);
+  cs->run_queue.mu_.AssertHeld();
 
   CHECK_EQ(task->gtid.id(), payload->gtid);
   CHECK_GE(payload->nice, CfsScheduler::kMinNice);
