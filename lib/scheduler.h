@@ -80,8 +80,10 @@ struct Task {
   // in-order and no messages were dropped.
   // REQUIRES: Should be invoked for each message associated with *this.
   inline void Advance(uint32_t next_seqnum) {
-    // Assert no missed messages for now.
-    CHECK_EQ(seqnum+1, next_seqnum);
+    // Note: next_seqnum could be greater than seqnum + 1 if BPF has consumed
+    // messages. We only assert that events have not been reordered with this
+    // check.
+    CHECK_GT(next_seqnum, seqnum);
     seqnum.store(next_seqnum);
   }
 
