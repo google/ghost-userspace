@@ -45,9 +45,10 @@ class CfsTaskState {
   };
 
   enum class OnRq : uint32_t {
-    kQueued = 0,  // Task is not migrating and can be migrated.
-    kMigrating,   // Task is currently migrating and on a migration
-                  // queue.
+    kDequeued = 0,  // Task is blocked or not on any run queue.
+    kQueued,        // Task is not migrating and can be migrated.
+    kMigrating,     // Task is currently migrating and on a migration
+                    // queue.
     kNumStates,
   };
 
@@ -154,7 +155,8 @@ class CfsTaskState {
 
   const std::map<OnRq, uint64_t>& GetOnRqTransitionMap() {
     static const auto* map =
-        new std::map<OnRq, uint64_t>{{OnRq::kQueued, kToQueued},
+        new std::map<OnRq, uint64_t>{{OnRq::kDequeued, kToDequeued},
+                                     {OnRq::kQueued, kToQueued},
                                      {OnRq::kMigrating, kToMigrating}};
     return *map;
   }
@@ -189,14 +191,14 @@ class CfsTaskState {
       (1 << static_cast<uint32_t>(State::kBlocked)) +
       (1 << static_cast<uint32_t>(State::kRunning));
 
-  constexpr static uint64_t kToQueued =
-      (1 << static_cast<uint32_t>(OnRq::kMigrating)) +
-      // TODO: Temporarily allow kQueued -> kQueued for previously
-      // kRunning task getting inserted into RQ. This transition will be deleted
-      // from this list when we introduce kDequeued OnRq state.
-      (1 << static_cast<uint32_t>(OnRq::kQueued));
-  constexpr static uint64_t kToMigrating =
+  constexpr static uint64_t kToDequeued =
       1 << static_cast<uint32_t>(OnRq::kQueued);
+  constexpr static uint64_t kToQueued =
+      (1 << static_cast<uint32_t>(OnRq::kDequeued)) +
+      (1 << static_cast<uint32_t>(OnRq::kMigrating));
+  constexpr static uint64_t kToMigrating =
+      (1 << static_cast<uint32_t>(OnRq::kDequeued)) +
+      (1 << static_cast<uint32_t>(OnRq::kQueued));
 #endif
 };
 
@@ -223,7 +225,7 @@ struct CfsTask : public Task<> {
 
   CfsTaskState task_state =
       CfsTaskState(CfsTaskState::State::kBlocked,
-                   CfsTaskState::OnRq::kMigrating,
+                   CfsTaskState::OnRq::kDequeued,
                    gtid.describe());
   int cpu = -1;
 

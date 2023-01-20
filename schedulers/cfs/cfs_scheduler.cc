@@ -351,10 +351,6 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
   task->cpu_affinity = cpu_affinity;
   task->seqnum = msg.seqnum();
 
-  // Our task does not have an rq assigned to it yet, so we do not need to hold
-  // an rq lock to set the state.
-  task->task_state.SetState(CfsTaskState::State::kBlocked);
-
   CHECK_GE(payload->nice, CfsScheduler::kMinNice);
   CHECK_LE(payload->nice, CfsScheduler::kMaxNice);
 
@@ -368,6 +364,7 @@ void CfsScheduler::TaskNew(CfsTask* task, const Message& msg) {
     CpuState *cs = cpu_state_of(task);
     cs->run_queue.mu_.AssertHeld();
     task->task_state.SetState(CfsTaskState::State::kRunnable);
+    task->task_state.SetOnRq(CfsTaskState::OnRq::kMigrating);
     cs->migration_queue.EnqueueTask(task);
   } else {
     // Wait until task becomes runnable to avoid race between migration
@@ -518,6 +515,7 @@ void CfsScheduler::TaskSwitchto(CfsTask* task, const Message& msg) {
   cs->run_queue.mu_.AssertHeld();
 
   task->task_state.SetState(CfsTaskState::State::kBlocked);
+  task->task_state.SetOnRq(CfsTaskState::OnRq::kDequeued);
 }
 
 // Disable thread safety analysis as this function is called with rq lock held
@@ -916,7 +914,7 @@ CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
   task->runtime_at_first_pick_ns = task->status_word.runtime();
 
   // Remove the task from the timeline.
-  rq_.erase(start_it);
+  Erase(task);
 
   // min_vruntime is used for Enqueing new tasks. We want to place them at
   // at least the current moment in time. Placing them before min_vruntime,
@@ -929,17 +927,20 @@ CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
 
 void CfsRq::Erase(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
   DPRINT_CFS(2, absl::StrFormat("[%s]: Erasing task", task->gtid.describe()));
-  if (rq_.erase(task) == 0) {
-    // TODO: Figure out the case where we call Erase, but the task is not
-    // actually in the rq. This seems to sporadically happen when processing a
-    // TaskDeparted message. In reality, this is harmless as adding a check for
-    // is my task in the rq currently would be equivalent.
-    // DPRINT_CFS(
-    //     1, absl::StrFormat(
-    //            "[%s] Attempted to remove task with state %d while not in rq",
-    //            task->gtid.describe(), task->task_state.Get()));
-    // CHECK(false);
+  if (rq_.erase(task)) {
+    task->task_state.SetOnRq(CfsTaskState::OnRq::kDequeued);
+    return;
   }
+
+  // TODO: Figure out the case where we call Erase, but the task is not
+  // actually in the rq. This seems to sporadically happen when processing a
+  // TaskDeparted message. In reality, this is harmless as adding a check for
+  // is my task in the rq currently would be equivalent.
+  // DPRINT_CFS(
+  //     1, absl::StrFormat(
+  //            "[%s] Attempted to remove task with state %d while not in rq",
+  //            task->gtid.describe(), task->task_state.Get()));
+  // CHECK(false);
 }
 
 void CfsRq::UpdateMinVruntime(CpuState* cs) {
@@ -1060,6 +1061,8 @@ std::ostream& operator<<(std::ostream& os, CfsTaskState::State state) {
 
 std::ostream& operator<<(std::ostream& os, CfsTaskState::OnRq state) {
   switch (state) {
+    case CfsTaskState::OnRq::kDequeued:
+      return os << "kDequeued";
     case CfsTaskState::OnRq::kQueued:
       return os << "kQueued";
     case CfsTaskState::OnRq::kMigrating:
