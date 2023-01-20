@@ -300,7 +300,7 @@ class CfsRq {
 
   size_t Size() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return rq_.size(); }
 
-  bool Empty() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return Size() == 0; }
+  bool IsEmpty() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return rq_.empty(); }
 
   // Needs to be called everytime we touch the rq or update a current task's
   // vruntime.
@@ -369,7 +369,7 @@ class CfsMq {
     return mq_.size();
   }
 
-  bool Empty() const { return Size() == 0; }
+  bool IsEmpty() const { return mq_.empty(); }
 
  private:
   absl::flat_hash_map<int64_t, MigrationArg> mq_;
@@ -447,7 +447,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   bool Empty(const Cpu& cpu) {
     CpuState* cs = cpu_state(cpu);
     absl::MutexLock l(&cs->run_queue.mu_);
-    bool res = cs->run_queue.Empty();
+    bool res = cs->run_queue.IsEmpty();
     return res;
   }
 

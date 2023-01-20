@@ -99,7 +99,7 @@ void CfsScheduler::DumpState(const Cpu& cpu, int flags) {
   {
     absl::MutexLock l(&cs->run_queue.mu_);
     if (!(flags & Scheduler::kDumpStateEmptyRQ) && !cs->current &&
-        cs->run_queue.Empty()) {
+        cs->run_queue.IsEmpty()) {
       return;
     }
 
@@ -310,7 +310,7 @@ void CfsScheduler::MigrateTasks(CpuState* cs) {
   // mostly due to new messages for that task, the task will not be removed
   // from the migration queue and this agent will try to migrate it after the
   // next draining loop.
-  if (ABSL_PREDICT_TRUE(cs->migration_queue.Empty())) {
+  if (ABSL_PREDICT_TRUE(cs->migration_queue.IsEmpty())) {
     return;
   }
 
@@ -899,7 +899,7 @@ CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
   }
 
   // First, we reconcile our CpuState with the messaging relating to prev.
-  if (rq_.empty()) {
+  if (IsEmpty()) {
     UpdateMinVruntime(cs);
     return nullptr;
   }
