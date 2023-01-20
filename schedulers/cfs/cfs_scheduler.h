@@ -293,6 +293,11 @@ class CfsRq {
   // DequeueTask 'task' from the runqueue. Task must be on rq.
   void DequeueTask(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
+  // The enqueued task with the smallest vruntime, or a nullptr if there are not
+  // enqueued tasks.
+  CfsTask* LeftmostRqTask() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+    return rq_.empty() ? nullptr : *rq_.begin(); }
+
   size_t Size() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return rq_.size(); }
 
   bool Empty() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return Size() == 0; }

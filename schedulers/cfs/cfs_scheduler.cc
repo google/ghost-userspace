@@ -904,17 +904,10 @@ CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
     return nullptr;
   }
 
-  // Get a pointer to the first task. std::{set, multiset} orders by the ::Less
-  // function, implying that, in our case, the first element has the smallest
-  // vruntime (https://www.cplusplus.com/reference/set/set/).
-  auto start_it = rq_.begin();
-  CfsTask* task = *start_it;
-
+  CfsTask* task = LeftmostRqTask();
+  DequeueTask(task);
   task->task_state.SetState(CfsTaskState::State::kRunning);
   task->runtime_at_first_pick_ns = task->status_word.runtime();
-
-  // Remove the task from the timeline.
-  DequeueTask(task);
 
   // min_vruntime is used for Enqueing new tasks. We want to place them at
   // at least the current moment in time. Placing them before min_vruntime,
@@ -950,8 +943,8 @@ void CfsRq::UpdateMinVruntime(CpuState* cs) {
   // wrt vruntime
   // - if a new task is inserted into the rq, it doesn't get treated unfairly
   // wrt to curr
+  CfsTask* leftmost = LeftmostRqTask();
   CfsTask* curr = cs->current;
-  CfsTask* leftmost = (rq_.empty()) ? nullptr : *rq_.begin();
 
   absl::Duration vruntime = min_vruntime_;
 
