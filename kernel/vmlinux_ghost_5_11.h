@@ -32725,6 +32725,50 @@ struct ghost_queue {
 	struct work_struct free_work;
 };
 
+struct simple_xattrs {
+	struct list_head head;
+	spinlock_t lock;
+};
+
+struct kernfs_iattrs {
+	kuid_t ia_uid;
+	kgid_t ia_gid;
+	struct timespec64 ia_atime;
+	struct timespec64 ia_mtime;
+	struct timespec64 ia_ctime;
+	struct simple_xattrs xattrs;
+	atomic_t nr_user_xattrs;
+	atomic_t user_xattr_size;
+};
+
+struct gf_dirent {
+	char *name;
+	umode_t mode;
+	struct kernfs_ops *ops;
+	loff_t size;
+	bool is_dir;
+};
+
+/*
+ * GHOST: when we have more than one ABI in the kernel, we have differing
+ * definitions of ghost ABI structs, e.g. ghost_msg_payload_task_new.  That will
+ * break CO-RE relocations when libbpf loads BPF programs.
+ *
+ * These structs are defined in header files (e.g. include/uapi/linux/ghost.h)
+ * and meant to be stable for a given ABI, which means we don't need or want the
+ * CO-RE relocations.  But BPF gets them from vmlinux (here).  To turn off the
+ * relocations, just pragma pop and repush the attribute.
+ *
+ * I had to manually move some structs around (e.g. kernfs_iattrs) so that the
+ * ghost ABI structs were all in this block of non-relocatable structs.
+ *
+ * Anytime we regenerate vmlinux, we'll need to manually edit the pragmas again.
+ */
+
+#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
+#pragma clang attribute pop
+#endif
+
 typedef volatile uint32_t _ghost_ring_index_t;
 
 struct ghost_msg {
@@ -32758,30 +32802,6 @@ struct ghost_status_word {
 	uint64_t gtid;
 	int64_t switch_time;
 	uint64_t runtime;
-};
-
-struct simple_xattrs {
-	struct list_head head;
-	spinlock_t lock;
-};
-
-struct kernfs_iattrs {
-	kuid_t ia_uid;
-	kgid_t ia_gid;
-	struct timespec64 ia_atime;
-	struct timespec64 ia_mtime;
-	struct timespec64 ia_ctime;
-	struct simple_xattrs xattrs;
-	atomic_t nr_user_xattrs;
-	atomic_t user_xattr_size;
-};
-
-struct gf_dirent {
-	char *name;
-	umode_t mode;
-	struct kernfs_ops *ops;
-	loff_t size;
-	bool is_dir;
 };
 
 struct ghost_msg_payload_task_dead {
@@ -32924,6 +32944,11 @@ struct bpf_ghost_msg {
 	uint16_t type;
 	uint32_t seqnum;
 };
+
+/* GHOST: end of disabling CO-RE relocations */
+#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
+#pragma clang attribute push (__attribute__((preserve_access_index)), apply_to = record)
+#endif
 
 struct bpf_link;
 
