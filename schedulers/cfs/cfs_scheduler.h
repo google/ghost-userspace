@@ -544,16 +544,12 @@ class CfsConfig : public AgentConfig {
  public:
   CfsConfig() {}
   CfsConfig(Topology* topology, CpuList cpulist)
-      : AgentConfig(topology, std::move(cpulist)) {
-    tick_config_ = CpuTickConfig::kAllTicks;
-  }
+      : AgentConfig(topology, std::move(cpulist)) {}
   CfsConfig(Topology* topology, CpuList cpulist, absl::Duration min_granularity,
             absl::Duration latency)
       : AgentConfig(topology, std::move(cpulist)),
         min_granularity_(min_granularity),
-        latency_(latency) {
-    tick_config_ = CpuTickConfig::kAllTicks;
-  }
+        latency_(latency) {}
 
   absl::Duration min_granularity_;
   absl::Duration latency_;
