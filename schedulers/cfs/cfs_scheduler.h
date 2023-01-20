@@ -427,6 +427,11 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
 
   void EnclaveReady() final;
   Channel& GetDefaultChannel() final { return *default_channel_; };
+  Channel& GetAgentChannel(const Cpu& cpu) final {
+    Channel* channel = cpu_state(cpu)->channel.get();
+    CHECK_NE(channel, nullptr);
+    return *channel;
+  }
 
   bool Empty(const Cpu& cpu) {
     CpuState* cs = cpu_state(cpu);

@@ -122,6 +122,13 @@ class Scheduler {
 
   // All schedulers must have some channel that is "default".
   virtual Channel& GetDefaultChannel() = 0;
+  // Gets the right channel for the current agent with cpu information. Should
+  // be called at the beginning of the agent's thread body. Should return the
+  // default channel if the channel for the agent cannot be decided yet or the
+  // scheduler would like to postpone this decision.
+  virtual Channel& GetAgentChannel(const Cpu& cpu) {
+    return GetDefaultChannel();
+  }
 
   // Returns a (const) pointer to this scheduler's topology.
   const Topology* SchedTopology() const { return topology(); }

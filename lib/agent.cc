@@ -32,7 +32,7 @@ void LocalAgent::ThreadBody() {
     // there is a default for the enclave.
     queue_fd = -1;
   } else {
-    queue_fd = s->GetDefaultChannel().GetFd();
+    queue_fd = s->GetAgentChannel(cpu_).GetFd();
   }
 
   CHECK_EQ(prctl(PR_SET_NAME, absl::StrCat("ap_task_", cpu().id()).c_str()), 0);
