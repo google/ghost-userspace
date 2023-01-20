@@ -110,4 +110,7 @@ static void __attribute__((noinline)) clr_dont_idle(struct bpf_ghost_sched *ctx)
 }
 #pragma GCC diagnostic pop
 
+/* Helper to prevent the compiler from optimizing bounds check on x. */
+#define BPF_MUST_CHECK(x) ({ asm volatile ("" : "+r"(x)); x; })
+
 #endif  // GHOST_LIB_BPF_COMMON_BPF_H_

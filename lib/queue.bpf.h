@@ -35,7 +35,9 @@
 #endif
 
 /* Helper to prevent the compiler from optimizing bounds check on x. */
+#ifndef BPF_MUST_CHECK
 #define BPF_MUST_CHECK(x) ({ asm volatile ("" : "+r"(x)); x; })
+#endif
 
 struct arr_list {
 	unsigned int first;

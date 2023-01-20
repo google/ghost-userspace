@@ -600,6 +600,10 @@ class Topology {
   // Returns the number of CPUs per physical core.
   uint32_t smt_count() const { return cpus_[0].siblings->Size(); }
 
+  // Returns the number of CCXs in this topology.
+  // TODO: compute this
+  uint32_t num_ccxs() const { return 0; }
+
   // Returns the number of numa nodes in this topology.
   uint32_t num_numa_nodes() const { return highest_node_idx_ + 1; }
 

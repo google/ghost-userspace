@@ -94,6 +94,7 @@
 
 #include "third_party/bpf/biff_bpf.h"
 #include "third_party/bpf/common.bpf.h"
+#include "third_party/bpf/topology.bpf.h"
 
 #include <asm-generic/errno.h>
 
@@ -167,10 +168,11 @@ static struct biff_bpf_cpu_data *cpu_to_pcpu(u32 cpu)
 	struct __cpu_arr *__ca;
 	u32 zero = 0;
 
-	if (cpu >= BIFF_MAX_CPUS)
-		return NULL;
 	__ca = bpf_map_lookup_elem(&cpu_data, &zero);
 	if (!__ca)
+		return NULL;
+	BPF_MUST_CHECK(cpu);
+	if (cpu >= BIFF_MAX_CPUS)
 		return NULL;
 	return &__ca->e[cpu];
 }
@@ -574,9 +576,14 @@ static void __attribute__((noinline)) handle_cpu_tick(struct bpf_ghost_msg *msg)
 	if (!swd)
 		return;
 
-	/* Arbitrary POLICY: kick anyone off cpu after 50ms */
-	if (bpf_ktime_get_us() - swd->ran_at > 50000)
+	/*
+	 * Arbitrary POLICY: kick anyone off cpu after 50ms, and kick the
+	 * sibling too, just because we can.
+	 */
+	if (bpf_ktime_get_us() - swd->ran_at > 50000) {
 		resched_cpu(cpu);
+		resched_cpu(sibling_of(cpu));
+	}
 }
 
 static void __attribute__((noinline))

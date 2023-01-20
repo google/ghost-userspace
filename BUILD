@@ -393,6 +393,7 @@ cc_library(
         "schedulers/biff/biff_bpf.skel.h",
         "schedulers/biff/biff_scheduler.h",
         "//third_party/bpf:biff_bpf.h",
+        "//third_party/bpf:topology.bpf.h",
     ],
     copts = compiler_flags,
     deps = [

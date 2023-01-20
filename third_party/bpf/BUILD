@@ -21,6 +21,7 @@ exports_files([
     "schedfair.h",
     "schedlat.h",
     "schedrun.h",
+    "topology.bpf.h",
 ])
 
 bpf_program(
@@ -29,6 +30,7 @@ bpf_program(
     hdrs = [
         "biff_bpf.h",
         "common.bpf.h",
+        "topology.bpf.h",
         "//:kernel/vmlinux_ghost_5_11.h",
     ],
     bpf_object = "biff_bpf.o",
