@@ -314,7 +314,7 @@ void CfsScheduler::MigrateTasks(CpuState* cs) {
     return;
   }
 
-  cs->migration_queue.EraseIf([this] (const CfsMq::MigrationArg& arg) {
+  cs->migration_queue.DequeueTaskIf([this] (const CfsMq::MigrationArg& arg) {
     CfsTask* task = arg.task;
 
     CHECK_NE(task, nullptr);
@@ -400,7 +400,7 @@ void CfsScheduler::HandleTaskDone(CfsTask* task, bool from_switchto)
   cs->run_queue.mu_.AssertHeld();
 
   // Remove any pending migration on this task.
-  cs->migration_queue.Erase(task);
+  cs->migration_queue.DequeueTask(task);
 
   // We might pair the state transition with pulling task of its rq, so lock
   // it. If we don't, we run the risk of the following race: CPU 1:
@@ -414,7 +414,7 @@ void CfsScheduler::HandleTaskDone(CfsTask* task, bool from_switchto)
       prev_state == CfsTaskState::State::kBlocked) {
     if (cs->current != task) {
       // Remove from the rq and free it.
-      cs->run_queue.Erase(task);
+      cs->run_queue.DequeueTask(task);
       allocator()->FreeTask(task);
       cs->run_queue.UpdateMinVruntime(cs);
     }
@@ -572,7 +572,7 @@ void CfsScheduler::CfsSchedule(const Cpu& cpu, BarrierToken agent_barrier,
         case CfsTaskState::State::kBlocked:
           break;
         case CfsTaskState::State::kDone:
-          cs->run_queue.Erase(prev);
+          cs->run_queue.DequeueTask(prev);
           allocator()->FreeTask(prev);
           break;
         case CfsTaskState::State::kRunnable:
@@ -732,7 +732,7 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg)
 
   // TODO: Consider moving this to TaskPreempted message handling.
   cs->current = nullptr;
-  cs->run_queue.Erase(task);
+  cs->run_queue.DequeueTask(task);
   task->task_state.SetState(CfsTaskState::State::kRunnable);
 
   task->task_state.SetOnRq(CfsTaskState::OnRq::kMigrating);
@@ -883,7 +883,7 @@ CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
       case CfsTaskState::State::kBlocked:
         break;
       case CfsTaskState::State::kDone:
-        Erase(prev);
+        DequeueTask(prev);
         allocator->FreeTask(prev);
         break;
       case CfsTaskState::State::kRunnable:
@@ -914,7 +914,7 @@ CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
   task->runtime_at_first_pick_ns = task->status_word.runtime();
 
   // Remove the task from the timeline.
-  Erase(task);
+  DequeueTask(task);
 
   // min_vruntime is used for Enqueing new tasks. We want to place them at
   // at least the current moment in time. Placing them before min_vruntime,
@@ -925,14 +925,14 @@ CfsTask* CfsRq::PickNextTask(CfsTask* prev, TaskAllocator<CfsTask>* allocator,
   return task;
 }
 
-void CfsRq::Erase(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+void CfsRq::DequeueTask(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
   DPRINT_CFS(2, absl::StrFormat("[%s]: Erasing task", task->gtid.describe()));
   if (rq_.erase(task)) {
     task->task_state.SetOnRq(CfsTaskState::OnRq::kDequeued);
     return;
   }
 
-  // TODO: Figure out the case where we call Erase, but the task is not
+  // TODO: Figure out the case where we call DequeueTask, but the task is not
   // actually in the rq. This seems to sporadically happen when processing a
   // TaskDeparted message. In reality, this is harmless as adding a check for
   // is my task in the rq currently would be equivalent.

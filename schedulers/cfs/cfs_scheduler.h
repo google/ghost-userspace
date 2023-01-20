@@ -290,8 +290,8 @@ class CfsRq {
   // Enqueue a task that is transitioning from being on the cpu to off the cpu.
   void PutPrevTask(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
-  // Erase 'task' from the runqueue. Task must be on rq.
-  void Erase(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+  // DequeueTask 'task' from the runqueue. Task must be on rq.
+  void DequeueTask(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   size_t Size() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return rq_.size(); }
 
@@ -349,11 +349,11 @@ class CfsMq {
     mq_[task->gtid.id()] = { .task = task, .dst_cpu = dst_cpu };
   }
 
-  void Erase(CfsTask* task) {
+  void DequeueTask(CfsTask* task) {
     mq_.erase(task->gtid.id());
   }
 
-  void EraseIf(TryMigrateFn try_migrate) {
+  void DequeueTaskIf(TryMigrateFn try_migrate) {
     absl::erase_if(mq_, [&try_migrate] (const auto& p) {
       const CfsMq::MigrationArg& arg = p.second;
       return try_migrate(arg);
