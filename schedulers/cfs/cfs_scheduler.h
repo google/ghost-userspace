@@ -190,7 +190,11 @@ class CfsTaskState {
       (1 << static_cast<uint32_t>(State::kRunning));
 
   constexpr static uint64_t kToQueued =
-      1 << static_cast<uint32_t>(OnRq::kMigrating);
+      (1 << static_cast<uint32_t>(OnRq::kMigrating)) +
+      // TODO: Temporarily allow kQueued -> kQueued for previously
+      // kRunning task getting inserted into RQ. This transition will be deleted
+      // from this list when we introduce kDequeued OnRq state.
+      (1 << static_cast<uint32_t>(OnRq::kQueued));
   constexpr static uint64_t kToMigrating =
       1 << static_cast<uint32_t>(OnRq::kQueued);
 #endif

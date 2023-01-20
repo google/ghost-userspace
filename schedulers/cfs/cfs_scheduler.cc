@@ -266,7 +266,6 @@ bool CfsScheduler::Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum) {
   // Short-circuit if we are trying to migrate to the same cpu.
   if (task->cpu == cpu.id()) {
     absl::MutexLock l(&cs->run_queue.mu_);
-    task->task_state.SetOnRq(CfsTaskState::OnRq::kQueued);
     if (task->task_state.IsRunnable()) {
       cs->run_queue.EnqueueTask(task);
     }
@@ -294,7 +293,6 @@ bool CfsScheduler::Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum) {
                  task->gtid.describe(), cpu.id());
     task->cpu = cpu.id();
 
-    task->task_state.SetOnRq(CfsTaskState::OnRq::kQueued);
     if (task->task_state.IsRunnable()) {
       cs->run_queue.EnqueueTask(task);
     }
@@ -1003,6 +1001,7 @@ absl::Duration CfsRq::MinPreemptionGranularity() {
 }
 
 void CfsRq::InsertTaskIntoRq(CfsTask* task) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+  task->task_state.SetOnRq(CfsTaskState::OnRq::kQueued);
   rq_.insert(task);
   min_vruntime_ = (*rq_.begin())->vruntime;
   DPRINT_CFS(2, absl::StrFormat("[%s]: Inserted into run queue",
