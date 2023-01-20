@@ -327,6 +327,25 @@ TEST(AgentTest, RpcSerializationErrorStatusOr) {
   ASSERT_FALSE(status_or.value().ok());
 }
 
+TEST(AgentTest, RpcDeserializationWithoutSerialization) {
+  AgentRpcResponse response;
+
+  int out;
+  EXPECT_FALSE(response.buffer.Deserialize(out, sizeof(out)).ok());
+
+  EXPECT_FALSE(response.buffer.Deserialize<int>().ok());
+
+  EXPECT_FALSE(response.buffer.DeserializeString().ok());
+
+  EXPECT_FALSE(response.buffer.DeserializeVector<int>(1).ok());
+
+  EXPECT_FALSE(response.buffer.DeserializeString().ok());
+
+  EXPECT_FALSE(response.buffer.DeserializeStatus().ok());
+
+  EXPECT_FALSE(response.buffer.DeserializeStatusOr<int>().ok());
+}
+
 // Test serialization of an object the same size as the buffer.
 TEST(AgentTest, RpcSerializationMaxSize) {
   constexpr size_t kResponseSize = 1024;

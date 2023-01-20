@@ -154,6 +154,8 @@ struct AgentRpcBuffer {
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,
                   "Template type must not be a pointer.");
+    is_serialized = false;
+
     // Template type cannot be larger than the buffer.
     if (ABSL_PREDICT_FALSE(size > BufferBytes)) {
       return absl::InvalidArgumentError(absl::StrFormat(
@@ -163,6 +165,7 @@ struct AgentRpcBuffer {
     const std::byte* serialized =
         reinterpret_cast<const std::byte*>(&t);
     std::copy_n(serialized, size, std::begin(data));
+    is_serialized = true;
     return absl::OkStatus();
   }
 
@@ -172,6 +175,8 @@ struct AgentRpcBuffer {
                   "Template type needs to be trivially copyable.");
     static_assert(!std::is_pointer<T>::value,
                   "Template type must not be a pointer.");
+    is_serialized = false;
+
     // Template type cannot be larger than the buffer.
     if (ABSL_PREDICT_FALSE(sizeof(T) * vt.size() > BufferBytes)) {
       return absl::InvalidArgumentError(absl::StrFormat(
@@ -183,10 +188,13 @@ struct AgentRpcBuffer {
       const std::byte* serialized = reinterpret_cast<const std::byte*>(&vt[i]);
       std::copy_n(serialized, sizeof(T), std::begin(data) + (sizeof(T) * i));
     }
+    is_serialized = true;
     return absl::OkStatus();
   }
 
   absl::Status SerializeString(absl::string_view s) {
+    is_serialized = false;
+
     if (ABSL_PREDICT_FALSE(s.size() > BufferBytes - 1)) {
       return absl::InvalidArgumentError(absl::StrFormat(
           "SerializeString used with too large of a string: %zu", s.size()));
@@ -201,6 +209,7 @@ struct AgentRpcBuffer {
     // See DeserializeString().
     string_length = s.size();
 
+    is_serialized = true;
     return absl::OkStatus();
   }
 
@@ -242,6 +251,11 @@ struct AgentRpcBuffer {
           absl::StrFormat("Deserialize failed; too large of type: %zu", size));
     }
 
+    if (!is_serialized) {
+      return absl::InvalidArgumentError(
+          "Calling deserialize without a successful serialize");
+    }
+
     std::byte* deserialized = reinterpret_cast<std::byte*>(&t);
     std::copy_n(std::begin(data), size, deserialized);
 
@@ -259,6 +273,11 @@ struct AgentRpcBuffer {
       return absl::InvalidArgumentError(absl::StrFormat(
           "DeserializeVector failed; too large of type: %zu items: %zu",
           sizeof(T), num_elements));
+    }
+
+    if (!is_serialized) {
+      return absl::InvalidArgumentError(
+          "Calling deserialize without a successful serialize");
     }
 
     // Note that this construct `num_elements` instance of `T` using the default
@@ -296,6 +315,12 @@ struct AgentRpcBuffer {
       return absl::InvalidArgumentError(absl::StrFormat(
           "Deserialize using invalid string length: %zu", string_length));
     }
+
+    if (!is_serialized) {
+      return absl::InvalidArgumentError(
+          "Calling deserialize without a successful serialize");
+    }
+
     return std::string(reinterpret_cast<const char*>(&data[0]), string_length);
   }
 
@@ -323,6 +348,7 @@ struct AgentRpcBuffer {
 
   // For internal use only.
   size_t string_length = 0;
+  bool is_serialized = false;
 };
 
 // Encapsulation for any arguments that might need to be passed as part of an
