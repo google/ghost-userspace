@@ -4,109 +4,73 @@
 // license that can be found in the LICENSE file or at
 // https://developers.google.com/open-source/licenses/bsd
 
-// This is a helper program that moves threads into a specified sched class. The
-// thread TIDs are passed to the process via stdin. See `PrintUsage()` for more
-// details about using this program.
+// This is a helper program that moves threads into the SCHED_OTHER (CFS) sched
+// class. The thread TIDs are passed to the process via stdin. See
+// `PrintUsage()` for more details about using this program.
 
 #include <errno.h>
-#include <fcntl.h>
 #include <sched.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#include "absl/strings/numbers.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
-#include "kernel/ghost_uapi.h"
-#include "lib/base.h"
-#include "lib/logging.h"
 
 namespace {
 
-// For various glibc reasons, this isn't available in glibc/grte. Including
-// uapi/sched.h or sched/types.h will run into conflicts on sched_param.
-struct sched_attr {
-  uint32_t size;
-  uint32_t sched_policy;
-  uint64_t sched_flags;
-  int32_t sched_nice;
-  uint32_t sched_priority;  // overloaded for is/is not an agent
-  uint64_t sched_runtime;   // overloaded for enclave ctl fd
-  uint64_t sched_deadline;
-  uint64_t sched_period;
-};
-
-const char* kEnclavePath = "/sys/fs/ghost/enclave_1/ctl";
-
-void PrintUsage(absl::string_view program_name, int return_code) {
-  absl::FPrintF(stderr, R"(Usage: %s <policy>
-To push tasks into ghOSt:
-    $ cat /dev/cgroup/cpu/mine/tasks | %s %d
-To push tasks into CFS:
-    $ cat /dev/cgroup/cpu/your/tasks | %s %d
+void PrintUsage(absl::string_view program_name) {
+  absl::FPrintF(stderr, R"(Usage:
+To push tasks in a cgroup into CFS:
+    $ cat /dev/cgroup/cpu/your/tasks | %s
+To push ghOSt tasks into CFS:
+    $ cat /sys/fs/ghost/enclave_X/tasks | %s
+To push CFS tasks into ghOSt, please write pids directly to enclave's task
+file. For example,
+    $ cat /dev/cgroup/cpu/your/tasks > /sys/fs/ghost/enclave_X/tasks
 )",
-                program_name, program_name, SCHED_GHOST, program_name,
-                SCHED_OTHER);
-  exit(return_code);
+                program_name, program_name);
 }
 
-// Adds `tid` to the ghOSt sched class.
-int SchedEnterGhost(pid_t tid, int enclave_fd) {
-  sched_attr attr = {
-      .size = sizeof(sched_attr),
-      .sched_policy = SCHED_GHOST,
-      .sched_priority = 0,  // GHOST_SCHED_TASK_PRIO
-      .sched_runtime = static_cast<uint64_t>(enclave_fd),
-  };
-  return syscall(__NR_sched_setattr, tid, &attr, /*flags=*/0);
-}
-
-// Adds `tid` to the sched class specified by `policy`.
-int SchedEnterOther(pid_t tid, int policy) {
+// Adds `pid` to the sched class specified by `policy`.
+int SchedEnterOther(pid_t pid) {
   sched_param param = {0};
-  return sched_setscheduler(tid, policy, &param);
+  return sched_setscheduler(pid, SCHED_OTHER, &param);
 }
 
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  if (argc != 2) {
-    PrintUsage(argv[0], 1);
+  if (argc != 1) {
+    PrintUsage(argv[0]);
+    return 1;
   }
 
-  int policy = -1;
-  CHECK(absl::SimpleAtoi(argv[1], &policy));
-  int enclave_fd = -1;
-  if (policy == SCHED_GHOST) {
-    enclave_fd = open(kEnclavePath, O_RDWR);
-    if (enclave_fd < 0) {
-      absl::FPrintF(stderr, "open(%s): %s\n", kEnclavePath, strerror(errno));
-      exit(1);
-    }
-  }
-
-  absl::FPrintF(stderr, "Setting scheduling policy to %d\n", policy);
-  pid_t tid;
-  while (fscanf(stdin, "%d\n", &tid) != EOF) {
-    absl::FPrintF(stderr, "TID: %d\n", tid);
-    if (sched_getscheduler(tid) == policy) {
-      absl::FPrintF(stderr, "Already in sched class %d, so skipping\n", policy);
+  absl::FPrintF(stderr, "Moving processes to SCHED_OTHER (CFS).\n");
+  pid_t pid;
+  while (fscanf(stdin, "%d\n", &pid) != EOF) {
+    absl::FPrintF(stderr, "pid: %d\n", pid);
+    if (sched_getscheduler(pid) == SCHED_OTHER) {
+      absl::FPrintF(
+          stderr, "Already in sched class SCHED_OTHER, skipping pid %d\n", pid);
       continue;
     }
 
-    int ret = (policy == SCHED_GHOST) ? SchedEnterGhost(tid, enclave_fd)
-                                      : SchedEnterOther(tid, policy);
-    // Check that the thread was successfully moved to the sched class.
-    if (ret) {
-      absl::FPrintF(stderr, "sched_setscheduler(%d) failed: %s\n", tid,
+    if (SchedEnterOther(pid)) {
+      absl::FPrintF(stderr, "sched_setscheduler failed (pid: %d): %s\n", pid,
                     strerror(errno));
-      exit(1);
-    } else {
-      int actual = sched_getscheduler(tid);
-      if (actual != policy) {
-        absl::FPrintF(stderr, "Scheduling policy of %d: want %d, got %d: %s\n",
-                      tid, policy, actual, strerror(errno));
-      }
+    }
+
+    int actual = sched_getscheduler(pid);
+    if (actual < 0) {
+      absl::FPrintF(stderr, "sched_getscheduler for pid %d failed: %s\n", pid,
+                    strerror(errno));
+      return 1;
+    } else if (actual != SCHED_OTHER) {
+      absl::FPrintF(
+          stderr,
+          "Failed to set sched policy of pid %d: want SCHED_OTHER(%d), "
+          "got %d\n",
+          pid, SCHED_OTHER, actual);
     }
   }
 

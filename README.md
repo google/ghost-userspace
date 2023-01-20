@@ -98,7 +98,8 @@ with an individual target name, such as `agent_shinjuku`.
     `BUILD` files to compile the code.
 - `util/`
   -  Helper utilities for ghOSt. For example, `pushtosched` can be used to move
-     a batch of kernel threads to the ghOSt scheduling class.
+     a batch of kernel threads from the ghOSt scheduling class to
+     `CFS (SCHED_OTHER)`.
 
 ---
 
