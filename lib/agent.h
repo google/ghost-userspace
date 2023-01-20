@@ -222,6 +222,10 @@ struct AgentRpcBuffer {
     return Serialize<TrivialStatusOr<T>>(TrivialStatusOr<T>(status_or));
   }
 
+  absl::Status SerializeStatusOrString(const absl::StatusOr<std::string>& s) {
+    return Serialize<TrivialStatusOrString>(TrivialStatusOrString(s));
+  }
+
   // See comment above for `Serialize<T>(const T& t, size_t size)`. This
   // function does the same thing but assumes that the size of `T` is
   // `sizeof(T)`. In some cases, such as array pointers, this is not true. In
@@ -332,6 +336,16 @@ struct AgentRpcBuffer {
   absl::StatusOr<absl::StatusOr<T>> DeserializeStatusOr() const {
     absl::StatusOr<TrivialStatusOr<T>> deserialize_status =
         Deserialize<TrivialStatusOr<T>>();
+    if (!deserialize_status.ok()) {
+      return deserialize_status.status();
+    }
+    return deserialize_status.value().ToStatusOr();
+  }
+
+  absl::StatusOr<absl::StatusOr<std::string>> DeserializeStatusOrString()
+      const {
+    absl::StatusOr<TrivialStatusOrString> deserialize_status =
+        Deserialize<TrivialStatusOrString>();
     if (!deserialize_status.ok()) {
       return deserialize_status.status();
     }

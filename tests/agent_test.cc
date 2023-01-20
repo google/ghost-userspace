@@ -425,6 +425,22 @@ TEST(AgentTest, RpcStatusOrSerialization) {
   EXPECT_EQ(status_or.value().value(), 42);
 }
 
+// Test serialization of absl::StatusOr<std::string>.
+TEST(AgentTest, RpcStatusOrStringSerialization) {
+  std::vector<std::string> strings = {"Hello World", "World", "", "Hello"};
+  AgentRpcResponse response;
+  for (const std::string& s : strings) {
+    absl::StatusOr<std::string> status_or = s;
+    ASSERT_EQ(response.buffer.SerializeStatusOrString(status_or),
+              absl::OkStatus());
+    absl::StatusOr<absl::StatusOr<std::string>> deserialized =
+        response.buffer.DeserializeStatusOrString();
+    ASSERT_EQ(deserialized.status(), absl::OkStatus());
+    ASSERT_EQ(deserialized.value().status(), absl::OkStatus());
+    EXPECT_EQ(deserialized.value().value(), s);
+  }
+}
+
 TEST(AgentTest, ExitHandler) {
   bool ran = false;
 

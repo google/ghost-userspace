@@ -22,11 +22,13 @@ class TrivialStatus {
   bool ok() const { return code_ == absl::StatusCode::kOk; }
 
  private:
+  static constexpr size_t kMaxErrorMessageSize = 1000;
+
   absl::StatusCode code_;
 
   // Sized large enough to handle most error messages. Must fit in
   // AgentRpcBuffer BufferBytes.
-  std::array<char, 1000> error_message_;
+  std::array<char, kMaxErrorMessageSize> error_message_;
 };
 
 // This is a trivially copyable version of absl::StatusOr. This is useful
@@ -69,6 +71,34 @@ class TrivialStatusOr {
 
   // If the status is OK, this stores the contained value.
   T value_;
+};
+
+// This is a trivially copyable version of absl::StatusOr<std::string>. This is
+// useful because it can be serialized across the shared memory AgentRpcBuffer.
+class TrivialStatusOrString {
+ public:
+  explicit TrivialStatusOrString()
+      : status_(TrivialStatus(absl::OkStatus())) {}
+
+  explicit TrivialStatusOrString(const absl::StatusOr<std::string>& s);
+
+  // Returns the absl::StatusOr<std::string> version of this object.
+  absl::StatusOr<std::string> ToStatusOr() const;
+
+  bool ok() const { return status_.ok(); }
+
+ private:
+  static constexpr size_t kMaxStringSize = 15000;
+
+  TrivialStatus status_;
+
+  // If the status is OK, this stores the contained string.
+  // Must fit in AgentRpcBuffer BufferBytes.
+  std::array<char, kMaxStringSize> str_;
+
+  // Not all strings will use null terminators, so we must track the original
+  // size of the std::string.
+  size_t string_length_ = 0;
 };
 
 }  // namespace ghost
