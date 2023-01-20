@@ -305,6 +305,28 @@ TEST(AgentTest, RpcSerialization) {
   EXPECT_EQ(data.value(), FullSimpleAgent<>::kRpcTestData);
 }
 
+TEST(AgentTest, RpcSerializationErrorStatus) {
+  AgentRpcResponse response;
+
+  ASSERT_TRUE(response.buffer.SerializeStatus(absl::UnknownError("")).ok());
+
+  absl::StatusOr<TrivialStatus> status_or = response.buffer.DeserializeStatus();
+  ASSERT_TRUE(status_or.status().ok());
+  ASSERT_FALSE(status_or.value().ok());
+}
+
+TEST(AgentTest, RpcSerializationErrorStatusOr) {
+  AgentRpcResponse response;
+
+  ASSERT_TRUE(
+      response.buffer.SerializeStatusOr<int>(absl::UnknownError("")).ok());
+
+  absl::StatusOr<absl::StatusOr<int>> status_or =
+      response.buffer.DeserializeStatusOr<int>();
+  ASSERT_TRUE(status_or.status().ok());
+  ASSERT_FALSE(status_or.value().ok());
+}
+
 // Test serialization of an object the same size as the buffer.
 TEST(AgentTest, RpcSerializationMaxSize) {
   constexpr size_t kResponseSize = 1024;
@@ -364,9 +386,9 @@ TEST(AgentTest, RpcStatusSerialization) {
   const AgentRpcResponse& response = ap.RpcWithResponse(kRpcSerializeStatus);
   ASSERT_EQ(response.response_code, 0);
 
-  absl::StatusOr<absl::Status> status_or = response.buffer.DeserializeStatus();
+  absl::StatusOr<TrivialStatus> status_or = response.buffer.DeserializeStatus();
   ASSERT_EQ(status_or.status(), absl::OkStatus());
-  EXPECT_EQ(status_or.value(), absl::OkStatus());
+  EXPECT_EQ(status_or.value().ToStatus(), absl::OkStatus());
 }
 
 // Test serialization of absl::StatusOr.

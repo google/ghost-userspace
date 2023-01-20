@@ -299,13 +299,8 @@ struct AgentRpcBuffer {
     return std::string(reinterpret_cast<const char*>(&data[0]), string_length);
   }
 
-  absl::StatusOr<absl::Status> DeserializeStatus() const {
-    absl::StatusOr<TrivialStatus> deserialize_status =
-        Deserialize<TrivialStatus>();
-    if (!deserialize_status.ok()) {
-      return deserialize_status.status();
-    }
-    return deserialize_status.value().ToStatus();
+  absl::StatusOr<TrivialStatus> DeserializeStatus() const {
+    return Deserialize<TrivialStatus>();
   }
 
   template <class T>
