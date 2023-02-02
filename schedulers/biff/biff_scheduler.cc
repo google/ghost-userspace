@@ -42,8 +42,6 @@ BiffScheduler::BiffScheduler(Enclave* enclave, CpuList cpulist,
   bpf_sw_data_ = static_cast<struct biff_bpf_sw_data*>(
       bpf_map__mmap(bpf_obj_->maps.sw_data));
   CHECK_NE(bpf_sw_data_, MAP_FAILED);
-
-  enclave->SetDeliverCpuAvailability(true);
 }
 
 BiffScheduler::~BiffScheduler() {
@@ -56,6 +54,8 @@ void BiffScheduler::EnclaveReady() {
   // Biff has no cpu locality, so the remote wakeup is never worth it.
   enclave()->SetWakeOnWakerCpu(true);
 
+  enclave()->SetDeliverTicks(true);
+  enclave()->SetDeliverCpuAvailability(true);
   WRITE_ONCE(bpf_obj_->bss->initialized, true);
 }
 
