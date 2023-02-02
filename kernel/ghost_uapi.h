@@ -25,7 +25,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION	75
+#define GHOST_VERSION 77
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -262,6 +262,7 @@ enum {
 /* TODO: Move payload to header once all clients updated. */
 struct ghost_msg_payload_task_new {
 	uint64_t gtid;
+	uint64_t parent_gtid;
 	uint64_t runtime;	/* cumulative runtime in ns */
 	uint16_t runnable;
 	int nice;		/* task priority in nice value [-20, 19] */

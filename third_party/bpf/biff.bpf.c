@@ -441,6 +441,7 @@ static void __attribute__((noinline)) handle_new(struct bpf_ghost_msg *msg)
 	swd = gtid_to_swd(gtid);
 	if (!swd)
 		return;
+	swd->parent = new->parent_gtid;
 	swd->ran_until = now;
 	if (new->runnable) {
 		swd->runnable_at = now;

@@ -60,6 +60,7 @@ struct biff_bpf_sw_data {
 	uint64_t ran_at;
 	uint64_t ran_until;
 	uint64_t runnable_at;
+	uint64_t parent;
 } __attribute__((aligned(8)));
 
 

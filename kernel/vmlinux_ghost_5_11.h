@@ -32832,6 +32832,7 @@ struct ghost_sw_info {
 
 struct ghost_msg_payload_task_new {
 	uint64_t gtid;
+	uint64_t parent_gtid;
 	uint64_t runtime;
 	uint16_t runnable;
 	int nice;
