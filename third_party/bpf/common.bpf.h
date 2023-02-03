@@ -40,7 +40,7 @@ static long (*bpf_ghost_resched_cpu)(__u32 cpu, __u64 cpu_seqnum) = (void *) 300
 #define TASK_RUNNING 0
 #define TASK_DEAD 0x0080
 #define MAX_RT_PRIO 100
-#define SEND_TASK_LATCHED (1 << 10)
+#define SEND_TASK_ON_CPU (1 << 10)
 
 static inline u64 min(u64 x, u64 y)
 {

@@ -98,7 +98,7 @@ static inline bool pnt_latch_task_from_ring(int which_ring, int cpu)
 		/* We claimed both the slot and the txn within it. */
 		slot->cpu = cpu;
 		ret = bpf_ghost_run_gtid(slot->gtid, slot->task_barrier,
-					 SEND_TASK_LATCHED);
+					 SEND_TASK_ON_CPU);
 
 		if (!ret) {
 			/*
@@ -239,7 +239,7 @@ static inline struct pnt_ring_slot *pnt_schedule_onto_ring(
 	return slot;
 }
 
-/* Reap a slot for a latched task, e.g. from a MSG_TASK_LATCHED handler. */
+/* Reap a slot for a latched task, e.g. from a MSG_TASK_ON_CPU handler. */
 static inline void pnt_ring_reap_slot(struct pnt_ring_slot *slot)
 {
 	__atomic_store_n(&slot->txn_state, GHOST_TXN_REAPED, __ATOMIC_RELEASE);
@@ -286,7 +286,7 @@ static inline bool pnt_unschedule_ring_slot(struct pnt_ring_slot *slot)
 	if (state == GHOST_TXN_COMPLETE) {
 		/*
 		 * Latching completed.  We'll get a message for this and reap in
-		 * TaskLatched().
+		 * TaskOnCpu().
 		 */
 		return false;
 	}
@@ -313,7 +313,7 @@ static inline int pnt_ring_reap_errors(struct pnt_ring_slot *slot)
 	int64_t state  = __atomic_load_n(&slot->txn_state, __ATOMIC_ACQUIRE);
 
 	if (state == GHOST_TXN_COMPLETE) {
-		/* Successful latches get reaped in TaskLatched(). */
+		/* Successful latches get reaped in TaskOnCpu(). */
 		return 0;
 	}
 	if (state == GHOST_TXN_ABORTED) {

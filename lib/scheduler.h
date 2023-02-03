@@ -389,7 +389,7 @@ class BasicDispatchScheduler : public Scheduler {
   virtual void TaskSwitchto(TaskType* task, const Message& msg) {}
   virtual void TaskAffinityChanged(TaskType* task, const Message& msg) {}
   virtual void TaskPriorityChanged(TaskType* task, const Message& msg) {}
-  virtual void TaskLatched(TaskType* task, const Message& msg) {}
+  virtual void TaskOnCpu(TaskType* task, const Message& msg) {}
 
   virtual void TaskDiscovered(TaskType* task) {}
   virtual void DiscoveryStart() {}
@@ -610,8 +610,8 @@ void BasicDispatchScheduler<TaskType>::DispatchMessage(const Message& msg) {
     case MSG_TASK_PRIORITY_CHANGED:
       TaskPriorityChanged(task, msg);
       break;
-    case MSG_TASK_LATCHED:
-      TaskLatched(task, msg);
+    case MSG_TASK_ON_CPU:
+      TaskOnCpu(task, msg);
       break;
     default:
       GHOST_ERROR("Unhandled message type %d", msg.type());

@@ -107,8 +107,8 @@ int BPF_PROG(sched_ghost_latched, struct task_struct *old,
 	struct cpu_info *ci = bpf_map_lookup_elem(&cpu_info, &cpu);
 
 	__sync_fetch_and_add(&nr_latches, 1);
-	/* BPF-PNT is the only one who uses SEND_TASK_LATCHED. */
-	if (run_flags & SEND_TASK_LATCHED)
+	/* BPF-PNT is the only one who uses SEND_TASK_ON_CPU. */
+	if (run_flags & SEND_TASK_ON_CPU)
 		__sync_fetch_and_add(&nr_bpf_latches, 1);
 
 	if (!ci || !ci->is_idle) {
@@ -116,7 +116,7 @@ int BPF_PROG(sched_ghost_latched, struct task_struct *old,
 		 * When BPF-PNT latches a task, the cpu might not go idle.
 		 * However, we'd like to measure those events.
 		 */
-		if (run_flags & SEND_TASK_LATCHED)
+		if (run_flags & SEND_TASK_ON_CPU)
 			update_hist(0);
 		return 0;
 	}

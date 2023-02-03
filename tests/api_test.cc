@@ -349,7 +349,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
         ASSERT_THAT(cs->next, NotNull());
         ASSERT_THAT(cs->current, IsNull());
         if (successful) {
-          TaskOnCpu(cs->next, cpu);  // task is oncpu.
+          TaskGotOnCpu(cs->next, cpu);  // task is oncpu.
         } else {
           rq_.Enqueue(cs->next);  // put task back to the runqueue.
 
@@ -365,7 +365,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
         // Attempted an idempotent commit on `cpu` (i.e. next == current).
         ASSERT_THAT(cs->next->run_state, Eq(FifoTaskState::kOnCpu));
         if (!successful) {
-          TaskOffCpu(cs->next, /*blocked=*/false);
+          TaskGotOffCpu(cs->next, /*blocked=*/false);
           cs->next->prio_boost = true;
           rq_.Enqueue(cs->next);
         }
@@ -418,18 +418,18 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
 
   void TaskYield(FifoTask* task, const Message& msg) final {
     EXPECT_NE(task->seqnum, msg.seqnum());
-    TaskOffCpu(task, /*blocked=*/false);
+    TaskGotOffCpu(task, /*blocked=*/false);
     rq_.Enqueue(task);
   }
 
   void TaskBlocked(FifoTask* task, const Message& msg) final {
     EXPECT_NE(task->seqnum, msg.seqnum());
-    TaskOffCpu(task, /*blocked=*/true);
+    TaskGotOffCpu(task, /*blocked=*/true);
   }
 
   void TaskPreempted(FifoTask* task, const Message& msg) final {
     EXPECT_NE(task->seqnum, msg.seqnum());
-    TaskOffCpu(task, /*blocked=*/false);
+    TaskGotOffCpu(task, /*blocked=*/false);
     task->preempted = true;
     task->prio_boost = true;
     rq_.Enqueue(task);
@@ -468,7 +468,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
     return &cpu_states_[task->cpu];
   }
 
-  void TaskOffCpu(FifoTask* task, bool blocked) {
+  void TaskGotOffCpu(FifoTask* task, bool blocked) {
     CpuState* cs = cpu_state_of(task);
     if (task->oncpu()) {
       ASSERT_THAT(cs->current, Eq(task));
@@ -482,7 +482,7 @@ class SyncGroupScheduler final : public BasicDispatchScheduler<FifoTask> {
         blocked ? FifoTaskState::kBlocked : FifoTaskState::kRunnable;
   }
 
-  void TaskOnCpu(FifoTask* task, const Cpu& cpu) {
+  void TaskGotOnCpu(FifoTask* task, const Cpu& cpu) {
     ASSERT_THAT(task->run_state, Ne(FifoTaskState::kOnCpu));
     CpuState* cs = cpu_state(cpu);
     cs->current = task;

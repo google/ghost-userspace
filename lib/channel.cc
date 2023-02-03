@@ -111,8 +111,8 @@ absl::string_view Message::describe_type() const {
       return "MSG_TASK_SWITCHTO";
     case MSG_TASK_AFFINITY_CHANGED:
       return "MSG_TASK_AFFINITY_CHANGED";
-    case MSG_TASK_LATCHED:
-      return "MSG_TASK_LATCHED";
+    case MSG_TASK_ON_CPU:
+      return "MSG_TASK_ON_CPU";
     case MSG_TASK_PRIORITY_CHANGED:
       return "MSG_TASK_PRIORITY_CHANGED";
     case MSG_CPU_TICK:

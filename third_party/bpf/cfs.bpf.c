@@ -711,7 +711,7 @@ int cfs_pnt(struct bpf_ghost_sched *ctx)
 		goto done;
 	}
 	err = bpf_ghost_run_gtid(next->gtid, next->task_barrier,
-				 SEND_TASK_LATCHED);
+				 SEND_TASK_ON_CPU);
 	if (err) {
 		/* Three broad classes of error:
 		 * - ignore it
@@ -838,20 +838,20 @@ static void __attribute__((noinline)) handle_new(struct bpf_ghost_msg *msg)
 	}
 }
 
-static void __attribute__((noinline)) handle_latched(
+static void __attribute__((noinline)) handle_on_cpu(
     struct bpf_ghost_msg *msg)
 {
-	bpf_printd("Handle latched\n");
-	struct ghost_msg_payload_task_latched *latched = &msg->latched;
+	bpf_printd("Handle on_cpu\n");
+	struct ghost_msg_payload_task_on_cpu *on_cpu = &msg->on_cpu;
 	struct cfs_bpf_thread *thread;
-	u64 gtid = latched->gtid;
+	u64 gtid = on_cpu->gtid;
 
 	thread = gtid_to_thread(gtid);
 	if (!thread)
 		return;
 	thread->ran_at = bpf_ktime_get_us();
 
-	task_started(gtid, latched->cpu, latched->cpu_seqnum);
+	task_started(gtid, on_cpu->cpu, on_cpu->cpu_seqnum);
 }
 
 static void __attribute__((noinline)) handle_blocked(
@@ -1090,8 +1090,8 @@ int cfs_msg_send(struct bpf_ghost_msg *msg)
 	case MSG_TASK_NEW:
 		handle_new(msg);
 		break;
-	case MSG_TASK_LATCHED:
-		handle_latched(msg);
+	case MSG_TASK_ON_CPU:
+		handle_on_cpu(msg);
 		break;
 	case MSG_TASK_BLOCKED:
 		handle_blocked(msg);

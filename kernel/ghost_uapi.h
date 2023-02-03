@@ -25,7 +25,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION 77
+#define GHOST_VERSION 78
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -246,7 +246,7 @@ enum {
 	MSG_TASK_DEPARTED,
 	MSG_TASK_SWITCHTO,
 	MSG_TASK_AFFINITY_CHANGED,
-	MSG_TASK_LATCHED,
+	MSG_TASK_ON_CPU,
 	MSG_TASK_PRIORITY_CHANGED,
 
 	/* cpu messages */
@@ -344,12 +344,11 @@ struct ghost_msg_payload_task_switchto {
 	int cpu;
 };
 
-struct ghost_msg_payload_task_latched {
+struct ghost_msg_payload_task_on_cpu {
 	uint64_t gtid;
 	uint64_t commit_time;
 	uint64_t cpu_seqnum;
 	int cpu;
-	char latched_preempt;
 };
 
 struct ghost_msg_payload_cpu_not_idle {
@@ -395,7 +394,7 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_task_switchto	switchto;
 		struct ghost_msg_payload_task_affinity_changed	affinity;
 		struct ghost_msg_payload_task_priority_changed	priority;
-		struct ghost_msg_payload_task_latched	latched;
+		struct ghost_msg_payload_task_on_cpu	on_cpu;
 		struct ghost_msg_payload_cpu_tick	cpu_tick;
 		struct ghost_msg_payload_timer		timer;
 		struct ghost_msg_payload_cpu_not_idle	cpu_not_idle;
@@ -477,7 +476,7 @@ enum ghost_base_ops {
 #define ELIDE_PREEMPT     (1 << 9)  /* Do not send TASK_PREEMPT if we preempt
 				     * a previous ghost task on this cpu
 				     */
-#define SEND_TASK_LATCHED (1 << 10) /* Send TASK_LATCHED at commit time */
+#define SEND_TASK_ON_CPU  (1 << 10) /* Send TASK_ON_CPU when on cpu */
 /* After the task is latched, don't immediately preempt it if the cpu local
  * agent is picked to run; wait at least until the next sched tick hits
  * (assuming the agent is still running). This provides a good tradeoff between

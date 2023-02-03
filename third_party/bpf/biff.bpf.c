@@ -27,13 +27,13 @@
  * - and example of how to preempt tasks based on some basic policy.
  *
  * FAQ:
- * - Do we need to request SEND_TASK_LATCHED?  Yes.  (This has the kernel
- *   generate a TASK_LATCHED message when we got on_cpu).  Arguably, if
+ * - Do we need to request SEND_TASK_ON_CPU?  Yes.  (This has the kernel
+ *   generate a TASK_ON_CPU message when we got on_cpu).  Arguably, if
  *   bpf_ghost_run_gtid() returns successfully, our task was latched, and we
- *   could run the contents of handle_latched() in bpf-pnt.  However, we gain
+ *   could run the contents of handle_on_cpu() in bpf-pnt.  However, we gain
  *   two things from the message handler: the cpu_seqnum (used in resched) and
  *   synchronization.  bpf-msg runs with the RQ lock for the task
- *   held.  bpf-pnt does not.  By deferring the work to handle_latched(), we
+ *   held.  bpf-pnt does not.  By deferring the work to handle_on_cpu(), we
  *   don't have to worry about concurrent changes to the task's data structures.
  *
  * - Can we do something smarter with dont_idle?  Yes!  Right now, we just tell
@@ -326,7 +326,7 @@ int biff_pnt(struct bpf_ghost_sched *ctx)
 	}
 
 	err = bpf_ghost_run_gtid(next->gtid, next->task_barrier,
-				 SEND_TASK_LATCHED);
+				 SEND_TASK_ON_CPU);
 	if (err) {
 		/* Three broad classes of error:
 		 * - ignore it
@@ -449,18 +449,18 @@ static void __attribute__((noinline)) handle_new(struct bpf_ghost_msg *msg)
 	}
 }
 
-static void __attribute__((noinline)) handle_latched(struct bpf_ghost_msg *msg)
+static void __attribute__((noinline)) handle_on_cpu(struct bpf_ghost_msg *msg)
 {
-	struct ghost_msg_payload_task_latched *latched = &msg->latched;
+	struct ghost_msg_payload_task_on_cpu *on_cpu = &msg->on_cpu;
 	struct biff_bpf_sw_data *swd;
-	u64 gtid = latched->gtid;
+	u64 gtid = on_cpu->gtid;
 
 	swd = gtid_to_swd(gtid);
 	if (!swd)
 		return;
 	swd->ran_at = bpf_ktime_get_us();
 
-	task_started(gtid, latched->cpu, latched->cpu_seqnum);
+	task_started(gtid, on_cpu->cpu, on_cpu->cpu_seqnum);
 }
 
 static void __attribute__((noinline)) handle_blocked(struct bpf_ghost_msg *msg)
@@ -620,8 +620,8 @@ int biff_msg_send(struct bpf_ghost_msg *msg)
 	case MSG_TASK_NEW:
 		handle_new(msg);
 		break;
-	case MSG_TASK_LATCHED:
-		handle_latched(msg);
+	case MSG_TASK_ON_CPU:
+		handle_on_cpu(msg);
 		break;
 	case MSG_TASK_BLOCKED:
 		handle_blocked(msg);
