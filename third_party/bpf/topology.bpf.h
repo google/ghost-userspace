@@ -28,6 +28,7 @@ const volatile __u32 nr_cpus;
 const volatile __u32 nr_siblings_per_core;
 const volatile __u32 nr_ccx;
 const volatile __u32 nr_numa;
+const volatile __u32 highest_node_idx;
 
 /*
  * These can be derived from nr_{cpus,siblings,numa}, but userspace precomputes
@@ -87,11 +88,12 @@ static inline __u32 numa_node_of(__u32 cpu)
  * Pass this macro your bpf_obj->rodata (which is a pointer).
  */
 #define __set_bpf_topology_vars(rodata, __nr_cpus, __smt_per_core, __nr_ccx,   \
-			      __nr_numa) ({                                    \
+			      __nr_numa, __highest_node_idx) ({                            \
 	(rodata)->nr_cpus = (__nr_cpus);                                       \
 	(rodata)->nr_siblings_per_core = (__smt_per_core);                     \
 	(rodata)->nr_ccx = (__nr_ccx);                                         \
 	(rodata)->nr_numa = (__nr_numa);                                       \
+	(rodata)->highest_node_idx = (__highest_node_idx);                     \
 	(rodata)->nr_cores = (rodata)->nr_cpus /(rodata)->nr_siblings_per_core;\
 	(rodata)->nr_cores_per_numa = (rodata)->nr_cores / (rodata)->nr_numa;  \
 })
@@ -102,7 +104,8 @@ static inline __u32 numa_node_of(__u32 cpu)
 				(topo)->num_cpus(),                            \
 				(topo)->smt_count(),                           \
 				(topo)->num_ccxs(),                            \
-				(topo)->num_numa_nodes());
+				(topo)->num_numa_nodes(),                      \
+				(topo)->highest_node_idx());
 
 #endif  // __BPF__
 
