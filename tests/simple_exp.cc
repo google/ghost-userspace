@@ -130,51 +130,16 @@ void TaskDepartedMany(int num_threads) {
 }
 
 void TaskDepartedManyRace(int num_threads) {
-  constexpr size_t kNumIterations = 20;
-  for (size_t i = 0; i < kNumIterations; i++) {
-    std::atomic<int> num_threads_at_barrier{0};
-    Notification start;
-    Notification exit;
-    std::vector<std::unique_ptr<GhostThread>> threads;
-
-    threads.reserve(num_threads);
-    for (int j = 0; j < num_threads; j++) {
-      threads.emplace_back(new GhostThread(
-          GhostThread::KernelScheduler::kGhost,
-          [&num_threads_at_barrier, &start, &exit] {
-            num_threads_at_barrier.fetch_add(1, std::memory_order_relaxed);
-            start.WaitForNotification();
-
-            // Get the scheduler to open and commit txns
-            // frequently.
-            while (!exit.HasBeenNotified()) {
-              absl::SleepFor(absl::Nanoseconds(1));
-            }
-          }));
-    }
-
-    while (num_threads_at_barrier.load(std::memory_order_relaxed) <
-           num_threads) {
-      absl::SleepFor(absl::Milliseconds(1));
-    }
-    start.Notify();
-
-    // Give the ghOSt threads time to wake up and the scheduler a moment to
-    // start scheduling them.
-    absl::SleepFor(absl::Milliseconds(10));
-    for (auto& t : threads) {
+  RemoteThreadTester().Run(
+    [] {  // ghost threads
+      absl::SleepFor(absl::Nanoseconds(1));
+    },
+    [](GhostThread* t) {  // remote, per-thread work
       const sched_param param{};
       CHECK_EQ(sched_setscheduler(t->tid(), SCHED_OTHER, &param), 0);
       CHECK_EQ(sched_getscheduler(t->tid()), SCHED_OTHER);
     }
-    // Wait a little while so that the race is hopefully triggered while we
-    // wait.
-    absl::SleepFor(absl::Milliseconds(10));
-    exit.Notify();
-    for (auto& t : threads) {
-      t->Join();
-    }
-  }
+  );
 }
 
 }  // namespace

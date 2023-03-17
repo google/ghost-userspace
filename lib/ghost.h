@@ -594,6 +594,35 @@ class GhostThread {
   std::thread thread_;
 };
 
+// Test helper class that launches threads and performs operations on them while
+// they do their work.
+//
+// You don't have to do anything in remote_work.  In that case, this class just
+// helps you spawn and join on num_threads.
+class RemoteThreadTester {
+ public:
+  RemoteThreadTester(int num_threads = 1000) : num_threads_(num_threads) {}
+  ~RemoteThreadTester() {};
+  RemoteThreadTester& operator=(const RemoteThreadTester&) = delete;
+
+  // Spawns threads, each of which does `thread_work()` in a loop at least once.
+  //
+  // Once the threads are up, all threads are notified to start their work loop.
+  // Then we run `remote_work(GhostThread*)` on each thread.
+  // After all remote_work is done, the threads are notified to exit.
+  // Once they are joined, Run() returns.
+  void Run(std::function<void()> thread_work,
+           std::function<void(GhostThread*)> remote_work =
+                                             [](GhostThread* t) {});
+
+ private:
+  int num_threads_;
+  std::atomic<int> num_threads_at_barrier_;
+  Notification start_;
+  Notification exit_;
+  std::vector<std::unique_ptr<GhostThread>> threads_;
+};
+
 // Returns the Ghost helper instance for this machine. The pointer is never null
 // and is owned by the  `GhostHelper` function. The pointer lives until the
 // process dies.

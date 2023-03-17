@@ -344,6 +344,41 @@ GhostThread::GhostThread(KernelScheduler ksched, std::function<void()> work,
 
 GhostThread::~GhostThread() { CHECK(!thread_.joinable()); }
 
+void RemoteThreadTester::Run(std::function<void()> thread_work,
+                             std::function<void(GhostThread*)> remote_work) {
+  for (int i = 0; i < num_threads_; ++i) {
+    threads_.push_back(std::make_unique<GhostThread>(
+        GhostThread::KernelScheduler::kGhost,
+        [this, thread_work] {
+          num_threads_at_barrier_.fetch_add(1, std::memory_order_relaxed);
+          start_.WaitForNotification();
+
+          do {
+            thread_work();
+          } while (!exit_.HasBeenNotified());
+        }));
+  }
+
+  while (num_threads_at_barrier_.load(std::memory_order_relaxed) <
+         num_threads_) {
+    absl::SleepFor(absl::Milliseconds(1));
+  }
+  start_.Notify();
+
+  // Give the ghOSt threads time to wake up and the scheduler a moment to
+  // start scheduling them.
+  absl::SleepFor(absl::Milliseconds(10));
+
+  for (auto& t : threads_) {
+    remote_work(t.get());
+  }
+
+  exit_.Notify();
+
+  for (auto& t : threads_) {
+    t->Join();
+  }
+}
 // Agents should have already set the global enclave fd before creating agent
 // tasks, so this helper is used by clients to find an enclave to join.
 //
