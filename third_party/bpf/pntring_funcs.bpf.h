@@ -188,14 +188,7 @@ static inline u64 pnt_push_task_to_ring(int which_ring, u64 gtid,
 		slot->task_barrier = task_barrier;
 		slot->task_ptr = NULL;
 
-		/*
-		 * TODO: we want an smp_store_release().  This works for
-		 * x86, but perhaps not for arm.  We'd rather avoid the overhead
-		 * of another atomic, and none of the __sync or __atomic
-		 * builtins work with clang -target bpf.
-		 */
-		asm volatile ("" ::: "memory");
-		WRITE_ONCE(slot->txn_state, GHOST_TXN_READY);
+		smp_store_release(&slot->txn_state, GHOST_TXN_READY);
 
 		return pnt_ring_to_agent_data(which_ring, prod_idx);
 	}

@@ -93,6 +93,18 @@ static inline bool is_traced_ghost(struct task_struct *p) {
 #define WRITE_ONCE(x, val) ((*(volatile typeof(x) *)&(x)) = val)
 
 /*
+ * TODO: This works for x86, but probably not for arm, which has
+ * store-release instructions.
+ *
+ * We'd rather avoid the overhead of another atomic, and none of the __sync or
+ * __atomic builtins work with clang -target bpf.
+ */
+#define smp_store_release(p, v) ({                                      \
+	asm volatile ("" ::: "memory");                                 \
+	WRITE_ONCE(*(p), v);                                            \
+})
+
+/*
  * Since this is in rodata, the verifier will drop all the bpf_printks, since
  * they are dead code.  That allows us to pass verification if we lack the CAP
  * to make a bpf_printk call.

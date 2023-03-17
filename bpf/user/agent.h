@@ -12,6 +12,13 @@
 #include "libbpf/bpf.h"
 #include "libbpf/libbpf.h"
 
+// See e.g. smp_store_release().  We can't check when we compile the BPF
+// programs, which are built with clang -target bpf, but all agents that load
+// bpf programs include this header.
+#ifndef __x86_64__
+#error "BPF shared memory sync only works on x86"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
