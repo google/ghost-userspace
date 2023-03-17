@@ -25,7 +25,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION 81
+#define GHOST_VERSION 82
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -412,6 +412,13 @@ struct bpf_ghost_msg {
 	};
 	uint16_t type;
 	uint32_t seqnum;
+
+	/*
+	 * BPF can inform the kernel which cpu it would prefer to wake up
+	 * in response to this message.
+	 * -1 indicates no preference.
+	 */
+	int pref_cpu;
 };
 
 #ifdef __cplusplus

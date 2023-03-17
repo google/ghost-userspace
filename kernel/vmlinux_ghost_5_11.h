@@ -32955,6 +32955,13 @@ struct bpf_ghost_msg {
 	};
 	uint16_t type;
 	uint32_t seqnum;
+
+	/*
+	 * BPF can inform the kernel which cpu it would prefer to wake up
+	 * in response to this message.
+	 * -1 indicates no preference.
+	 */
+	int pref_cpu;
 };
 
 /* GHOST: end of disabling CO-RE relocations */
