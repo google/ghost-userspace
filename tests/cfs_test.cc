@@ -262,6 +262,156 @@ TEST_F(CfsTest, TaskChangesAffinityWithIncomingMessages) {
   GhostHelper()->CloseGlobalEnclaveFds();
 }
 
+TEST_F(CfsTest, HandlesAffinityChangeWhileBlocked) {
+  if (MachineTopology()->num_cpus() < 2) {
+    GTEST_SKIP() << "must have at least 2 cpus";
+    return;
+  }
+  Topology* topology = MachineTopology();
+
+  // The enclave has two CPUs.
+  CfsConfig config(topology, topology->ToCpuList(std::vector<int>{0, 1}));
+
+  // Create the CFS agent process.
+  auto ap = AgentProcess<FullCfsAgent<LocalEnclave>, CfsConfig>(config);
+
+  std::atomic<uint32_t> num_threads_at_barrier{0};
+  Notification block;
+
+  // Create 10 threads.
+  constexpr uint32_t kNumThreads = 10;
+  std::vector<std::unique_ptr<GhostThread>> threads;
+  threads.reserve(kNumThreads);
+
+  for (uint32_t i = 0; i < kNumThreads; i++) {
+    threads.emplace_back(std::make_unique<GhostThread>(
+        GhostThread::KernelScheduler::kGhost,
+        [&block, &num_threads_at_barrier] {
+          GhostHelper()->SchedSetAffinity(
+              Gtid::Current(),
+              MachineTopology()->ToCpuList(std::vector<int>{0}));
+          EXPECT_THAT(sched_getcpu(), Eq(0));
+
+          num_threads_at_barrier.fetch_add(1, std::memory_order_relaxed);
+
+          // Agent should receive TASK_AFFINITY_CHANGED message while this task
+          // is blocked.
+          block.WaitForNotification();
+
+          SpinFor(absl::Milliseconds(100));
+
+          // This task should still be on CPU 1.
+          EXPECT_THAT(sched_getcpu(), Eq(1));
+        }));
+  }
+
+  while (num_threads_at_barrier.load(std::memory_order_relaxed) < kNumThreads) {
+    absl::SleepFor(absl::Milliseconds(10));
+  }
+
+  // Wait for a while to give tasks in threads hit WaitForNotification().
+  SpinFor(absl::Milliseconds(100));
+
+  for (std::unique_ptr<GhostThread>& t : threads) {
+    EXPECT_THAT(
+        GhostHelper()->SchedSetAffinity(
+            t->gtid(), MachineTopology()->ToCpuList(std::vector<int>{1})),
+        Eq(0));
+  }
+
+  // TASK_RUNNABLE should arrive after TASK_AFFINITY_CHANGED.
+  block.Notify();
+
+  for (std::unique_ptr<GhostThread>& t : threads) {
+    t->Join();
+  }
+
+  // Even though the threads have joined it does not mean they are dead.
+  // pthread_join() can return before the dying task has made its way to
+  // TASK_DEAD. In this case, CfsAgent::ValidatePreExitState() triggers
+  // a CHECK failure because the runqueue is not empty. We spin here until
+  // there are no more tasks remaining.
+  int num_tasks;
+  do {
+    num_tasks = ap.Rpc(CfsScheduler::kCountAllTasks);
+    EXPECT_THAT(num_tasks, Ge(0));
+  } while (num_tasks > 0);
+
+  GhostHelper()->CloseGlobalEnclaveFds();
+}
+
+TEST_F(CfsTest, HandlesAffinityChangeWhileRunnable) {
+  if (MachineTopology()->num_cpus() < 2) {
+    GTEST_SKIP() << "must have at least 2 cpus";
+    return;
+  }
+
+  Topology* topology = MachineTopology();
+
+  // The enclave has two CPUs.
+  CfsConfig config(topology, topology->ToCpuList(std::vector<int>{0, 1}));
+
+  // Create the CFS agent process.
+  auto ap = AgentProcess<FullCfsAgent<LocalEnclave>, CfsConfig>(config);
+
+  std::atomic<uint32_t> num_threads_at_barrier{0};
+  std::atomic<bool> done{false};
+  Notification block;
+
+  // Create 10 threads.
+  constexpr uint32_t kNumThreads = 10;
+  std::vector<std::unique_ptr<GhostThread>> threads;
+  threads.reserve(kNumThreads);
+
+  // We put 10 threads on two CPUs - at any moment, at most 2 threads should be
+  // running and at least 8 threads should be in runnable state.
+  for (uint32_t i = 0; i < kNumThreads; i++) {
+    threads.emplace_back(std::make_unique<GhostThread>(
+        GhostThread::KernelScheduler::kGhost,
+        [&done, &block, &num_threads_at_barrier] {
+          num_threads_at_barrier.fetch_add(1, std::memory_order_relaxed);
+          block.WaitForNotification();
+
+          // Keep this task runnable all the time.
+          while (!done.load(std::memory_order_relaxed)) {}
+        }));
+  }
+
+  while (num_threads_at_barrier.load(std::memory_order_relaxed) < kNumThreads) {
+    absl::SleepFor(absl::Milliseconds(10));
+  }
+  block.Notify();
+
+  // Continuously send TASK_AFFINITY_CHANGED messages.
+  for (int i = 0; i < 10; i++) {
+    for (std::unique_ptr<GhostThread>& t : threads) {
+      EXPECT_THAT(
+          GhostHelper()->SchedSetAffinity(
+              t->gtid(), MachineTopology()->ToCpuList(std::vector<int>{i % 2})),
+          Eq(0));
+    }
+    absl::SleepFor(absl::Milliseconds(10));
+  }
+  done.store(true);
+
+  for (std::unique_ptr<GhostThread>& t : threads) {
+    t->Join();
+  }
+
+  // Even though the threads have joined it does not mean they are dead.
+  // pthread_join() can return before the dying task has made its way to
+  // TASK_DEAD. In this case, CfsAgent::ValidatePreExitState() triggers
+  // a CHECK failure because the runqueue is not empty. We spin here until
+  // there are no more tasks remaining.
+  int num_tasks;
+  do {
+    num_tasks = ap.Rpc(CfsScheduler::kCountAllTasks);
+    EXPECT_THAT(num_tasks, Ge(0));
+  } while (num_tasks > 0);
+
+  GhostHelper()->CloseGlobalEnclaveFds();
+}
+
 }  // namespace
 }  // namespace ghost
 

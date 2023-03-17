@@ -245,6 +245,28 @@ Cpu CfsScheduler::SelectTaskRq(CfsTask* task) {
   return min_load_cpu;
 }
 
+void CfsScheduler::StartMigrateTask(CfsTask* task) {
+  CpuState* cs = cpu_state_of(task);
+  cs->run_queue.mu_.AssertHeld();
+
+  cs->run_queue.DequeueTask(task);
+  task->task_state.SetOnRq(CfsTaskState::OnRq::kMigrating);
+  cs->migration_queue.EnqueueTask(task);
+}
+
+void CfsScheduler::StartMigrateCurrTask() {
+  int my_cpu = MyCpu();
+  CpuState* cs = &cpu_states_[my_cpu];
+  cs->run_queue.mu_.AssertHeld();
+
+  CfsTask* task = cs->current;
+  CHECK_EQ(task->cpu, my_cpu);
+
+  cs->current = nullptr;
+  task->task_state.SetState(CfsTaskState::State::kRunnable);
+  StartMigrateTask(task);
+}
+
 bool CfsScheduler::Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum) {
   // The task is not visible to anyone except the agent currently proccessing
   // the task as the only way to get to migrate is if the task is not
@@ -704,39 +726,45 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg)
   const ghost_msg_payload_task_affinity_changed* payload =
     static_cast<const ghost_msg_payload_task_affinity_changed*>(msg.payload());
 
+  CpuState* cs = cpu_state_of(task);
+  cs->run_queue.mu_.AssertHeld();
+
   CHECK_EQ(task->gtid.id(), payload->gtid);
-  CHECK_EQ(task->task_state.GetState(), CfsTaskState::State::kRunning);
 
   CpuList cpu_affinity = MachineTopology()->EmptyCpuList();
   if (GhostHelper()->SchedGetAffinity(task->gtid, cpu_affinity) != 0) {
     DPRINT_CFS(3, absl::StrFormat("[%s]: Cannot retrieve the CPU mask.",
       task->gtid.describe()));
-    cpu_affinity  = cpus();
+    cpu_affinity = cpus();
   }
 
   task->cpu_affinity = cpu_affinity;
 
   // Short-circuit if the current CPU is an eligible CPU. In this case, we do
-  // not even need to remove the task from the current CPU.
+  // not need to do anything here.
   if (task->cpu_affinity.IsSet(task->cpu)) {
     return;
   }
 
-  // Make sure to remove the task from the current cpu.
-  CpuState* cs = cpu_state_of(task);
-  cs->run_queue.mu_.AssertHeld();
+  // If this task is blocked, the task does not have to be migrated right now.
+  // RQ will be selected later on when processing TaskRunnable message (Wakeup
+  // CPU selection). We also does not have to do anything if this task is
+  // already in the middle of migration.
+  if (task->task_state.IsBlocked() || task->task_state.OnRqMigrating()) {
+    return;
+  }
 
-  // TODO: We need to support handling affinity changed messages that
-  // are runnable or blocked.
-  CHECK_EQ(cs->current, task);
+  CHECK(task->task_state.IsRunning() || task->task_state.IsRunnable());
 
-  // TODO: Consider moving this to TaskPreempted message handling.
-  cs->current = nullptr;
-  cs->run_queue.DequeueTask(task);
-  task->task_state.SetState(CfsTaskState::State::kRunnable);
-
-  task->task_state.SetOnRq(CfsTaskState::OnRq::kMigrating);
-  cs->migration_queue.EnqueueTask(task);
+  // If this task was running, remove the task from the current CPU.
+  if (task->task_state.IsRunning()) {
+    // TODO: Consider moving this to TaskPreempted message handling.
+    CHECK_EQ(cs->current, task);
+    StartMigrateCurrTask();
+  } else {
+    // Only runnable tasks in this CPU's RQ will reach here.
+    StartMigrateTask(task);
+  }
 }
 
 void CfsScheduler::TaskPriorityChanged(CfsTask* task, const Message& msg) {

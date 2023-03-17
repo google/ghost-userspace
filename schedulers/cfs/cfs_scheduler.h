@@ -500,6 +500,13 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   // Note: Should be called with this CPU's rq mutex lock held.
   void HandleTaskDone(CfsTask* task, bool from_switchto);
 
+  // Dequeues the task from its RQ and initiates its migration. Places the task
+  // in the migration queue and does not immediately migrate the task.
+  void StartMigrateTask(CfsTask* task);
+  // Moves the current task off-cpu and initiates its migration. Places the task
+  // in the migration queue and does not immediately migrate the task.
+  void StartMigrateCurrTask();
+
   // Migrate takes task and places it on cpu's run queue.
   bool Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum);
   // Migrates pending tasks in the migration queue.
