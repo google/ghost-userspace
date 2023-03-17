@@ -67,6 +67,7 @@ CfsScheduler::CfsScheduler(Enclave* enclave, CpuList cpulist,
           absl::GetFlag(FLAGS_experimental_enable_idle_load_balancing)) {
   for (const Cpu& cpu : cpus()) {
     CpuState* cs = cpu_state(cpu);
+    cs->id = cpu.id();
 
     // CfsRq has a default constructor, meaning these parameters will initially
     // be set to 0, so set them to the correct value.
@@ -596,8 +597,7 @@ inline void CfsScheduler::AttachTasks(struct LoadBalanceEnv& env) {
 inline int CfsScheduler::DetachTasks(struct LoadBalanceEnv& env) {
   absl::MutexLock l(&env.src_cs->run_queue.mu_);
 
-  env.src_cs->run_queue.DetachTasks(env.imbalance, env.dst_cpu,
-                                    env.dst_cs->channel.get(), env.tasks);
+  env.src_cs->run_queue.DetachTasks(env.dst_cs, env.imbalance, env.tasks);
 
   return env.tasks.size();
 }
@@ -662,17 +662,17 @@ inline int CfsScheduler::LoadBalance(CpuState* cs, bool newly_idle) {
     return 0;
   }
 
-  int busiest_cpu = FindBusiestQueue();
-  struct LoadBalanceEnv env {
-    .dst_cpu = MyCpu(), .src_cpu = busiest_cpu,
-  };
+  int src_cpu = FindBusiestQueue();
+  int dst_cpu = MyCpu();
 
-  if (env.src_cpu == env.dst_cpu) {
+  if (src_cpu == dst_cpu) {
     return 0;
   }
 
-  env.src_cs = &cpu_states_[env.src_cpu];
-  env.dst_cs = &cpu_states_[env.dst_cpu];
+  struct LoadBalanceEnv env {
+    .dst_cs = &cpu_states_[dst_cpu], .src_cs = &cpu_states_[src_cpu],
+  };
+
   if (!CalculateImbalance(env)) {
     return 0;
   }
@@ -1173,7 +1173,7 @@ void CfsRq::AttachTasks(const std::vector<CfsTask*>& tasks)
   }
 }
 
-int CfsRq::DetachTasks(int n, int dst_cpu, const Channel* channel,
+int CfsRq::DetachTasks(const CpuState* dst_cs, int n,
                        std::vector<CfsTask*>& tasks)
     ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
   int tasks_detached = 0;
@@ -1184,11 +1184,11 @@ int CfsRq::DetachTasks(int n, int dst_cpu, const Channel* channel,
 
     CfsTask* task = *it;
     CHECK_NE(task, nullptr);
-    if (CanMigrateTask(task, dst_cpu, channel)) {
+    if (CanMigrateTask(task, dst_cs)) {
       tasks.push_back(task);
       tasks_detached++;
 
-      task->cpu = dst_cpu;
+      task->cpu = dst_cs->id;
       task->task_state.SetOnRq(CfsTaskState::OnRq::kDequeued);
       it = rq_.erase(it);
       rq_size_.store(rq_.size(), std::memory_order_relaxed);
@@ -1200,8 +1200,11 @@ int CfsRq::DetachTasks(int n, int dst_cpu, const Channel* channel,
   return tasks_detached;
 }
 
-bool CfsRq::CanMigrateTask(CfsTask* task, int dst_cpu, const Channel* channel) {
+bool CfsRq::CanMigrateTask(CfsTask* task, const CpuState* dst_cs) {
   uint32_t seqnum = READ_ONCE(task->seqnum);
+
+  int dst_cpu = dst_cs->id;
+  const Channel* channel = dst_cs->channel.get();
 
   if (dst_cpu >= 0 && !task->cpu_affinity.IsSet(dst_cpu)) {
     return false;

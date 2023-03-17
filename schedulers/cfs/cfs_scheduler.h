@@ -303,19 +303,19 @@ class CfsRq {
   void AttachTasks(const std::vector<CfsTask*>& tasks_to_attach)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
-  // Detaches at most `n` eligible tasks from the run queue and appends to the
+  // Detaches at most `n` eligible tasks from this run queue and appends to the
   // vector of tasks. A task is eligible for detaching from its source RQ if
-  // (i) affinity mask of `task` allows dst_cpu to run it and (ii) channel
-  // association succeeds with task struct's seqnum. Returns the number of tasks
-  // detached.
-  int DetachTasks(int n, int dst_cpu, const Channel* channel,
+  // (i) affinity mask of `task` allows dst_cs->id to run it and (ii) channel
+  // association succeeds with task struct's seqnum to dst_cs->channel. Returns
+  // the number of tasks detached.
+  int DetachTasks(const CpuState* dst_cs, int n,
                   std::vector<CfsTask*>& detached_tasks)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Determines whether `task` can be migrated to `dst_cpu`. `task` should be on
   // this run queue. Similar to the upstream kernel implementation of
   // `can_migrate_task`.
-  bool CanMigrateTask(CfsTask* task, int dst_cpu, const Channel* channel);
+  bool CanMigrateTask(CfsTask* task, const CpuState* dst_cs);
 
   // Returns the exact size of the run queue.
   size_t Size() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return rq_.size(); }
@@ -421,6 +421,8 @@ struct CpuState {
   CfsMq migration_queue;
   // Should we keep running the current task.
   bool preempt_curr = false;
+  // ID of the cpu.
+  int id = -1;
 
   bool IsIdle() { return current == nullptr; }
   bool LocklessRqEmpty() { return run_queue.LocklessSize() == 0; }
@@ -467,9 +469,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   // Load Balance Environment struct similar to `struct lb_env` in the
   // upstream kernel.
   struct LoadBalanceEnv {
-    int dst_cpu = -1;
     CpuState* dst_cs = nullptr;
-    int src_cpu = -1;
     CpuState* src_cs = nullptr;
     int imbalance = 0;
     std::vector<CfsTask*> tasks;
