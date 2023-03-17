@@ -38,7 +38,9 @@ const volatile __u32 nr_cores_per_numa;
 
 static inline __u32 sibling_of(__u32 cpu)
 {
-	/* TODO doesn't handle nr_siblings_per_core != 2 too well. */
+	/* TODO doesn't handle nr_siblings_per_core > 2 . */
+	if (nr_siblings_per_core == 1)
+		return cpu;
 	if (cpu >= nr_cores)
 		return cpu - nr_cores;
 	else
