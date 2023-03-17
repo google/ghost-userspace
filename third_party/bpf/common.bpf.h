@@ -130,6 +130,18 @@ static void __attribute__((noinline)) clr_dont_idle(struct bpf_ghost_sched *ctx)
 {
 	ctx->dont_idle = false;
 }
+
+static void __attribute__((noinline))
+set_must_resched(struct bpf_ghost_sched *ctx)
+{
+	ctx->must_resched = true;
+}
+
+static void __attribute__((noinline))
+clr_must_resched(struct bpf_ghost_sched *ctx)
+{
+	ctx->must_resched = false;
+}
 #pragma GCC diagnostic pop
 
 /* Helper to prevent the compiler from optimizing bounds check on x. */

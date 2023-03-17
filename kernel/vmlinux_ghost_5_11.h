@@ -32763,6 +32763,12 @@ struct gf_dirent {
  * ghost ABI structs were all in this block of non-relocatable structs.
  *
  * Anytime we regenerate vmlinux, we'll need to manually edit the pragmas again.
+ *
+ * If the BPF program does not define BPF_NO_PRESERVE_ACCESS_INDEX then all
+ * structs _except_ those defined by the ghost uapi header get CO-RE treatment.
+ * If the BPF program defines BPF_NO_PRESERVE_ACCESS_INDEX then no struct
+ * accesses get CO-RE treatment.  See the top of this file for the pragma we're
+ * popping.
  */
 
 #ifndef BPF_NO_PRESERVE_ACCESS_INDEX
@@ -33225,6 +33231,7 @@ struct bpf_ghost_sched {
 	__u8 agent_runnable;
 	__u8 might_yield;
 	__u8 dont_idle;
+	__u8 must_resched;
 	__u64 next_gtid;
 };
 
