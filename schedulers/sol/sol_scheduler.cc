@@ -114,6 +114,20 @@ SolScheduler::CpuState* SolScheduler::cpu_state_of(const SolTask* task) {
   return cs;
 }
 
+void SolScheduler::TaskOffCpu(SolTask* task, bool blocked, bool from_switchto) {
+  if (task->oncpu()) {
+    CpuState* cs = cpu_state_of(task);
+    CHECK_EQ(cs->current, task);
+    cs->current = nullptr;
+  } else {
+    CHECK(from_switchto);
+    CHECK(task->blocked());
+  }
+
+  task->run_state =
+      blocked ? SolTask::RunState::kBlocked : SolTask::RunState::kRunnable;
+}
+
 void SolScheduler::TaskNew(SolTask* task, const Message& msg) {
   const ghost_msg_payload_task_new* payload =
       static_cast<const ghost_msg_payload_task_new*>(msg.payload());
@@ -142,6 +156,10 @@ void SolScheduler::TaskRunnable(SolTask* task, const Message& msg) {
 }
 
 void SolScheduler::TaskDeparted(SolTask* task, const Message& msg) {
+  const ghost_msg_payload_task_departed* payload =
+      static_cast<const ghost_msg_payload_task_departed*>(msg.payload());
+  bool from_switchto = payload->from_switchto;
+
   if (task->pending()) {
     RunRequest* req = enclave()->GetRunRequest(task->cpu);
     // Wait for txn to complete, because we might not get another message
@@ -157,10 +175,8 @@ void SolScheduler::TaskDeparted(SolTask* task, const Message& msg) {
     Unyield(task);
   }
 
-  if (task->oncpu()) {
-    CpuState* cs = cpu_state_of(task);
-    CHECK_EQ(cs->current, task);
-    cs->current = nullptr;
+  if (task->oncpu() || from_switchto) {
+    TaskOffCpu(task, /*blocked=*/false, from_switchto);
   } else if (task->queued()) {
     RemoveFromRunqueue(task);
   } else {
@@ -169,6 +185,10 @@ void SolScheduler::TaskDeparted(SolTask* task, const Message& msg) {
 
   allocator()->FreeTask(task);
   num_tasks_--;
+
+  // The msg exiting a switchto chain may wakeup a different agent than the
+  // local CPU's agent. (See go/kcl/373024.)
+  // However, since this is a global scheduler, we don't need a Ping() here.
 }
 
 void SolScheduler::TaskDead(SolTask* task, const Message& msg) {
@@ -221,14 +241,16 @@ void SolScheduler::SyncTaskState(SolTask* task) {
 }
 
 void SolScheduler::TaskBlocked(SolTask* task, const Message& msg) {
+  const ghost_msg_payload_task_blocked* payload =
+      static_cast<const ghost_msg_payload_task_blocked*>(msg.payload());
+  bool from_switchto = payload->from_switchto;
+
   if (task->pending()) {
     SyncTaskState(task);
   }
 
-  if (task->oncpu()) {
-    CpuState* cs = cpu_state_of(task);
-    CHECK_EQ(cs->current, task);
-    cs->current = nullptr;
+  if (task->oncpu() || from_switchto) {
+    TaskOffCpu(task, /*blocked=*/true, from_switchto);
   } else if (task->preempted_by_agent()) {
     // Do nothing. We cannot enqueue the task since it is blocked.
   } else {
@@ -237,20 +259,25 @@ void SolScheduler::TaskBlocked(SolTask* task, const Message& msg) {
   }
 
   task->run_state = SolTask::RunState::kBlocked;
+
+  // The msg exiting a switchto chain may wakeup a different agent than the
+  // local CPU's agent. (See go/kcl/373024.)
+  // However, since this is a global scheduler, we don't need a Ping() here.
 }
 
 void SolScheduler::TaskPreempted(SolTask* task, const Message& msg) {
+  const ghost_msg_payload_task_preempt* payload =
+      static_cast<const ghost_msg_payload_task_preempt*>(msg.payload());
+  bool from_switchto = payload->from_switchto;
+
   if (task->pending()) {
     SyncTaskState(task);
   }
 
   task->preempted = true;
 
-  if (task->oncpu()) {
-    CpuState* cs = cpu_state_of(task);
-    CHECK_EQ(cs->current, task);
-    cs->current = nullptr;
-    task->run_state = SolTask::RunState::kRunnable;
+  if (task->oncpu() || from_switchto) {
+    TaskOffCpu(task, /*blocked=*/false, from_switchto);
     Enqueue(task);
   } else if (task->preempted_by_agent()) {
     task->run_state = SolTask::RunState::kRunnable;
@@ -258,17 +285,27 @@ void SolScheduler::TaskPreempted(SolTask* task, const Message& msg) {
   } else {
     CHECK(task->queued());
   }
+
+  // The msg exiting a switchto chain may wakeup a different agent than the
+  // local CPU's agent. (See go/kcl/373024.)
+  // However, since this is a global scheduler, we don't need a Ping() here.
+}
+
+void SolScheduler::TaskSwitchto(SolTask* task, const Message& msg) {
+  TaskOffCpu(task, /*blocked=*/true, /*from_switchto=*/false);
 }
 
 void SolScheduler::TaskYield(SolTask* task, const Message& msg) {
+  const ghost_msg_payload_task_yield* payload =
+      static_cast<const ghost_msg_payload_task_yield*>(msg.payload());
+  bool from_switchto = payload->from_switchto;
+
   if (task->pending()) {
     SyncTaskState(task);
   }
 
-  if (task->oncpu()) {
-    CpuState* cs = cpu_state_of(task);
-    CHECK_EQ(cs->current, task);
-    cs->current = nullptr;
+  if (task->oncpu() || from_switchto) {
+    TaskOffCpu(task, /*blocked=*/false, from_switchto);
     Yield(task);
   } else if (task->preempted_by_agent()) {
     task->run_state = SolTask::RunState::kRunnable;
@@ -276,6 +313,10 @@ void SolScheduler::TaskYield(SolTask* task, const Message& msg) {
   } else {
     CHECK(task->queued());
   }
+
+  // The msg exiting a switchto chain may wakeup a different agent than the
+  // local CPU's agent. (See go/kcl/373024.)
+  // However, since this is a global scheduler, we don't need a Ping() here.
 }
 
 void SolScheduler::Yield(SolTask* task) {

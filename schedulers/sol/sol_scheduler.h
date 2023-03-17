@@ -97,6 +97,7 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
   void TaskYield(SolTask* task, const Message& msg) final;
   void TaskBlocked(SolTask* task, const Message& msg) final;
   void TaskPreempted(SolTask* task, const Message& msg) final;
+  void TaskSwitchto(SolTask* task, const Message& msg) final;
 
   // Handles cpu "not idle" message. Currently a nop.
   void CpuNotIdle(const Message& msg) final;
@@ -183,6 +184,8 @@ class SolScheduler : public BasicDispatchScheduler<SolTask> {
 
   bool SyncCpuState(const Cpu& cpu);
   void SyncTaskState(SolTask* task);
+
+  void TaskOffCpu(SolTask* task, bool blocked, bool from_switchto);
 
   // Marks a task as yielded.
   void Yield(SolTask* task);
