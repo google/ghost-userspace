@@ -174,6 +174,187 @@ void SimpleNice() {
       default_first_counter, default_second_counter);
 }
 
+void SimpleLoadBalancing(int num_threads, const CpuList& enclave_cpus) {
+  Notification first_stage_done;
+  Notification second_stage_done;
+  Notification third_stage_done;
+  std::atomic<bool> fourth_stage_done{false};
+
+  constexpr uint32_t kMaxCpusForSimpleLoadBalancing = 10;
+  std::atomic<uint32_t> num_threads_at_barrier{0};
+  std::array<std::atomic<uint32_t>, kMaxCpusForSimpleLoadBalancing>
+      first_stage_counters{
+          0,
+      };
+  std::array<std::atomic<uint32_t>, kMaxCpusForSimpleLoadBalancing>
+      second_stage_counters{
+          0,
+      };
+  std::array<std::atomic<uint32_t>, kMaxCpusForSimpleLoadBalancing>
+      third_stage_counters{
+          0,
+      };
+  std::array<std::atomic<uint32_t>, kMaxCpusForSimpleLoadBalancing>
+      fourth_stage_counters{
+          0,
+      };
+  std::array<std::atomic<uint32_t>, kMaxCpusForSimpleLoadBalancing>
+      final_stage_counters{
+          0,
+      };
+
+  uint32_t num_cpus =
+      std::min(kMaxCpusForSimpleLoadBalancing, enclave_cpus.Size());
+  std::vector<int> cpu_vector;
+  for (uint32_t i = 0; i < num_cpus; i++) {
+    Cpu cpu = enclave_cpus.GetNthCpu(i);
+    cpu_vector.push_back(cpu.id());
+  }
+
+  CpuList cpus = MachineTopology()->ToCpuList(cpu_vector);
+
+  std::vector<std::unique_ptr<GhostThread>> threads;
+  threads.reserve(num_threads);
+  for (int i = 0; i < num_threads; i++) {
+    threads.emplace_back(std::make_unique<GhostThread>(
+        GhostThread::KernelScheduler::kGhost,
+        [&first_stage_counters, &second_stage_counters, &third_stage_counters,
+         &fourth_stage_counters, &final_stage_counters, &first_stage_done,
+         &second_stage_done, &third_stage_done, &fourth_stage_done, &cpu_vector,
+         &cpus, &num_threads_at_barrier] {
+          SpinFor(absl::Seconds(1));
+
+          // First stage: threads join ghOSt on any CPU. There is no requirement
+          // on which CPU each task should be running on.
+          int cpu = sched_getcpu();
+          CHECK_GE(cpu, 0);
+
+          std::vector<int>::iterator it =
+              std::find(cpu_vector.begin(), cpu_vector.end(), cpu);
+          CHECK(it != cpu_vector.end());
+          first_stage_counters[it - cpu_vector.begin()].fetch_add(
+              1, std::memory_order_relaxed);
+          num_threads_at_barrier.fetch_add(1, std::memory_order_relaxed);
+          first_stage_done.WaitForNotification();
+
+          // Second stage: threads are migrated to the first CPU via affinity
+          // change messages.
+          CHECK_EQ(
+              GhostHelper()->SchedSetAffinity(
+                  Gtid::Current(), MachineTopology()->ToCpuList(
+                                       std::vector<int>{cpus.Front().id()})),
+              0);
+
+          // This task should be on the first CPU when SchedSetAffinity returns
+          // control to userspace.
+          cpu = sched_getcpu();
+          CHECK_EQ(cpu, cpus.Front().id());
+          it = std::find(cpu_vector.begin(), cpu_vector.end(), cpu);
+          CHECK(it != cpu_vector.end());
+          second_stage_counters[it - cpu_vector.begin()].fetch_add(
+              1, std::memory_order_relaxed);
+          num_threads_at_barrier.fetch_add(1, std::memory_order_relaxed);
+          second_stage_done.WaitForNotification();
+
+          // Third stage: As we haven't sent any task affinity change messages,
+          // all the threads should stay on the first CPU and load balancing
+          // should not move these tasks to another CPU.
+          SpinFor(absl::Seconds(1));
+          cpu = sched_getcpu();
+          it = std::find(cpu_vector.begin(), cpu_vector.end(), cpu);
+          CHECK(it != cpu_vector.end());
+          third_stage_counters[it - cpu_vector.begin()].fetch_add(
+              1, std::memory_order_relaxed);
+          num_threads_at_barrier.fetch_add(1, std::memory_order_relaxed);
+          third_stage_done.WaitForNotification();
+
+          // Fourth stage: Now we relax task affinity to all the CPUs and wait
+          // for some time for load balancing to happen.
+          CHECK_EQ(GhostHelper()->SchedSetAffinity(Gtid::Current(), cpus), 0);
+          cpu = sched_getcpu();
+          it = std::find(cpu_vector.begin(), cpu_vector.end(), cpu);
+          CHECK(it != cpu_vector.end());
+          fourth_stage_counters[it - cpu_vector.begin()].fetch_add(
+              1, std::memory_order_relaxed);
+          num_threads_at_barrier.fetch_add(1, std::memory_order_relaxed);
+
+          while (!fourth_stage_done.load(std::memory_order_relaxed)) {
+          }
+
+          cpu = sched_getcpu();
+          it = std::find(cpu_vector.begin(), cpu_vector.end(), cpu);
+          CHECK(it != cpu_vector.end());
+          final_stage_counters[it - cpu_vector.begin()].fetch_add(
+              1, std::memory_order_relaxed);
+        }));
+  }
+
+  while (num_threads_at_barrier.load(std::memory_order_relaxed) < num_threads) {
+    absl::SleepFor(absl::Milliseconds(50));
+  }
+  num_threads_at_barrier.store(0);
+  first_stage_done.Notify();
+  std::cout << "First stage done." << std::endl;
+
+  while (num_threads_at_barrier.load(std::memory_order_relaxed) < num_threads) {
+    absl::SleepFor(absl::Milliseconds(50));
+  }
+  num_threads_at_barrier.store(0);
+  second_stage_done.Notify();
+  std::cout << "Second stage done." << std::endl;
+
+  while (num_threads_at_barrier.load(std::memory_order_relaxed) < num_threads) {
+    absl::SleepFor(absl::Milliseconds(50));
+  }
+  num_threads_at_barrier.store(0);
+  third_stage_done.Notify();
+  std::cout << "Third stage done." << std::endl;
+
+  while (num_threads_at_barrier.load(std::memory_order_relaxed) < num_threads) {
+    absl::SleepFor(absl::Milliseconds(50));
+  }
+
+  // Forcefully advance `Schedule` loop because the other CPUs' agent thread may
+  // not be invoked at all. CpuTick may be turned off due to NO_HZ_IDLE setting
+  // on idle CPUs and there is no message to wake them up.
+  // TODO: Explicitly disable CpuTicks to ensure we do not rely on
+  // CpuTicks for idle load balance.
+  // TODO: Upon implementing periodic load balancing, add a case to
+  // disable idle load balancing and only test the effect of periodic load
+  // balancing.
+  std::vector<std::unique_ptr<GhostThread>> ephemeral_threads;
+  ephemeral_threads.reserve(cpu_vector.size());
+  for (uint32_t j = 0; j < cpu_vector.size(); j++) {
+    ephemeral_threads.emplace_back(
+        std::make_unique<GhostThread>(GhostThread::KernelScheduler::kGhost,
+                                      [] { SpinFor(absl::Milliseconds(10)); }));
+  }
+  for (std::unique_ptr<GhostThread>& t : ephemeral_threads) {
+    t->Join();
+  }
+
+  SpinFor(absl::Milliseconds(500));
+
+  fourth_stage_done.store(true, std::memory_order_relaxed);
+
+  for (std::unique_ptr<GhostThread>& t : threads) {
+    t->Join();
+  }
+  std::cout << "Fourth/final stage done." << std::endl;
+
+  std::cout << "cpu\tfirst\tsecond\tthird\tfourth\tfinal" << std::endl;
+  for (uint32_t i = 0; i < cpu_vector.size(); i++) {
+    std::cout << absl::Substitute(
+                     "cpu[$0]\t$1\t$2\t$3\t$4\t$5", cpu_vector[i],
+                     first_stage_counters[i].load(std::memory_order_relaxed),
+                     second_stage_counters[i].load(std::memory_order_relaxed),
+                     third_stage_counters[i].load(std::memory_order_relaxed),
+                     fourth_stage_counters[i].load(std::memory_order_relaxed),
+                     final_stage_counters[i].load(std::memory_order_relaxed))
+              << std::endl;
+  }
+}
+
 }  // namespace
 }  // namespace ghost
 
@@ -183,10 +364,10 @@ int main(int argc, char* argv[]) {
   std::unique_ptr<ghost::AgentProcess<ghost::FullCfsAgent<ghost::LocalEnclave>,
                                       ghost::CfsConfig>>
       ap;
+  ghost::CpuList cpus = ghost::MachineTopology()->all_cpus();
   if (absl::GetFlag(FLAGS_create_enclave_and_agent)) {
     ghost::Topology* topology = ghost::MachineTopology();
-    ghost::CpuList cpus =
-        topology->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
+    cpus = topology->ParseCpuStr(absl::GetFlag(FLAGS_ghost_cpus));
     ghost::CfsConfig config(topology, cpus);
     ap = std::make_unique<ghost::AgentProcess<
         ghost::FullCfsAgent<ghost::LocalEnclave>, ghost::CfsConfig>>(config);
@@ -195,6 +376,10 @@ int main(int argc, char* argv[]) {
   std::cout << "Running SimpleNice ..." << std::endl;
   ghost::SimpleNice();
   std::cout << "SimpleNice Done." << std::endl;
+
+  std::cout << "Running SimpleLoadBalancing ..." << std::endl;
+  ghost::SimpleLoadBalancing(10, cpus);
+  std::cout << "SimpleLoadBalancing Done." << std::endl;
 
   return 0;
 }

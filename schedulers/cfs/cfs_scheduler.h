@@ -182,7 +182,8 @@ class CfsTaskState {
       (1 << static_cast<uint32_t>(State::kBlocked));
   constexpr static uint64_t kToRunnable =
       (1 << static_cast<uint32_t>(State::kBlocked)) +
-      (1 << static_cast<uint32_t>(State::kRunning));
+      (1 << static_cast<uint32_t>(State::kRunning)) +
+      (1 << static_cast<uint32_t>(State::kRunnable));
   constexpr static uint64_t kToRunning =
       (1 << static_cast<uint32_t>(State::kRunnable)) +
       (1 << static_cast<uint32_t>(State::kRunning));
@@ -298,7 +299,33 @@ class CfsRq {
   CfsTask* LeftmostRqTask() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     return rq_.empty() ? nullptr : *rq_.begin(); }
 
+  // Attaches tasks to the run queue in batch.
+  void AttachTasks(const std::vector<CfsTask*>& tasks_to_attach)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Detaches at most `n` eligible tasks from the run queue and appends to the
+  // vector of tasks. A task is eligible for detaching from its source RQ if
+  // (i) affinity mask of `task` allows dst_cpu to run it and (ii) channel
+  // association succeeds with task struct's seqnum. Returns the number of tasks
+  // detached.
+  int DetachTasks(int n, int dst_cpu, const Channel* channel,
+                  std::vector<CfsTask*>& detached_tasks)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  // Determines whether `task` can be migrated to `dst_cpu`. `task` should be on
+  // this run queue. Similar to the upstream kernel implementation of
+  // `can_migrate_task`.
+  bool CanMigrateTask(CfsTask* task, int dst_cpu, const Channel* channel);
+
+  // Returns the exact size of the run queue.
   size_t Size() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return rq_.size(); }
+
+  // Returns the last known size of the run queue, without acquiring any lock.
+  // The returned size might be stale if read from a context other than the
+  // agent that owns the queue.
+  size_t LocklessSize() const {
+    return rq_size_.load(std::memory_order_relaxed);
+  }
 
   bool IsEmpty() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) { return rq_.empty(); }
 
@@ -327,6 +354,8 @@ class CfsRq {
   // container is easiest way to use a red-black tree short of writing or
   // importing our own.
   std::set<CfsTask*, decltype(&CfsTask::Less)> rq_ ABSL_GUARDED_BY(mu_);
+  // Used for lockless reads of rq size.
+  std::atomic<size_t> rq_size_{0};
 };
 
 // Migration queue. Neither copyable nor movable.
@@ -392,6 +421,9 @@ struct CpuState {
   CfsMq migration_queue;
   // Should we keep running the current task.
   bool preempt_curr = false;
+
+  bool IsIdle() { return current == nullptr; }
+  bool LocklessRqEmpty() { return run_queue.LocklessSize() == 0; }
 } ABSL_CACHELINE_ALIGNED;
 
 class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
@@ -427,6 +459,20 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
       12820798,  15790321,  19976592,  24970740,  31350126,  // 5 .. 9
       39045157,  49367440,  61356676,  76695844,  95443717,  // 10 .. 14
       119304647, 148102320, 186737708, 238609294, 286331153  // 15 .. 19
+  };
+
+  // The maximum number of tasks to be migrated at a single load balancing
+  // event. Similar to `SCHED_NR_MIGRATE_BREAK` in the upstream kernel.
+  static constexpr size_t kMaxTasksToLoadBalance = 32;
+  // Load Balance Environment struct similar to `struct lb_env` in the
+  // upstream kernel.
+  struct LoadBalanceEnv {
+    int dst_cpu = -1;
+    CpuState* dst_cs = nullptr;
+    int src_cpu = -1;
+    CpuState* src_cs = nullptr;
+    int imbalance = 0;
+    std::vector<CfsTask*> tasks;
   };
 
   explicit CfsScheduler(Enclave* enclave, CpuList cpulist,
@@ -507,6 +553,41 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   // in the migration queue and does not immediately migrate the task.
   void StartMigrateCurrTask();
 
+  // Attaches tasks defined by the load balance environment.
+  inline void AttachTasks(struct LoadBalanceEnv& env);
+
+  // Detaches tasks required by the load balance environment.
+  // Returns: the number of detached tasks.
+  inline int DetachTasks(struct LoadBalanceEnv& env);
+
+  // Calculates the imbalance between source CPU and destination
+  // CPU.
+  inline int CalculateImbalance(LoadBalanceEnv& env);
+
+  // Finds the CPU with most RUNNABLE tasks. Returns the ID of the busiest CPU.
+  inline int FindBusiestQueue();
+
+  // Determines whether to run load balancing in this context. Specifically,
+  // returns true if this CPU became idle just now (`newly_idle` is true), the
+  // current CPU is the first idle CPU, or (if this CPU is not idle) the first
+  // CPU. This function roughly follows `should_we_balance` function in
+  // `kernel/sched/fair.c`.
+  inline bool ShouldWeBalance(CpuState* cs, bool newly_idle);
+
+  // Tries to load balance when this CPU is about to become idle and attempts
+  // to take some tasks from another CPU. Should only be called inside the
+  // schedule loop.
+  // Returns: one of the pulled tasks picked via `PickNextTask` or nullptr if
+  // failed pull any task.
+  CfsTask* IdleLoadBalance(CpuState* cs, bool newly_idle);
+
+  // Tries to balance the load across different CPUs to make sure each CPU has
+  // about an equal amount of work. The gist of the algorithm is to balance the
+  // busiest and least busy core.
+  // Following this check, we find the rq with the heaviest load and balance it
+  // with the rq with the lightest load.
+  int LoadBalance(CpuState* cs, bool newly_idle);
+
   // Migrate takes task and places it on cpu's run queue.
   bool Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum);
   // Migrates pending tasks in the migration queue.
@@ -544,6 +625,8 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
 
   absl::Duration min_granularity_;
   absl::Duration latency_;
+
+  bool idle_load_balancing_;
 
   friend class CfsRq;
 };
