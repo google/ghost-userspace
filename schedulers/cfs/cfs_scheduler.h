@@ -463,6 +463,13 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
       119304647, 148102320, 186737708, 238609294, 286331153  // 15 .. 19
   };
 
+  enum class CpuIdleType : uint32_t {
+    kCpuIdle = 0,  // The CPU is idle
+    kCpuNotIdle,   // The CPU is not idle
+    kCpuNewlyIdle, // The CPU is going to be idle
+    kNumCpuIdleType,
+  };
+
   // The maximum number of tasks to be migrated at a single load balancing
   // event. Similar to `SCHED_NR_MIGRATE_BREAK` in the upstream kernel.
   static constexpr size_t kMaxTasksToLoadBalance = 32;
@@ -473,6 +480,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
     CpuState* src_cs = nullptr;
     int imbalance = 0;
     std::vector<CfsTask*> tasks;
+    CpuIdleType idle;
   };
 
   explicit CfsScheduler(Enclave* enclave, CpuList cpulist,
@@ -572,21 +580,21 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   // current CPU is the first idle CPU, or (if this CPU is not idle) the first
   // CPU. This function roughly follows `should_we_balance` function in
   // `kernel/sched/fair.c`.
-  inline bool ShouldWeBalance(CpuState* cs, bool newly_idle);
+  inline bool ShouldWeBalance(LoadBalanceEnv& env);
 
   // Tries to load balance when this CPU is about to become idle and attempts
   // to take some tasks from another CPU. Should only be called inside the
   // schedule loop.
   // Returns: one of the pulled tasks picked via `PickNextTask` or nullptr if
   // failed pull any task.
-  CfsTask* IdleLoadBalance(CpuState* cs, bool newly_idle);
+  inline CfsTask* NewIdleBalance(CpuState* cs);
 
   // Tries to balance the load across different CPUs to make sure each CPU has
   // about an equal amount of work. The gist of the algorithm is to balance the
   // busiest and least busy core.
   // Following this check, we find the rq with the heaviest load and balance it
   // with the rq with the lightest load.
-  int LoadBalance(CpuState* cs, bool newly_idle);
+  int LoadBalance(CpuState* cs, CpuIdleType idle_type);
 
   // Migrate takes task and places it on cpu's run queue.
   bool Migrate(CfsTask* task, Cpu cpu, BarrierToken seqnum);

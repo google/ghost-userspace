@@ -637,10 +637,10 @@ inline int CfsScheduler::FindBusiestQueue() {
   return busiest_cpu;
 }
 
-inline bool CfsScheduler::ShouldWeBalance(CpuState* cs, bool newly_idle) {
+inline bool CfsScheduler::ShouldWeBalance(LoadBalanceEnv& env) {
   // Allow any newly idle CPU to do the newly idle load balance.
-  if (newly_idle) {
-    return cs->LocklessRqEmpty();
+  if (env.idle == CpuIdleType::kCpuNewlyIdle) {
+    return env.dst_cs->LocklessRqEmpty();
   }
 
   // Load balance runs from the first idle CPU or if there are no idle CPUs then
@@ -657,22 +657,22 @@ inline bool CfsScheduler::ShouldWeBalance(CpuState* cs, bool newly_idle) {
   return dst_cpu == MyCpu();
 }
 
-inline int CfsScheduler::LoadBalance(CpuState* cs, bool newly_idle) {
-  if (!ShouldWeBalance(cs, newly_idle)) {
+inline int CfsScheduler::LoadBalance(CpuState* cs, CpuIdleType idle_type) {
+  struct LoadBalanceEnv env;
+  int my_cpu = MyCpu();
+
+  env.idle = idle_type;
+  env.dst_cs = &cpu_states_[my_cpu];
+  if (!ShouldWeBalance(env)) {
     return 0;
   }
 
-  int src_cpu = FindBusiestQueue();
-  int dst_cpu = MyCpu();
-
-  if (src_cpu == dst_cpu) {
+  int busiest_cpu = FindBusiestQueue();
+  if (busiest_cpu == my_cpu) {
     return 0;
   }
 
-  struct LoadBalanceEnv env {
-    .dst_cs = &cpu_states_[dst_cpu], .src_cs = &cpu_states_[src_cpu],
-  };
-
+  env.src_cs = &cpu_states_[busiest_cpu];
   if (!CalculateImbalance(env)) {
     return 0;
   }
@@ -685,8 +685,8 @@ inline int CfsScheduler::LoadBalance(CpuState* cs, bool newly_idle) {
   return moved_tasks_cnt;
 }
 
-inline CfsTask* CfsScheduler::IdleLoadBalance(CpuState* cs, bool newly_idle) {
-  int load_balanced = LoadBalance(cs, newly_idle);
+inline CfsTask* CfsScheduler::NewIdleBalance(CpuState* cs) {
+  int load_balanced = LoadBalance(cs, CpuIdleType::kCpuNewlyIdle);
   if (load_balanced <= 0) {
     return nullptr;
   }
@@ -757,13 +757,7 @@ void CfsScheduler::CfsSchedule(const Cpu& cpu, BarrierToken agent_barrier,
   cs->run_queue.mu_.Unlock();
 
   if (!next && idle_load_balancing_) {
-    // This CPU is about to become idle. If pulling a task from another busy
-    // CPU succeeds, this CPU does not have to go idle.
-    // TODO: newly_idle does not capture all newly idle cases as we
-    // now manipulate cs->current in message draining loop to handle migration.
-    // Consider adding new ways to determine newly idle cases.
-    bool newly_idle = prev != nullptr;
-    next = IdleLoadBalance(cs, newly_idle);
+    next = NewIdleBalance(cs);
   }
 
   cs->current = next;
