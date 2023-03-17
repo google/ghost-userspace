@@ -213,8 +213,14 @@ class CpuMap {
   const Topology& topology() const { return *topology_; }
 
   // Returns true if bitmap is all 0s, otherwise returns false.
-  // TODO: Bail early if this needs to be efficient.
-  bool Empty() const { return CountSetCpus() == 0; }
+  bool Empty() const {
+    for (size_t i = 0; i < map_size_; ++i) {
+      if (GetNthMap(i)) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   // Returns number of set bits in the bitmap.
   uint32_t Size() const { return CountSetCpus(); }

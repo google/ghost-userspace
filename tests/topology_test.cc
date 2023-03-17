@@ -1073,6 +1073,20 @@ TEST(TopologyTest, AtomicTestAndClear) {
   EXPECT_THAT(num_clears, Eq(n));
 }
 
+TEST(TopologyTest, CpuMapEmpty) {
+  CpuList l = TestTopology()->EmptyCpuList();
+
+  EXPECT_THAT(l.Empty(), IsTrue());
+
+  l.Set(0);
+  EXPECT_THAT(l.Empty(), IsFalse());
+  l.Clear(0);
+  EXPECT_THAT(l.Empty(), IsTrue());
+
+  l.Set(TestTopology()->all_cpus().Size() - 1);
+  EXPECT_THAT(l.Empty(), IsFalse());
+}
+
 }  // namespace
 }  // namespace ghost
 
