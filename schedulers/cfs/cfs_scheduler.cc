@@ -490,9 +490,9 @@ void CfsScheduler::TaskYield(CfsTask* task, const Message& msg) {
   PrintDebugTaskMessage("TaskYield", cs, task);
   cs->run_queue.mu_.AssertHeld();
 
+  // Kick the task off-cpu.
   CHECK_EQ(cs->current, task);
-  // Setting to runnable will trigger a PutPrevTask.
-  task->task_state.SetState(CfsTaskState::State::kRunnable);
+  PutPrevTask();
 
   if (payload->from_switchto) {
     Cpu cpu = topology()->cpu(payload->cpu);
@@ -525,13 +525,9 @@ void CfsScheduler::TaskPreempted(CfsTask* task, const Message& msg) {
   PrintDebugTaskMessage("TaskPreempted", cs, task);
   cs->run_queue.mu_.AssertHeld();
 
-  // Skip the check in case cs->current == nullptr. TaskPreempted
-  // invoked after the task has been removed from the RQ.
-  if (cs->current) {
-    CHECK_EQ(cs->current, task);
-  }
-
-  // no-op. the task doesn't change any state.
+  // Kick the task off-cpu.
+  CHECK_EQ(cs->current, task);
+  PutPrevTask();
 
   if (payload->from_switchto) {
     Cpu cpu = topology()->cpu(payload->cpu);
@@ -565,6 +561,26 @@ void CfsScheduler::CheckPreemptTick(const Cpu& cpu)
         cs->run_queue.MinPreemptionGranularity()) {
       cs->preempt_curr = true;
     }
+  }
+}
+
+void CfsScheduler::PutPrevTask() {
+  CpuState* cs = &cpu_states_[MyCpu()];
+  cs->run_queue.mu_.AssertHeld();
+
+  CfsTask* task = cs->current;
+  cs->current = nullptr;
+
+  // We have a notable deviation from the upstream's behavior here. In upstream,
+  // put_prev_task does not update the state, while we update the state here.
+  task->task_state.SetState(CfsTaskState::State::kRunnable);
+
+  // Task affinity no longer allows this CPU to run the task. We should migrate
+  // this task.
+  if (!task->cpu_affinity.IsSet(task->cpu)) {
+    StartMigrateTask(task);
+  } else {  // Otherwise just add the task into this CPU's run queue.
+    cs->run_queue.PutPrevTask(task);
   }
 }
 
@@ -854,6 +870,7 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg)
   const ghost_msg_payload_task_affinity_changed* payload =
     static_cast<const ghost_msg_payload_task_affinity_changed*>(msg.payload());
 
+  // Make sure to remove the task from the current cpu.
   CpuState* cs = cpu_state_of(task);
   cs->run_queue.mu_.AssertHeld();
 
@@ -874,23 +891,12 @@ void CfsScheduler::TaskAffinityChanged(CfsTask* task, const Message& msg)
     return;
   }
 
-  // If this task is blocked, the task does not have to be migrated right now.
-  // RQ will be selected later on when processing TaskRunnable message (Wakeup
-  // CPU selection). We also does not have to do anything if this task is
-  // already in the middle of migration.
-  if (task->task_state.IsBlocked() || task->task_state.OnRqMigrating()) {
-    return;
-  }
-
-  CHECK(task->task_state.IsRunning() || task->task_state.IsRunnable());
-
-  // If this task was running, remove the task from the current CPU.
-  if (task->task_state.IsRunning()) {
-    // TODO: Consider moving this to TaskPreempted message handling.
-    CHECK_EQ(cs->current, task);
-    StartMigrateCurrTask();
-  } else {
-    // Only runnable tasks in this CPU's RQ will reach here.
+  // The only case we consider here is if the task's state is runnable and it is
+  // in a wrong CPU's queue. If the task is currently running and kicked off-cpu
+  // by this affinity change, affinity will be honored at TaskPreempted. If the
+  // task is blocked, affinity will be honored at wake-up routine. If this task
+  // yields, its affinity will be examined at TaskYield.
+  if (task->task_state.IsRunnable() && !task->task_state.OnRqMigrating()) {
     StartMigrateTask(task);
   }
 }
