@@ -32,7 +32,8 @@
 #ifndef GHOST_BPF
 static long (*bpf_ghost_wake_agent)(__u32 cpu) = (void *) 3000;
 static long (*bpf_ghost_run_gtid)(__s64 gtid, __u32 task_barrier, __s32 run_flags) = (void *) 3001;
-static long (*bpf_ghost_resched_cpu)(__u32 cpu, __u64 cpu_seqnum) = (void *) 3002;
+/* 3002 is bpf_ghost_resched_cpu, which is deprecated with ABI 79 */
+static long (*bpf_ghost_resched_cpu2)(__u32 cpu, __u32 flags) = (void *) 3003;
 #endif
 
 #define MAX_PIDS 102400
@@ -41,6 +42,15 @@ static long (*bpf_ghost_resched_cpu)(__u32 cpu, __u64 cpu_seqnum) = (void *) 300
 #define TASK_DEAD 0x0080
 #define MAX_RT_PRIO 100
 #define SEND_TASK_ON_CPU (1 << 10)
+
+/* flags accepted by bpf_ghost_resched_cpu2 */
+#define RESCHED_ANY_CLASS      (1 << 0)
+#define RESCHED_GHOST_CLASS    (1 << 1)
+#define RESCHED_IDLE_CLASS     (1 << 2)
+#define RESCHED_OTHER_CLASS    (1 << 3)
+#define SET_MUST_RESCHED       (1 << 4)
+#define WAKE_AGENT             (1 << 5)
+#define GHOST_RESCHED_CPU_MAX  (1 << 6)
 
 static inline u64 min(u64 x, u64 y)
 {

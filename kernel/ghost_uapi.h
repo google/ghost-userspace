@@ -25,7 +25,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION 78
+#define GHOST_VERSION 79
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -502,6 +502,15 @@ enum ghost_base_ops {
 
 /* Union of all COMMIT_AT_XYZ flags */
 #define COMMIT_AT_FLAGS		(COMMIT_AT_SCHEDULE | COMMIT_AT_TXN_COMMIT)
+
+/* flags accepted by bpf_ghost_resched_cpu2 */
+#define RESCHED_ANY_CLASS       (1 << 0) /* resched no matter what type of task is running */
+#define RESCHED_GHOST_CLASS     (1 << 1) /* resched if the running task is a ghost task */
+#define RESCHED_IDLE_CLASS      (1 << 2) /* resched if the running task is an idle task */
+#define RESCHED_OTHER_CLASS     (1 << 3) /* resched if the running task is neither ghost nor idle */
+#define SET_MUST_RESCHED        (1 << 4) /* set rq->ghost.must_resched as part of the resched */
+#define WAKE_AGENT              (1 << 5) /* if we resched, also force the agent to wake */
+#define GHOST_RESCHED_CPU_MAX   (1 << 6) /* Must be the last value here. */
 
 /* special 'gtid' encodings that can be passed to ghost_run() */
 #define GHOST_NULL_GTID		(0)

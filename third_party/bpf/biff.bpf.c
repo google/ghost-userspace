@@ -233,12 +233,9 @@ static struct biff_bpf_sw_data *get_current(int cpu)
 /* Forces the cpu to reschedule and eventually call bpf-pnt. */
 static int resched_cpu(int cpu)
 {
-	struct biff_bpf_cpu_data *pcpu;
+	const int flags = RESCHED_GHOST_CLASS | RESCHED_IDLE_CLASS | SET_MUST_RESCHED;
 
-	pcpu = cpu_to_pcpu(cpu);
-	if (!pcpu)
-		return -1;
-	return bpf_ghost_resched_cpu(cpu, pcpu->cpu_seqnum);
+	return bpf_ghost_resched_cpu2(cpu, flags);
 }
 
 /* Biff POLICY: dumb global fifo.  No locality, etc. */

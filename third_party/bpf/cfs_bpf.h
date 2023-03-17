@@ -25,8 +25,6 @@
 
 /*
  * The array map of these, called `cpu_data`, can be mmapped by userspace.
- *
- * Need to track the cpu_seqnum to use bpf_ghost_resched_cpu().
  */
 struct cfs_bpf_cpu_data {
 	uint64_t current;

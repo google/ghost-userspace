@@ -300,12 +300,9 @@ static struct cfs_bpf_thread *get_current(u32 cpu)
 /* Forces the cpu to reschedule and eventually call bpf-pnt. */
 static int resched_cpu(int cpu)
 {
-	struct cfs_bpf_cpu_data *pcpu;
+	const int flags = RESCHED_GHOST_CLASS | RESCHED_IDLE_CLASS | SET_MUST_RESCHED;
 
-	pcpu = cpu_to_pcpu(cpu);
-	if (!pcpu)
-		return -1;
-	return bpf_ghost_resched_cpu(cpu, pcpu->cpu_seqnum);
+	return bpf_ghost_resched_cpu2(cpu, flags);
 }
 
 
