@@ -32889,6 +32889,11 @@ struct ghost_msg_payload_task_on_cpu {
 	int cpu;
 };
 
+struct ghost_msg_payload_task_latch_failure {
+	uint64_t gtid;
+	int errno;
+};
+
 struct ghost_msg_payload_cpu_tick {
 	int cpu;
 };
@@ -32933,6 +32938,7 @@ struct bpf_ghost_msg {
 		struct ghost_msg_payload_task_affinity_changed affinity;
 		struct ghost_msg_payload_task_priority_changed	priority;
 		struct ghost_msg_payload_task_on_cpu on_cpu;
+		struct ghost_msg_payload_task_latch_failure latch_failure;
 		struct ghost_msg_payload_cpu_tick cpu_tick;
 		struct ghost_msg_payload_timer timer;
 		struct ghost_msg_payload_cpu_not_idle cpu_not_idle;
@@ -33036,6 +33042,7 @@ enum {
 	MSG_TASK_AFFINITY_CHANGED = 72,
 	MSG_TASK_ON_CPU = 73,
 	MSG_TASK_PRIORITY_CHANGED = 74,
+	MSG_TASK_LATCH_FAILURE = 75,
 	MSG_CPU_TICK = 128,
 	MSG_CPU_TIMER_EXPIRED = 129,
 	MSG_CPU_NOT_IDLE = 130,
