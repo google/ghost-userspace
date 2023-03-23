@@ -48,7 +48,6 @@ cc_library(
         "lib/agent.cc",
         "lib/channel.cc",
         "lib/enclave.cc",
-        "lib/topology.cc",
     ],
     hdrs = [
         "bpf/user/agent.h",
@@ -57,7 +56,6 @@ cc_library(
         "lib/channel.h",
         "lib/enclave.h",
         "lib/scheduler.h",
-        "lib/topology.h",
         "//third_party:iovisor_bcc/trace_helpers.h",
     ],
     copts = compiler_flags,
@@ -66,6 +64,7 @@ cc_library(
         ":base",
         ":ghost",
         ":shared",
+        ":topology",
         ":trivial_status",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -103,6 +102,7 @@ cc_binary(
     deps = [
         ":agent",
         ":base",
+        ":topology",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
@@ -127,6 +127,7 @@ cc_library(
     deps = [
         ":agent",
         ":base",
+        ":topology",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
@@ -147,6 +148,7 @@ cc_binary(
     deps = [
         ":agent",
         ":edf_scheduler",
+        ":topology",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
     ],
@@ -184,6 +186,7 @@ cc_binary(
     deps = [
         ":agent",
         ":shinjuku_scheduler",
+        ":topology",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
     ],
@@ -214,6 +217,7 @@ cc_binary(
     deps = [
         ":agent",
         ":sol_scheduler",
+        ":topology",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
     ],
@@ -255,6 +259,7 @@ cc_binary(
         ":base",
         ":cfs_scheduler",
         ":ghost",
+        ":topology",
         "@com_google_googletest//:gtest",
     ],
 )
@@ -329,6 +334,24 @@ exports_files(glob([
 ])
 
 cc_library(
+    name = "topology",
+    srcs = [
+        "lib/topology.cc",
+    ],
+    hdrs = [
+        "lib/topology.h",
+    ],
+    copts = compiler_flags,
+    linkopts = ["-lnuma"],
+    deps = [
+        ":base",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+cc_library(
     name = "base",
     srcs = [
         "lib/base.cc",
@@ -382,6 +405,7 @@ cc_binary(
     deps = [
         ":agent",
         ":biff_scheduler",
+        ":topology",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
     ],
@@ -449,6 +473,7 @@ cc_binary(
     deps = [
         ":agent",
         ":cfs_bpf_scheduler",
+        ":topology",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
     ],
@@ -671,6 +696,7 @@ cc_binary(
     deps = [
         ":agent",
         ":fifo_centralized_scheduler",
+        ":topology",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
     ],
@@ -702,6 +728,7 @@ cc_binary(
     deps = [
         ":agent",
         ":flux_scheduler",
+        ":topology",
         "@com_google_absl//absl/debugging:symbolize",
         "@com_google_absl//absl/flags:parse",
     ],
@@ -753,17 +780,16 @@ cc_library(
     name = "ghost",
     srcs = [
         "lib/ghost.cc",
-        "lib/topology.cc",
     ],
     hdrs = [
         "kernel/ghost_uapi.h",
         "lib/ghost.h",
-        "lib/topology.h",
     ],
     copts = compiler_flags,
     linkopts = ["-lnuma"],
     deps = [
         ":base",
+        ":topology",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:flag",
@@ -844,6 +870,7 @@ cc_test(
     deps = [
         ":agent",
         ":ghost",
+        ":topology",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
@@ -1277,6 +1304,7 @@ cc_test(
     deps = [
         ":agent",
         ":ghost",
+        ":topology",
         "@com_google_benchmark//:benchmark",
         "@com_google_googletest//:gtest",
     ],

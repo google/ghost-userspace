@@ -15,7 +15,6 @@
 #include <thread>
 
 #include "absl/strings/str_format.h"
-#include "lib/ghost.h"
 #include <numa.h>
 
 namespace ghost {
