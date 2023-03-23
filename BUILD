@@ -1,9 +1,18 @@
 # Note: If you modify this BUILD file, please contact jhumphri@ first to ensure
 # that you are not breaking the Copybara script.
 
+load("@rules_license//rules:license.bzl", "license")
 load("//:bpf/bpf.bzl", "bpf_skeleton")
 
-package(default_visibility = ["//:__pkg__"])
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//:__pkg__"],
+)
+
+license(
+    name = "license",
+    package_name = "ghost",
+)
 
 # Each license covers the code below:
 #
