@@ -8790,6 +8790,7 @@ enum bpf_prog_type {
 	BPF_PROG_TYPE_SK_LOOKUP = 30,
 	BPF_PROG_TYPE_GHOST_SCHED = 1000,
 	BPF_PROG_TYPE_GHOST_MSG = 1001,
+	BPF_PROG_TYPE_GHOST_SELECT_RQ = 1002,
 };
 
 enum bpf_attach_type {
@@ -8832,6 +8833,13 @@ enum bpf_attach_type {
 	BPF_SK_LOOKUP = 36,
 	BPF_XDP = 37,
 	__MAX_BPF_ATTACH_TYPE = 38,
+};
+
+enum {
+	BPF_GHOST_SCHED_PNT = 2000,
+	BPF_GHOST_MSG_SEND = 2001,
+	BPF_GHOST_SELECT_RQ = 2002,
+	__MAX_BPF_GHOST_ATTACH_TYPE = 2003,
 };
 
 struct sock_filter {
@@ -33242,6 +33250,15 @@ struct bpf_ghost_sched {
 	__u64 next_gtid;
 };
 
+struct bpf_ghost_select_rq {
+	__u64 gtid;
+	__u32 task_cpu;
+	__u32 waker_cpu;
+	__u32 sd_flag;
+	__u32 wake_flags;
+	__u8 skip_ttwu_queue;
+};
+
 enum bpf_func_id {
 	BPF_FUNC_unspec = 0,
 	BPF_FUNC_map_lookup_elem = 1,
@@ -42514,6 +42531,8 @@ struct bpf_ctx_convert {
 	struct bpf_ghost_sched BPF_PROG_TYPE_GHOST_SCHED_kern;
 	struct bpf_ghost_msg BPF_PROG_TYPE_GHOST_MSG_prog;
 	struct bpf_ghost_msg BPF_PROG_TYPE_GHOST_MSG_kern;
+	struct bpf_ghost_select_rq BPF_PROG_TYPE_GHOST_SELECT_RQ_prog;
+	struct bpf_ghost_select_rq BPF_PROG_TYPE_GHOST_SELECT_RQ_kern;
 };
 
 struct bpf_flow_keys {

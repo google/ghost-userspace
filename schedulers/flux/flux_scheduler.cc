@@ -42,6 +42,8 @@ FluxScheduler::FluxScheduler(Enclave* enclave, CpuList cpulist,
                          BPF_PROG_TYPE_GHOST_SCHED, BPF_GHOST_SCHED_PNT);
   bpf_program__set_types(bpf_obj_->progs.flux_msg_send, BPF_PROG_TYPE_GHOST_MSG,
                          BPF_GHOST_MSG_SEND);
+  bpf_program__set_types(bpf_obj_->progs.flux_select_rq,
+                         BPF_PROG_TYPE_GHOST_SELECT_RQ, BPF_GHOST_SELECT_RQ);
 
   bpf_obj_->rodata->enable_bpf_printd = CapHas(CAP_PERFMON);
 
@@ -51,6 +53,8 @@ FluxScheduler::FluxScheduler(Enclave* enclave, CpuList cpulist,
            0);
   CHECK_EQ(agent_bpf_register(bpf_obj_->progs.flux_msg_send,
                               BPF_GHOST_MSG_SEND), 0);
+  CHECK_EQ(agent_bpf_register(bpf_obj_->progs.flux_select_rq,
+                              BPF_GHOST_SELECT_RQ), 0);
 
   cpu_data_ = static_cast<flux_cpu*>(
       bpf_map__mmap(bpf_obj_->maps.cpu_data));
@@ -80,8 +84,6 @@ FluxScheduler::~FluxScheduler() {
 }
 
 void FluxScheduler::EnclaveReady() {
-  enclave()->SetWakeOnWakerCpu(true);
-
   enclave()->SetDeliverTicks(true);
   enclave()->SetDeliverCpuAvailability(true);
   // We learn about cpu availability via a message.  Some cpus may currently be

@@ -656,4 +656,28 @@ int biff_msg_send(struct bpf_ghost_msg *msg)
 	return 1;
 }
 
+SEC("ghost_select_rq/select_rq")
+int biff_select_rq(struct bpf_ghost_select_rq *ctx)
+{
+	u64 gtid = ctx->gtid;
+	/* Can't pass ctx->gtid to gtid_to_thread (swd) directly.  (verifier) */
+	struct biff_bpf_sw_data *t = gtid_to_swd(gtid);
+
+	if (!t) {
+		bpf_printd("Got select_rq without a task!");
+		return -1;
+	}
+
+	/*
+	 * POLICY
+	 *
+	 * Not necessarily a good policy.  The combo of skip + picking the
+	 * task_cpu will grab remote cpus RQ locks for remote wakeups.  This is
+	 * just an example of what you can do.
+	 */
+	ctx->skip_ttwu_queue = true;
+
+	return ctx->task_cpu;
+}
+
 char LICENSE[] SEC("license") = "GPL";

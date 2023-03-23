@@ -806,4 +806,10 @@ int flux_msg_send(struct bpf_ghost_msg *msg)
 	return 1;
 }
 
+SEC("ghost_select_rq/select_rq")
+int flux_select_rq(struct bpf_ghost_select_rq *ctx)
+{
+	return ctx->waker_cpu;
+}
+
 char LICENSE[] SEC("license") = "GPL";

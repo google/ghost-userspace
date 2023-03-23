@@ -24,6 +24,8 @@ BiffScheduler::BiffScheduler(Enclave* enclave, CpuList cpulist,
                          BPF_PROG_TYPE_GHOST_SCHED, BPF_GHOST_SCHED_PNT);
   bpf_program__set_types(bpf_obj_->progs.biff_msg_send, BPF_PROG_TYPE_GHOST_MSG,
                          BPF_GHOST_MSG_SEND);
+  bpf_program__set_types(bpf_obj_->progs.biff_select_rq,
+                         BPF_PROG_TYPE_GHOST_SELECT_RQ, BPF_GHOST_SELECT_RQ);
 
   bpf_obj_->rodata->enable_bpf_printd = CapHas(CAP_PERFMON);
   SetBpfTopologyVars(bpf_obj_->rodata, MachineTopology());
@@ -34,6 +36,8 @@ BiffScheduler::BiffScheduler(Enclave* enclave, CpuList cpulist,
            0);
   CHECK_EQ(agent_bpf_register(bpf_obj_->progs.biff_msg_send,
                               BPF_GHOST_MSG_SEND), 0);
+  CHECK_EQ(agent_bpf_register(bpf_obj_->progs.biff_select_rq,
+                              BPF_GHOST_SELECT_RQ), 0);
 
   bpf_cpu_data_ = static_cast<struct biff_bpf_cpu_data*>(
       bpf_map__mmap(bpf_obj_->maps.cpu_data));
@@ -51,9 +55,6 @@ BiffScheduler::~BiffScheduler() {
 }
 
 void BiffScheduler::EnclaveReady() {
-  // Biff has no cpu locality, so the remote wakeup is never worth it.
-  enclave()->SetWakeOnWakerCpu(true);
-
   enclave()->SetDeliverTicks(true);
   enclave()->SetDeliverCpuAvailability(true);
   WRITE_ONCE(bpf_obj_->bss->initialized, true);

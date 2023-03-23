@@ -25,7 +25,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION 82
+#define GHOST_VERSION 83
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
