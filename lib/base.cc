@@ -28,7 +28,6 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_format.h"
 #include "absl/time/time.h"
-#include "kernel/ghost_uapi.h"
 #include "lib/logging.h"
 
 // procfs may have been mounted somewhere other than root (eg. for testing
@@ -255,13 +254,32 @@ void Gtid::assign_name(std::string name) const {
 absl::string_view Gtid::describe() const {
   int64_t gtid = id();
 
-  // Describe special encodings.
+  // Describe special encodings. Ideally we would use mnemonics like
+  // GHOST_AGENT_GTID here but that requires including uapi header
+  // which is restricted to the ghost library.
   if (gtid <= 0) {
-    if (gtid == GHOST_NULL_GTID) return "<empty>";
+    switch (gtid) {
+      case 0:
+        return "<null>";
+      case -1:
+        return "<agent>";
+      case -2:
+        return "<idle>";
 
-    if (gtid == GHOST_AGENT_GTID) return "<agent>";
+      // In the unlikely case the uapi starts using the next 3 numbers
+      // let's encode the numerical value in the name (note that we cannot
+      // use absl::StrFormat to create this dynamically since this function
+      // returns a string_view).
+      case -3:
+        return "<gtid-3>";
+      case -4:
+        return "<gtid-4>";
+      case -5:
+        return "<gtid-5>";
 
-    return "<unknown>";
+      default:
+        return "<unknown>";
+    }
   }
 
   return get_gtid_name(gtid);
