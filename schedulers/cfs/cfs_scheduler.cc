@@ -1201,7 +1201,7 @@ int CfsRq::DetachTasks(const CpuState* dst_cs, int n,
 }
 
 bool CfsRq::CanMigrateTask(CfsTask* task, const CpuState* dst_cs) {
-  uint32_t seqnum = READ_ONCE(task->seqnum);
+  uint32_t seqnum = task->seqnum.load();
 
   int dst_cpu = dst_cs->id;
   const Channel* channel = dst_cs->channel.get();
