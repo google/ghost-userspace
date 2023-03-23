@@ -83,6 +83,7 @@ cc_library(
     name = "trivial_status",
     srcs = ["lib/trivial_status.cc"],
     hdrs = ["lib/trivial_status.h"],
+    copts = compiler_flags,
     deps = [
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
