@@ -313,7 +313,6 @@ cc_test(
     ],
 )
 
-# Makes vmlinux_ghost_*.h files visible to eBPF code.
 exports_files(glob([
     "kernel/vmlinux_ghost_*.h",
 ]) + [
@@ -682,6 +681,62 @@ cc_library(
         ":agent",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
+    ],
+)
+
+cc_binary(
+    name = "agent_flux",
+    srcs = [
+        "schedulers/flux/agent_flux.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        ":flux_scheduler",
+        "@com_google_absl//absl/debugging:symbolize",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+bpf_skeleton(
+    name = "flux_bpf_skel",
+    bpf_object = "//third_party/bpf:flux_bpf",
+    skel_hdr = "schedulers/flux/flux_bpf.skel.h",
+)
+
+cc_library(
+    name = "flux_scheduler",
+    srcs = [
+        "schedulers/flux/flux_scheduler.cc",
+    ],
+    hdrs = [
+        "lib/queue.bpf.h",
+        "schedulers/flux/flux_bpf.skel.h",
+        "schedulers/flux/flux_scheduler.h",
+        "//third_party/bpf:flux_bpf.h",
+        "//third_party/bpf:flux_infra",
+        "//third_party/bpf:flux_scheds",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_absl//absl/strings:str_format",
+        "@linux//:libbpf",
+    ],
+)
+
+cc_test(
+    name = "flux_test",
+    size = "small",
+    srcs = [
+        "tests/flux_test.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":flux_scheduler",
+        "@com_google_googletest//:gtest",
     ],
 )
 
