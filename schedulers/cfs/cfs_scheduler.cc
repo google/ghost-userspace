@@ -27,7 +27,6 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "kernel/ghost_uapi.h"
 #include "lib/agent.h"
 #include "lib/logging.h"
 #include "lib/topology.h"

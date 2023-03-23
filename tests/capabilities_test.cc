@@ -11,7 +11,6 @@
 
 #include "bpf/user/agent.h"
 #include "bpf/user/test_bpf.skel.h"
-#include "kernel/ghost_uapi.h"
 #include "lib/agent.h"
 #include "lib/channel.h"
 #include "lib/ghost.h"

@@ -16,7 +16,6 @@
 #include "absl/base/attributes.h"
 #include "absl/strings/numbers.h"
 #include "bpf/user/agent.h"
-#include "kernel/ghost_uapi.h"
 #include "lib/agent.h"
 #include "lib/scheduler.h"
 
