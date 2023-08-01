@@ -34,6 +34,14 @@
 #include "absl/time/time.h"
 #include "lib/logging.h"
 
+/*
+ * Define SCHED_GHOST unless it has already been defined via the proper
+ * channels (i.e. the official <sched.h> uapi header file).
+ */
+#ifndef SCHED_GHOST
+#define SCHED_GHOST   18
+#endif
+
 ABSL_DECLARE_FLAG(std::string, ghost_procfs_prefix);
 ABSL_DECLARE_FLAG(bool, emit_fork_warnings);
 
