@@ -7,6 +7,7 @@
 #ifndef _SCHED_GHOST_H_
 #define _SCHED_GHOST_H_
 
+#include <linux/types.h>
 #include <linux/ioctl.h>
 
 #ifdef __KERNEL__
@@ -419,6 +420,36 @@ struct bpf_ghost_msg {
 	 * -1 indicates no preference.
 	 */
 	int pref_cpu;
+};
+
+struct bpf_ghost_sched {
+	__u8 agent_on_rq;	/* there is an agent, it can run if poked */
+	__u8 agent_runnable;	/* there is an agent, it will run */
+	__u8 might_yield;	/* other classes (CFS) probably want to run.
+				 * the agent will supersede these.  latched
+				 * tasks will not.
+				 */
+	__u8 dont_idle;		/* set true to prevent the cpu from idling */
+	__u8 must_resched;	/* set true force prev to get off cpu */
+	__u64 next_gtid;	/* scheduler will run this next, unless you do
+				 * something (or agent_runnable or
+				 * should_yield).  This is either a latched task
+				 * or was current and still TASK_RUNNING in PNT.
+				 * It will be preempted if you latch.
+				 */
+};
+
+struct bpf_ghost_select_rq {
+	__u64 gtid;
+	__u32 task_cpu;
+	__u32 waker_cpu;
+	__u32 sd_flag;
+	__u32 wake_flags;
+	__u8 skip_ttwu_queue;
+};
+
+struct bpf_ghost_halt_poll {
+	__u32 type; /* one of the enum GHOST_***_HALT_POLL options */
 };
 
 #ifdef __cplusplus

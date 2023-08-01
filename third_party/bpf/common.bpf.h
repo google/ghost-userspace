@@ -52,6 +52,12 @@ static long (*bpf_ghost_resched_cpu2)(__u32 cpu, __u32 flags) = (void *) 3003;
 #define WAKE_AGENT             (1 << 5)
 #define GHOST_RESCHED_CPU_MAX  (1 << 6)
 
+enum {
+  GHOST_PREPARE_HALT_POLL,
+  GHOST_CONTINUE_HALT_POLL,
+  GHOST_END_HALT_POLL,
+};
+
 static inline u64 min(u64 x, u64 y)
 {
   if (x < y)
