@@ -63,6 +63,7 @@ cc_library(
     deps = [
         ":base",
         ":ghost",
+        ":ghost_uapi",
         ":shared",
         ":topology",
         ":trivial_status",
@@ -358,7 +359,6 @@ cc_library(
         "lib/base.cc",
     ],
     hdrs = [
-        "kernel/ghost_uapi.h",
         "lib/base.h",
         "lib/logging.h",
         "//third_party:util/util.h",
@@ -783,13 +783,13 @@ cc_library(
         "lib/ghost.cc",
     ],
     hdrs = [
-        "kernel/ghost_uapi.h",
         "lib/ghost.h",
     ],
     copts = compiler_flags,
     linkopts = ["-lnuma"],
     deps = [
         ":base",
+        ":ghost_uapi",
         ":topology",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -797,6 +797,16 @@ cc_library(
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+cc_library(
+    name = "ghost_uapi",
+    srcs = [
+        "abi/latest/kernel/ghost.h",
+    ],
+    hdrs = [
+        "lib/ghost_uapi.h",
     ],
 )
 

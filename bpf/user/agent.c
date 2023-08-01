@@ -5,7 +5,7 @@
 // https://developers.google.com/open-source/licenses/bsd
 
 #include "bpf/user/agent.h"
-#include "kernel/ghost_uapi.h"
+#include "lib/ghost_uapi.h"
 
 #include <errno.h>
 #include <signal.h>
