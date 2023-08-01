@@ -543,10 +543,11 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   // Note: Should be called with this CPU's rq mutex lock held.
   void CheckPreemptTick(const Cpu& cpu);
 
-  // Kicks the current task off-cpu and puts into this CPU's run queue or
-  // initiate its migration if this CPU is no longer eligible as per its
-  // affinity mask.
-  void PutPrevTask();
+  // Kicks a given task off-cpu and puts into this CPU's run queue or initiate
+  // its migration if this CPU is no longer eligible as per its affinity mask.
+  // If the task was on-cpu (cs->current == task), cs->current will be reset as
+  // a side effect.
+  void PutPrevTask(CfsTask* task);
 
   // CfsSchedule looks at the current cpu state and its run_queue, decides what
   // to run next, and then commits a txn. REQUIRES: Called after all messages
