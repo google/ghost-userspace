@@ -88,7 +88,7 @@ class TrivialStatusOrString {
   bool ok() const { return status_.ok(); }
 
  private:
-  static constexpr size_t kMaxStringSize = 15000;
+  static constexpr size_t kMaxStringSize = 30000;
 
   TrivialStatus status_;
 

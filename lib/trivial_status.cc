@@ -10,10 +10,10 @@ void CopyString(std::array<char, ArraySize>& dest, absl::string_view s) {
   static_assert(ArraySize > 0);
   const size_t chars_to_copy = std::min(ArraySize - 1, s.size());
   if (chars_to_copy < s.size()) {
-    absl::FPrintF(
-        stderr,
-        "Source string too large to fix in TrivialStatus: %zu, vs max_size %zu",
-        s.size(), chars_to_copy);
+    absl::FPrintF(stderr,
+                  "Source string too large to fit in TrivialStatus: %zu, vs "
+                  "max_size %zu\n",
+                  s.size(), chars_to_copy);
   }
   std::copy_n(s.begin(), chars_to_copy, dest.begin());
   dest[chars_to_copy] = '\0';
