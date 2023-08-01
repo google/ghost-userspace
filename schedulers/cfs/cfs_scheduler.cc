@@ -495,6 +495,10 @@ void CfsScheduler::TaskYield(CfsTask* task, const Message& msg) {
     CHECK_EQ(cs->current, task);
   }
 
+  // The task should be in kDequeued state because only a currently running
+  // task can yield.
+  CHECK(task->task_state.OnRqDequeued());
+
   // Updates the task state accordingly. This is safe because this task should
   // be associated with this CPU's agent and protected by this CPU's RQ lock.
   PutPrevTask(task);
@@ -528,7 +532,10 @@ void CfsScheduler::TaskBlocked(CfsTask* task, const Message& msg) {
   }
 
   task->task_state.SetState(CfsTaskState::State::kBlocked);
-  task->task_state.SetOnRq(CfsTaskState::OnRq::kDequeued);
+  // No need to update OnRq state to kDequeued because the task should already
+  // be in kDequeued state because only a currently running task can block and
+  // it should be in kDequeued state.
+  CHECK(task->task_state.OnRqDequeued());
 
   // This task was the last task in a switchto chain on a remote CPU. We should
   // ping the remote CPU to schedule a new task.
@@ -552,6 +559,10 @@ void CfsScheduler::TaskPreempted(CfsTask* task, const Message& msg) {
     CHECK_EQ(cs->current, task);
   }
 
+  // The task should be in kDequeued state because only a currently running
+  // task can be preempted.
+  CHECK(task->task_state.OnRqDequeued());
+
   // Updates the task state accordingly. This is safe because this task should
   // be associated with this CPU's agent and protected by this CPU's RQ lock.
   PutPrevTask(task);
@@ -571,7 +582,9 @@ void CfsScheduler::TaskSwitchto(CfsTask* task, const Message& msg) {
 
   CHECK_EQ(cs->current, task);
   task->task_state.SetState(CfsTaskState::State::kBlocked);
-  task->task_state.SetOnRq(CfsTaskState::OnRq::kDequeued);
+  // No need to update OnRq state to kDequeued because the task should be on
+  // CPU and therefore in kDequeued state.
+  CHECK(task->task_state.OnRqDequeued());
   cs->current = nullptr;
 }
 

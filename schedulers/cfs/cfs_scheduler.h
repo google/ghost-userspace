@@ -80,6 +80,7 @@ class CfsTaskState {
   // Convenience functions for accessing on_rq state.
   inline bool OnRqQueued() const { return on_rq_ == OnRq::kQueued; }
   inline bool OnRqMigrating() const { return on_rq_ == OnRq::kMigrating; }
+  inline bool OnRqDequeued() const { return on_rq_ == OnRq::kDequeued; }
 
   // Accessors.
   State GetState() const { return state_; }
