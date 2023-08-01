@@ -86,6 +86,7 @@ static int insert_prog(int ctl_fd, struct bpf_program *prog)
 	case BPF_GHOST_SCHED_PNT:
 	case BPF_GHOST_MSG_SEND:
 	case BPF_GHOST_SELECT_RQ:
+	case BPF_GHOST_HALT_POLL:
 		ret = bpf_link_create(prog_fd, ctl_fd, eat, NULL);
 		break;
 	default:
