@@ -3,9 +3,12 @@
 
 load("//:bpf/bpf.bzl", "bpf_program")
 
-package(default_visibility = [
-    "//:__subpackages__",
-])
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = [
+        "//:__subpackages__",
+    ],
+)
 
 # We use the GPLv2 license for the eBPF code so that we can access kernel
 # functionality restricted to eBPF programs that are licensed under GPLv2. That
