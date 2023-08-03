@@ -9,13 +9,15 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 
-// vmlinux.h must be included before bpf_helpers.h
+#include <linux/types.h>
+
 // clang-format off
-#include "kernel/vmlinux_ghost_5_11.h"
+#include <linux/bpf.h>
 #include "libbpf/bpf_helpers.h"
 #include "libbpf/bpf_tracing.h"
 // clang-format on
 
+#include "lib/ghost_uapi.h"
 #include "third_party/bpf/common.bpf.h"
 #include "third_party/bpf/edf.h"
 

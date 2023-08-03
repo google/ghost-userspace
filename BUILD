@@ -330,9 +330,10 @@ cc_test(
 )
 
 exports_files(glob([
-    "kernel/vmlinux_ghost_*.h",
+    "abi/*/kernel/ghost.h",
 ]) + [
     "lib/queue.bpf.h",
+    "lib/ghost_uapi.h",
 ])
 
 cc_library(

@@ -13,9 +13,7 @@
 #ifndef GHOST_LIB_BPF_BPF_SCHEDRUN_H_
 #define GHOST_LIB_BPF_BPF_SCHEDRUN_H_
 
-#ifndef __BPF__
 #include <stdint.h>
-#endif
 
 #define MAX_PIDS 102400
 #define MAX_NR_HIST_SLOTS 25

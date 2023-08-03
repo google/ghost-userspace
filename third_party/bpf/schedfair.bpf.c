@@ -9,17 +9,19 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 
-// vmlinux.h must be included before bpf_helpers.h
+#include <linux/types.h>
+
 // clang-format off
-#include "kernel/vmlinux_ghost_5_11.h"
+#include <linux/bpf.h>
 #include "libbpf/bpf_core_read.h"
 #include "libbpf/bpf_helpers.h"
 #include "libbpf/bpf_tracing.h"
-// clang-format on
 
-#include "third_party/iovisor_bcc/bits.bpf.h"
+// common.bpf.h comes before bits.bpf.h for u32/s32/u64/s64 in OSS.
 #include "third_party/bpf/common.bpf.h"
+#include "third_party/iovisor_bcc/bits.bpf.h"
 #include "third_party/bpf/schedfair.h"
+// clang-format on
 
 /*
  * A task's fair share of a multiprocessor at an instant 't' is the nr_cpus /

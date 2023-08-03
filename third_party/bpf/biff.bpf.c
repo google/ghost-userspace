@@ -84,14 +84,17 @@
  *   from dying-task to old-agent-task in between.
  */
 
+#include <stdbool.h>
 
-// vmlinux.h must be included before bpf_helpers.h
+#include <linux/types.h>
+
 // clang-format off
-#include "kernel/vmlinux_ghost_5_11.h"
+#include <linux/bpf.h>
 #include "libbpf/bpf_helpers.h"
 #include "libbpf/bpf_tracing.h"
 // clang-format on
 
+#include "lib/ghost_uapi.h"
 #include "third_party/bpf/biff_bpf.h"
 #include "third_party/bpf/common.bpf.h"
 #include "third_party/bpf/topology.bpf.h"
