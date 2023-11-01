@@ -66,13 +66,13 @@ echo "Running scheduler with pid $SCHEDULER_PID"
 
 # Run test case
 time $TEST_BIN
-TEST_STATUS = $?
+TEST_STATUS=$?
 
 echo "Test case finished. Status: $TEST_STATUS"
 
 # Kill scheduler process after test case finishes
 sudo kill $SCHEDULER_PID
-KILL_STATUS = $?
+KILL_STATUS=$?
 
 # Check if kill worked
 if [ $KILL_STATUS -ne 0 ]; then
