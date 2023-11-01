@@ -61,8 +61,9 @@ TEST_BIN=bazel-bin/$TEST_NAME
 COMMAND="sudo $SCHEDULER_BIN ${SCHEDULER_ARGS[@]}"
 echo "> $COMMAND"
 
-tmux new -d -s ghost_scheduler $COMMAND
+tmux new -d -s ghost_scheduler "sleep 0.1 && $COMMAND" # sleep so that there is enough time to capture output
 tmux capture-pane -t ghost_scheduler -S - -E - # forward output to shell
+sleep 0.2
 echo "Running scheduler inside of tmux"
 
 # Run test case
