@@ -62,6 +62,7 @@ COMMAND="sudo $SCHEDULER_BIN ${SCHEDULER_ARGS[@]}"
 echo "> $COMMAND"
 
 tmux new -d -s ghost_scheduler $COMMAND
+tmux capture-pane -t ghost_scheduler -S - -E - # forward output to shell
 echo "Running scheduler inside of tmux"
 
 # Run test case
