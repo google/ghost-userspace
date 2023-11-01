@@ -71,7 +71,7 @@ TEST_STATUS=$?
 echo "Test case finished. Status: $TEST_STATUS"
 
 # Kill scheduler process after test case finishes
-sudo kill $SCHEDULER_PID
+sudo kill -INT $SCHEDULER_PID
 KILL_STATUS=$?
 
 # Check if kill worked
