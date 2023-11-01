@@ -59,12 +59,10 @@ TEST_BIN=bazel-bin/$TEST_NAME
 
 # Run the scheduler in the background
 COMMAND="sudo $SCHEDULER_BIN ${SCHEDULER_ARGS[@]}"
+$COMMAND &
+SCHEDULER_PID=$!
 echo "> $COMMAND"
-
-tmux new -d -s ghost_scheduler "sleep 0.1 && $COMMAND" # sleep so that there is enough time to capture output
-tmux capture-pane -t ghost_scheduler -S - -E - # forward output to shell
-sleep 0.2
-echo "Running scheduler inside of tmux"
+echo "Running scheduler with pid $SCHEDULER_PID"
 
 # Run test case
 echo "=== Running $TEST_NAME ==="
@@ -73,29 +71,7 @@ echo "=== Finished running $TEST_NAME ==="
 TEST_STATUS=$?
 
 echo "Test case finished. Status: $TEST_STATUS"
-echo "Killing ghOst scheduler..."
+echo "Please manually kill the scheduler to ensure everything is cleaned up."
 
-# Check if scheduler is still running
-# Returns 0 if running, !=0 otherwise
-is_scheduler_running() {
-  tmux ls | grep -q ghost_scheduler
-  return $?
-}
-
-if ! is_scheduler_running; then
-    echo "Scheduler tmux window is not running."
-    echo "This may mean the scheduler crashed unexpectedly."
-    echo "Run scripts/cleanup.sh if new test cases are failing."
-    exit 1
-fi
-
-# tmux send-keys sends the keys to the window (C-c = Ctrl+C = SIGINT)
-tmux send-keys -t ghost_scheduler:0 C-c
-
-# Check if signal worked
-if is_scheduler_running; then
-    echo "Attempt to send SIGINT to scheduler failed."
-    echo "Scheduler still running in tmux - please kill manually."
-else
-    echo "Scheduler exited gracefully"
-fi
+# For some reason this doesn't work in Bash, so we have to do it manually
+echo "Run this command: sudo kill -INT $SCHEDULER_PID"
