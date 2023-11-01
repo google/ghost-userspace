@@ -1,7 +1,7 @@
-# Note: If you modify this BUILD file, please contact jhumphri @first to ensure
+# Note: If you modify this BUILD file, please contact jhumphri@ first to ensure
 # that you are not breaking the Copybara script.
 
-    load("@rules_license//rules:license.bzl", "license")
+load("@rules_license//rules:license.bzl", "license")
 load("//:bpf/bpf.bzl", "bpf_skeleton")
 
 package(
@@ -16,19 +16,19 @@ license(
 
 # Each license covers the code below:
 #
-# BSD 2 - clause: Just covers the IOVisor BCC code in third_party / iovisor_bcc /.
+# BSD 2-clause: Just covers the IOVisor BCC code in third_party/iovisor_bcc/.
 # This code was not written by Google.
 #
-# GPLv2: Just covers the eBPF code in third_party / bpf /.This code was written
-# by Google.We need to license it under GPLv2 though so that the eBPF code
+# GPLv2: Just covers the eBPF code in third_party/bpf/. This code was written
+# by Google. We need to license it under GPLv2 though so that the eBPF code
 # can use kernel functionality restricted to code licensed under GPLv2.
 #
-# MIT: Just covers third_party / util / util.h.This code was not written by Google,
+# MIT: Just covers third_party/util/util.h. This code was not written by Google,
 # but was modified by Google.
 #
-# BSD 3 - clause: All other code is covered by BSD 3 - clause.This includes the
-# library code in lib /, the experiments, all code in bpf / user /, etc.
-    licenses(["notice"])
+# BSD 3-clause: All other code is covered by BSD 3-clause. This includes the
+# library code in lib/, the experiments, all code in bpf/user/, etc.
+licenses(["notice"])
 
 exports_files(["LICENSE"])
 
@@ -331,8 +331,8 @@ cc_test(
 exports_files(glob([
     "kernel/vmlinux_ghost_*.h",
 ]) + [
-        "lib/queue.bpf.h",
-    ])
+    "lib/queue.bpf.h",
+])
 
 cc_library(
     name = "topology",
@@ -985,65 +985,65 @@ cc_binary(
 
 # Shared library for ghOSt tests.
 
-    cc_library(
-        name = "experiments_shared",
-        srcs = [
-            "experiments/shared/prio_table_helper.cc",
-            "experiments/shared/thread_pool.cc",
-            "experiments/shared/thread_wait.cc",
-        ],
-        hdrs = [
-            "experiments/shared/prio_table_helper.h",
-            "experiments/shared/thread_pool.h",
-            "experiments/shared/thread_wait.h",
-        ],
-        copts = compiler_flags,
-        deps = [
-            ":base",
-            ":ghost",
-            ":shared",
-        ],
-    )
+cc_library(
+    name = "experiments_shared",
+    srcs = [
+        "experiments/shared/prio_table_helper.cc",
+        "experiments/shared/thread_pool.cc",
+        "experiments/shared/thread_wait.cc",
+    ],
+    hdrs = [
+        "experiments/shared/prio_table_helper.h",
+        "experiments/shared/thread_pool.h",
+        "experiments/shared/thread_wait.h",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":base",
+        ":ghost",
+        ":shared",
+    ],
+)
 
 cc_test(
-        name = "thread_pool_test",
-        size = "small",
-        srcs = [
-            "experiments/shared/thread_pool.cc",
-            "experiments/shared/thread_pool.h",
-            "experiments/shared/thread_pool_test.cc",
-        ],
-        copts = compiler_flags,
-        deps = [
-            ":base",
-            ":ghost",
-            "@com_google_absl//absl/functional:bind_front",
-            "@com_google_absl//absl/synchronization",
-            "@com_google_googletest//:gtest_main",
-        ],
-    )
+    name = "thread_pool_test",
+    size = "small",
+    srcs = [
+        "experiments/shared/thread_pool.cc",
+        "experiments/shared/thread_pool.h",
+        "experiments/shared/thread_pool_test.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":base",
+        ":ghost",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
 
 # The RocksDB binary and tests.
 
-    cc_binary(
-        name = "rocksdb",
-        srcs = [
-            "experiments/rocksdb/cfs_orchestrator.cc",
-            "experiments/rocksdb/cfs_orchestrator.h",
-            "experiments/rocksdb/ghost_orchestrator.cc",
-            "experiments/rocksdb/ghost_orchestrator.h",
-            "experiments/rocksdb/main.cc",
-        ],
-        copts = compiler_flags,
-        visibility = ["//experiments/scripts:__pkg__"],
-        deps = [
-            ":experiments_shared",
-            ":rocksdb_lib",
-            "@com_google_absl//absl/flags:parse",
-            "@com_google_absl//absl/functional:bind_front",
-            "@com_google_absl//absl/synchronization",
-        ],
-    )
+cc_binary(
+    name = "rocksdb",
+    srcs = [
+        "experiments/rocksdb/cfs_orchestrator.cc",
+        "experiments/rocksdb/cfs_orchestrator.h",
+        "experiments/rocksdb/ghost_orchestrator.cc",
+        "experiments/rocksdb/ghost_orchestrator.h",
+        "experiments/rocksdb/main.cc",
+    ],
+    copts = compiler_flags,
+    visibility = ["//experiments/scripts:__pkg__"],
+    deps = [
+        ":experiments_shared",
+        ":rocksdb_lib",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
 
 cc_library(
     name = "rocksdb_lib",
@@ -1200,31 +1200,31 @@ cc_test(
 
 # The Antagonist binary and tests.
 
-    cc_binary(
-        name = "antagonist",
-        srcs = [
-            "experiments/antagonist/cfs_orchestrator.cc",
-            "experiments/antagonist/cfs_orchestrator.h",
-            "experiments/antagonist/ghost_orchestrator.cc",
-            "experiments/antagonist/ghost_orchestrator.h",
-            "experiments/antagonist/main.cc",
-            "experiments/antagonist/orchestrator.cc",
-            "experiments/antagonist/orchestrator.h",
-            "experiments/antagonist/results.cc",
-            "experiments/antagonist/results.h",
-        ],
-        copts = compiler_flags,
-        visibility = ["//experiments/scripts:__pkg__"],
-        deps = [
-            ":base",
-            ":experiments_shared",
-            "@com_google_absl//absl/flags:flag",
-            "@com_google_absl//absl/flags:parse",
-            "@com_google_absl//absl/functional:bind_front",
-            "@com_google_absl//absl/synchronization",
-            "@com_google_absl//absl/time",
-        ],
-    )
+cc_binary(
+    name = "antagonist",
+    srcs = [
+        "experiments/antagonist/cfs_orchestrator.cc",
+        "experiments/antagonist/cfs_orchestrator.h",
+        "experiments/antagonist/ghost_orchestrator.cc",
+        "experiments/antagonist/ghost_orchestrator.h",
+        "experiments/antagonist/main.cc",
+        "experiments/antagonist/orchestrator.cc",
+        "experiments/antagonist/orchestrator.h",
+        "experiments/antagonist/results.cc",
+        "experiments/antagonist/results.h",
+    ],
+    copts = compiler_flags,
+    visibility = ["//experiments/scripts:__pkg__"],
+    deps = [
+        ":base",
+        ":experiments_shared",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+    ],
+)
 
 cc_test(
     name = "antagonist_options_test",
