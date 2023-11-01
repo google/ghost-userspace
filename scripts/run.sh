@@ -53,13 +53,15 @@ if [ $BUILD_STATUS -ne 0 ]; then
     exit $BUILD_STATUS
 fi
 
+echo "Test case built successfully"
+
 TEST_BIN=bazel-bin/$TEST_NAME
 
 # Run the scheduler in the background
 COMMAND="sudo $SCHEDULER_BIN ${SCHEDULER_ARGS[@]}"
 $COMMAND &
 SCHEDULER_PID=$!
-echo $COMMAND
+echo "> $COMMAND"
 echo "Running scheduler with pid $SCHEDULER_PID"
 
 # Run test case
