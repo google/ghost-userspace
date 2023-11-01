@@ -3,11 +3,6 @@
 # This script runs a scheduler along with a workload, collect benchmarks,
 # and clean everything up after the workload is finished.
 
-if [ "$EUID" -ne 0 ]
-  then echo "Please run as root (sudo bash)"
-  exit
-fi
-
 if [ "$#" -lt 2 ]; then
   echo "Usage: $0 <path_to_test_case> <path_to_scheduler> ..."
   echo "Example: $0 tests/custom_ghost_test.cc bazel-bin/fifo_per_cpu_agent --ghost_cpus 0-1" # 0-1 signifies the indices of the cpus you would like to use for ghOSt Google Scheduler TM Copyr
@@ -61,10 +56,10 @@ fi
 TEST_BIN=bazel-bin/$TEST_NAME
 
 # Run the scheduler in the background
-$SCHEDULER_BIN "${SCHEDULER_ARGS[@]}" &
+COMMAND="sudo $SCHEDULER_BIN ${SCHEDULER_ARGS[@]}"
+$COMMAND &
 SCHEDULER_PID=$!
-
-echo "$SCHEDULER_BIN ${SCHEDULER_ARGS[@]}"
+echo $COMMAND
 echo "Running scheduler with pid $SCHEDULER_PID"
 
 # Run test case
