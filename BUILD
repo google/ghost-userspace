@@ -250,18 +250,6 @@ cc_binary(
 )
 
 cc_binary(
-    name = "custom_ghost_test",
-    srcs = [
-        "tests/custom_ghost_test.cc",
-    ],
-    copts = compiler_flags,
-    deps = [
-        ":base",
-        ":ghost",
-    ],
-)
-
-cc_binary(
     name = "cfs_test",
     testonly = 1,
     srcs = [

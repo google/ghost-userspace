@@ -1,1 +1,7 @@
+# Bazel build results
+/bazel-bin
+/bazel-ghost-userspace
+/bazel-out
+/bazel-testlogs
+
 /.vscode
