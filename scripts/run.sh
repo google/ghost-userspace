@@ -80,7 +80,7 @@ is_scheduler_running() {
   return $?
 }
 
-if !is_scheduler_running; then
+if ! is_scheduler_running; then
     echo "Scheduler tmux window is not running."
     echo "This may mean the scheduler crashed unexpectedly."
     echo "Run scripts/cleanup.sh if new test cases are failing."
