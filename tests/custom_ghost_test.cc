@@ -12,7 +12,7 @@ int main() {
     int ctr = 0;
     for (int threadId = 0; threadId < 5; ++threadId) {
         threads.push_back(std::make_unique<ghost::GhostThread>(
-            ghost::GhostThread::KernelScheduler::kCfs, [ctr, threadId]() {
+            ghost::GhostThread::KernelScheduler::kCfs, [&ctr, threadId]() {
                 for (int i = 0; i < 100; ++i) {
                     std::this_thread::sleep_for(
                         std::chrono::milliseconds(threadId + 5));
