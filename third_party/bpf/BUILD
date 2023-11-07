@@ -74,8 +74,8 @@ bpf_program(
         "cfs_bpf.h",
         "common.bpf.h",
         "//:abi/latest/kernel/ghost.h",
+        "//:arr_structs",
         "//:lib/ghost_uapi.h",
-        "//:lib/queue.bpf.h",
     ],
     bpf_object = "cfs_bpf.o",
 )
@@ -101,8 +101,8 @@ bpf_program(
         ":flux_infra",
         ":flux_scheds",
         "//:abi/latest/kernel/ghost.h",
+        "//:arr_structs",
         "//:lib/ghost_uapi.h",
-        "//:lib/queue.bpf.h",
     ],
     bpf_object = "flux_bpf.o",
 )

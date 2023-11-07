@@ -7,7 +7,7 @@ load("//:abi.bzl", "bpf_skel_ghost", "cc_library_ghost", "define_ghost_uapi")
 
 package(
     default_applicable_licenses = ["//:license"],
-    default_visibility = ["//:__pkg__"],
+    default_visibility = ["//:__subpackages__"],
 )
 
 license(
@@ -334,9 +334,17 @@ cc_test(
 exports_files(glob([
     "abi/*/kernel/ghost.h",
 ]) + [
-    "lib/queue.bpf.h",
     "lib/ghost_uapi.h",
 ])
+
+filegroup(
+    name = "arr_structs",
+    srcs = [
+        "lib/arr_structs.bpf.h",
+        "lib/avl.bpf.h",
+        "lib/queue.bpf.h",
+    ],
+)
 
 cc_library(
     name = "topology",
@@ -443,11 +451,24 @@ cc_library(
 )
 
 cc_test(
+    name = "bpf_avl_test",
+    size = "small",
+    srcs = [
+        "tests/bpf_avl_test.cc",
+        ":arr_structs",
+    ],
+    copts = compiler_flags,
+    deps = [
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_test(
     name = "bpf_queue_test",
     size = "small",
     srcs = [
-        "lib/queue.bpf.h",
         "tests/bpf_queue_test.cc",
+        ":arr_structs",
     ],
     copts = compiler_flags,
     deps = [
@@ -495,9 +516,9 @@ cc_library(
         "schedulers/cfs_bpf/cfs_scheduler.cc",
     ],
     hdrs = [
-        "lib/queue.bpf.h",
         "schedulers/cfs_bpf/cfs_bpf.skel.h",
         "schedulers/cfs_bpf/cfs_scheduler.h",
+        ":arr_structs",
         "//third_party/bpf:cfs_bpf.h",
     ],
     copts = compiler_flags,
@@ -750,9 +771,9 @@ cc_library(
         "schedulers/flux/flux_scheduler.cc",
     ],
     hdrs = [
-        "lib/queue.bpf.h",
         "schedulers/flux/flux_bpf.skel.h",
         "schedulers/flux/flux_scheduler.h",
+        ":arr_structs",
         "//third_party/bpf:flux_bpf.h",
         "//third_party/bpf:flux_infra",
         "//third_party/bpf:flux_scheds",

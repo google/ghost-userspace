@@ -29,15 +29,7 @@
 #ifndef GHOST_LIB_QUEUE_BPF_H_
 #define GHOST_LIB_QUEUE_BPF_H_
 
-/* For older gcc, typeof may be undefined. */
-#ifndef typeof
-#define typeof(x) __typeof__(x)
-#endif
-
-/* Helper to prevent the compiler from optimizing bounds check on x. */
-#ifndef BPF_MUST_CHECK
-#define BPF_MUST_CHECK(x) ({ asm volatile ("" : "+r"(x)); x; })
-#endif
+#include "lib/arr_structs.bpf.h"
 
 struct arr_list {
 	unsigned int first;
@@ -56,32 +48,6 @@ struct arr_list_entry {
 })
 
 #define ARR_LIST_HEAD_INITIALIZER {0}
-
-/*
- * Lookup the elem for an id.  Returns a pointer to the elem or NULL.
- *
- * Need to prevent the compiler from optimizing the bounds check on __idx so
- * that the verifier knows it was checked.
- */
-#define __id_to_elem(arr, arr_sz, id) ({				\
-	typeof(&arr[0]) ret = NULL;					\
-	if (id) {							\
-		unsigned int __idx = id - 1;				\
-		if (BPF_MUST_CHECK(__idx) < (arr_sz))			\
-			ret = &(arr)[__idx];				\
-	}								\
-	ret;								\
-})
-
-/*
- * Lookup the id for an elem.  elem must be in arr.
- *
- * The manual pointer arithmetic avoids signed division, which is not allowed in
- * BPF.  (The difference of pointers is signed).
- */
-#define __elem_to_id(arr, elem)						\
-	(((size_t)((unsigned char*)(elem) - (unsigned char*)(arr))	\
-	  / sizeof(*elem)) + 1)
 
 #define arr_list_next(arr, arr_sz, elem, field)				\
 	__id_to_elem(arr, arr_sz, (elem)->field.next)
