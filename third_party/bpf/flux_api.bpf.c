@@ -553,7 +553,7 @@ int flux_pnt(struct bpf_ghost_sched *ctx)
  * You can also sprinkle asm volatile ("" ::: "memory") to help reduce compiler
  * optimizations on the context.
  */
-static void __attribute__((noinline)) handle_new(struct bpf_ghost_msg *msg)
+static void handle_new(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_new *new = &msg->newt;
 	struct task_sw_info swi[1] = {0};
@@ -603,7 +603,7 @@ static void __attribute__((noinline)) handle_new(struct bpf_ghost_msg *msg)
 	flux_join_scheduler(t, new_thread_sched_id(new), new->runnable);
 }
 
-static void __attribute__((noinline)) handle_on_cpu(struct bpf_ghost_msg *msg)
+static void handle_on_cpu(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_on_cpu *on_cpu = &msg->on_cpu;
 	struct flux_thread *t;
@@ -612,7 +612,7 @@ static void __attribute__((noinline)) handle_on_cpu(struct bpf_ghost_msg *msg)
 	t->f.on_cpu = true;
 }
 
-static void __attribute__((noinline)) handle_blocked(struct bpf_ghost_msg *msg)
+static void handle_blocked(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_blocked *blocked = &msg->blocked;
 	struct flux_thread *t;
@@ -627,7 +627,7 @@ static void __attribute__((noinline)) handle_blocked(struct bpf_ghost_msg *msg)
 	t->f.on_cpu = false;
 }
 
-static void __attribute__((noinline)) handle_wakeup(struct bpf_ghost_msg *msg)
+static void handle_wakeup(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_wakeup *wakeup = &msg->wakeup;
 	struct flux_thread *t;
@@ -640,7 +640,7 @@ static void __attribute__((noinline)) handle_wakeup(struct bpf_ghost_msg *msg)
 	t->f.on_rq = true;
 }
 
-static void __attribute__((noinline)) handle_preempt(struct bpf_ghost_msg *msg)
+static void handle_preempt(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_preempt *preempt = &msg->preempt;
 	struct flux_thread *t;
@@ -651,7 +651,7 @@ static void __attribute__((noinline)) handle_preempt(struct bpf_ghost_msg *msg)
 	t->f.on_cpu = false;
 }
 
-static void __attribute__((noinline)) handle_yield(struct bpf_ghost_msg *msg)
+static void handle_yield(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_yield *yield = &msg->yield;
 	struct flux_thread *t;
@@ -662,7 +662,7 @@ static void __attribute__((noinline)) handle_yield(struct bpf_ghost_msg *msg)
 	t->f.on_cpu = false;
 }
 
-static void __attribute__((noinline)) handle_switchto(struct bpf_ghost_msg *msg)
+static void handle_switchto(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_switchto *switchto = &msg->switchto;
 	struct flux_thread *t;
@@ -688,16 +688,14 @@ static void __attribute__((noinline)) handle_switchto(struct bpf_ghost_msg *msg)
 	t->f.on_cpu = false;
 }
 
-static void __attribute__((noinline))
-handle_affinity_changed(struct bpf_ghost_msg *msg)
+static void handle_affinity_changed(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_affinity_changed *affin = &msg->affinity;
 
 	flux_thread_affinity_changed(affin->gtid, msg->seqnum, affin);
 }
 
-static void __attribute__((noinline))
-handle_prio_changed(struct bpf_ghost_msg *msg)
+static void handle_prio_changed(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_priority_changed *prio = &msg->priority;
 	struct flux_thread *t;
@@ -712,8 +710,7 @@ handle_prio_changed(struct bpf_ghost_msg *msg)
 	flux_thread_prio_changed_thr(t, msg->seqnum, &prio_f);
 }
 
-static void __attribute__((noinline))
-handle_latch_failure(struct bpf_ghost_msg *msg)
+static void handle_latch_failure(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_latch_failure *lf =
 		&msg->latch_failure;
@@ -736,7 +733,7 @@ handle_latch_failure(struct bpf_ghost_msg *msg)
 	flux_thread_runnable_thr(t, msg->seqnum, &runnable_f);
 }
 
-static void __attribute__((noinline)) handle_dead(struct bpf_ghost_msg *msg)
+static void handle_dead(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_dead *dead = &msg->dead;
 	struct flux_thread *t;
@@ -747,7 +744,7 @@ static void __attribute__((noinline)) handle_dead(struct bpf_ghost_msg *msg)
 	flux_thread_decref(t);
 }
 
-static void __attribute__((noinline)) handle_departed(struct bpf_ghost_msg *msg)
+static void handle_departed(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_task_departed *departed = &msg->departed;
 	struct flux_thread *t;
@@ -763,7 +760,7 @@ static void __attribute__((noinline)) handle_departed(struct bpf_ghost_msg *msg)
 	flux_thread_decref(t);
 }
 
-static void __attribute__((noinline)) handle_cpu_tick(struct bpf_ghost_msg *msg)
+static void handle_cpu_tick(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_cpu_tick *cpu_tick = &msg->cpu_tick;
 	struct flux_cpu *cpu;
@@ -795,8 +792,7 @@ static void __attribute__((noinline)) handle_cpu_tick(struct bpf_ghost_msg *msg)
 	}
 }
 
-static void __attribute__((noinline))
-handle_cpu_available(struct bpf_ghost_msg *msg)
+static void handle_cpu_available(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_cpu_available *avail = &msg->cpu_available;
 	struct flux_cpu *cpu;
@@ -813,8 +809,7 @@ handle_cpu_available(struct bpf_ghost_msg *msg)
 	WRITE_ONCE(cpu->f.preempt_to, FLUX_TIER_NO_PREEMPT);
 }
 
-static void __attribute__((noinline))
-handle_cpu_busy(struct bpf_ghost_msg *msg)
+static void handle_cpu_busy(struct bpf_ghost_msg *msg)
 {
 	struct ghost_msg_payload_cpu_busy *busy = &msg->cpu_busy;
 	struct flux_cpu *cpu;
@@ -837,8 +832,39 @@ handle_cpu_busy(struct bpf_ghost_msg *msg)
 }
 
 SEC("ghost_msg/msg_send")
-int flux_msg_send(struct bpf_ghost_msg *msg)
+int flux_msg_send(struct bpf_ghost_msg *__msg)
 {
+	/*
+	 * This is crappy, but it seems to be the best way to avoid the dreaded
+	 * "dereference of modified ctx ptr" error.  For whatever reason, you're
+	 * allowed to do reads/writes from a context pointer at various offsets.
+	 * e.g. r1 = *(u64 *)(r2 +40) would be a read from 40 into the context.
+	 * But if you add 40 to r2, and then do the read, that's not OK.  It's
+	 * hardcoded into the verifier like that, where certain pointer types
+	 * are OK to modify (map items, stack objects, etc.) and some aren't.
+	 *
+	 * Previously, I tried to defeat this by no-inlining all of the handle
+	 * functions, since that seemed to stop the compiler from modifying the
+	 * pointer.  But as you write more complicated functions, you need to
+	 * put the noinline on every sched op too.  And even then, you're just
+	 * hoping the compiler doesn't decide to increment the pointer for its
+	 * own reasons.  I ran into this with a simple on_cpu op, where all we
+	 * did was read the cpu field (+24).
+	 *
+	 * The 'fix' is to just copy the msg to the stack, where we're allowed
+	 * to modify the pointer.  Yeah, it's a copy of 48 bytes that we
+	 * shouldn't have to do.
+	 *
+	 * bpf_ghost_msg is read-only for flux, so this is fine.  But if you're
+	 * interested in changing the contents of the msg or setting the
+	 * pref_cpu field from a handler, you'll need to copy that back to the
+	 * "real" __msg.
+	 *
+	 * Hopefully we won't need do to this for BPF-PNT.  I've only run into
+	 * this error with BPF-MSG, perhaps because of the union.
+	 */
+	struct bpf_ghost_msg msg[1] = {*__msg};
+
 	switch (msg->type) {
 	case MSG_TASK_NEW:
 		handle_new(msg);
