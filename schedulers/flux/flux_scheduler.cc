@@ -38,6 +38,7 @@ FluxScheduler::FluxScheduler(Enclave* enclave, CpuList cpulist,
   bpf_obj_ = flux_bpf__open();
   CHECK_NE(bpf_obj_, nullptr);
 
+  FluxCheckMaps(bpf_obj_);
   FluxSetProgTypes(bpf_obj_);
   FluxSetGlobals(bpf_obj_);
 

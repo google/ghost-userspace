@@ -35,4 +35,11 @@
   bpf_obj->rodata->ghost_gtid_seqnum_bits = ghost_tid_seqnum_bits(); \
 })
 
+#define FluxCheckMaps(bpf_obj) ({ \
+  CHECK_EQ(bpf_map__value_size(bpf_obj->maps.cpu_data), \
+           FLUX_MAX_CPUS * sizeof(struct flux_cpu)); \
+  CHECK_EQ(bpf_map__value_size(bpf_obj->maps.thread_data), \
+           FLUX_MAX_GTIDS * sizeof(struct flux_thread)); \
+})
+
 #endif // GHOST_LIB_FLUX_H_
