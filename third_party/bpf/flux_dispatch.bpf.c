@@ -89,23 +89,7 @@ static struct flux_cpu *get_cpus(void)
 /* Helper, from cpu id to per-cpu data blob */
 static struct flux_cpu *cpuid_to_cpu(u32 cpu_id)
 {
-	struct flux_cpu *cpus = get_cpus();
-
-	if (!cpus)
-		return NULL;
-	/*
-	 * Do the index bounds check as close to the use as possible.  That will
-	 * decrease the chances that the compiler drops the register and e.g.
-	 * uses the function argument's register.  The verifier knows the bounds
-	 * check only for a particular register.
-	 *
-	 * BPF_MUST_CHECK has helped prevent the compiler from dropping the
-	 * register, though it doesn't seem to matter all the time.
-	 */
-	BPF_MUST_CHECK(cpu_id);
-	if (cpu_id >= FLUX_MAX_CPUS)
-		return NULL;
-	return &cpus[cpu_id];
+	return BOUNDED_ARRAY_IDX(get_cpus(), FLUX_MAX_CPUS, cpu_id);
 }
 
 static struct flux_cpu *get_this_cpu(void)
@@ -127,8 +111,6 @@ static struct flux_thread *get_thread_array(void)
 static struct flux_thread *gtid_to_thread(u64 gtid)
 {
 	struct task_sw_info *swi;
-	struct flux_thread *__t_arr;
-	u32 idx;
 
 	/* Convenience for our callers: no process has gtid == 0 */
 	if (gtid == 0)
@@ -136,14 +118,8 @@ static struct flux_thread *gtid_to_thread(u64 gtid)
 	swi = bpf_map_lookup_elem(&sw_lookup, &gtid);
 	if (!swi)
 		return NULL;
-	__t_arr = get_thread_array();
-	if (!__t_arr)
-		return NULL;
-	idx = swi->index;
-	BPF_MUST_CHECK(idx);
-	if (idx >= FLUX_MAX_GTIDS)
-		return NULL;
-	return &__t_arr[idx];
+	return BOUNDED_ARRAY_IDX(get_thread_array(), FLUX_MAX_GTIDS,
+				 swi->index);
 }
 
 /*

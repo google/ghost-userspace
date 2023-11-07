@@ -199,4 +199,70 @@ static inline int gtid_to_pid(uint64_t gtid)
 /* Helper to prevent the compiler from optimizing bounds check on x. */
 #define BPF_MUST_CHECK(x) ({ asm volatile ("" : "+r"(x)); x; })
 
+/*
+ * Index to an array element within a bound.
+ *
+ * No matter what you do to idx, the compiler is free to use two different
+ * registers for it, and use one to do the bounds check and another to do the
+ * array index.
+ *
+ * For example, when the idx was a u32 in Flux's cpuid_to_cpu(), I tried
+ *
+ * 	cpu_id = BPF_MUST_CHECK(cpu_id)
+ *
+ * where the compiler now has no idea the value of cpu_id.  That defeats some
+ * optimizations (e.g. the compiler removes the check because it knows the value
+ * of cpu_id), but you'll still get:
+ *
+ *	r2 = r8
+ *	r2 <<= 32
+ *	r2 >>= 32
+ *	if r2 > 0x3ff goto pc+29
+ *	r8 <<= 32
+ *	r8 >>= 32
+ *	r8 <<= 6
+ *	r0 += r8
+ *	*(u64 *)(r0 +48) = r3
+ *
+ * And that dereference of r0 wasn't bounds checked.  r2 was bounds checked, not
+ * r8, and the verifier doesn't know that r2 = r8.  (The shift by 6 was due to
+ * the size of the cpu struct at the time).  Perhaps the compiler wanted to keep
+ * r2 around.  Who knows.
+ *
+ * The shifting by 32 was because cpu_id was a u32, but depending on the BPF
+ * instruction set, we didn't have a conditional 32 bit jump.
+ *
+ * Eventually, we just have to bite the inline asm bullet to force the use of
+ * the same register for the bounds check and the array access.  This macro asm
+ * is the equivalent of:
+ *
+ *	if (!arr)
+ *		return NULL;
+ *	if (idx >= arr_sz)
+ *		return NULL;
+ *	return &arr[idx];
+ *
+ * The idx (___idx below) needs to be a u64, at least for certain versions
+ * of the BPF ISA, since there aren't u32 conditional jumps.
+ */
+#define BOUNDED_ARRAY_IDX(arr, arr_sz, idx) ({				\
+	typeof(&arr[0]) ___arr = arr;					\
+	u64 ___idx = idx;						\
+	if (___arr) {							\
+		asm volatile("if %[__idx] >= %[__bound] goto 1f;	\
+			      %[__idx] *= %[__size];		\
+			      %[__arr] += %[__idx];		\
+			      goto 2f;				\
+			      1:;				\
+			      %[__arr] = 0;			\
+			      2:				\
+			      "						\
+			     : [__arr]"+r"(___arr), [__idx]"+r"(___idx)	\
+			     : [__bound]"i"((arr_sz)),		        \
+			       [__size]"i"(sizeof(typeof(arr[0])))	\
+			     : "cc");					\
+	}								\
+	___arr;								\
+})
+
 #endif  // GHOST_LIB_BPF_COMMON_BPF_H_
