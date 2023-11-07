@@ -425,8 +425,8 @@ struct CpuState {
   // ID of the cpu.
   int id = -1;
 
-  bool IsIdle() { return current == nullptr; }
-  bool LocklessRqEmpty() { return run_queue.LocklessSize() == 0; }
+  bool IsIdle() const { return current == nullptr; }
+  bool LocklessRqEmpty() const { return run_queue.LocklessSize() == 0; }
 } ABSL_CACHELINE_ALIGNED;
 
 class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
@@ -509,7 +509,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   void DumpState(const Cpu& cpu, int flags) final;
   std::atomic<bool> debug_runqueue_ = false;
 
-  int CountAllTasks() {
+  int CountAllTasks() const {
     int num_tasks = 0;
     allocator()->ForEachTask([&num_tasks](Gtid gtid, const CfsTask* task) {
       ++num_tasks;
