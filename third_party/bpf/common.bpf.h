@@ -246,7 +246,7 @@ static inline int gtid_to_pid(uint64_t gtid)
  * of the BPF ISA, since there aren't u32 conditional jumps.
  */
 #define BOUNDED_ARRAY_IDX(arr, arr_sz, idx) ({				\
-	typeof(&arr[0]) ___arr = arr;					\
+	typeof(&(arr)[0]) ___arr = arr;					\
 	u64 ___idx = idx;						\
 	if (___arr) {							\
 		asm volatile("if %[__idx] >= %[__bound] goto 1f;	\
@@ -259,7 +259,7 @@ static inline int gtid_to_pid(uint64_t gtid)
 			      "						\
 			     : [__arr]"+r"(___arr), [__idx]"+r"(___idx)	\
 			     : [__bound]"i"((arr_sz)),		        \
-			       [__size]"i"(sizeof(typeof(arr[0])))	\
+			       [__size]"i"(sizeof(typeof((arr)[0])))	\
 			     : "cc");					\
 	}								\
 	___arr;								\

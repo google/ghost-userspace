@@ -243,10 +243,10 @@ struct avl_node *__avl_id_to_node(void *arr, size_t arr_sz,
 	 * p can legitimately be (arr_sz-1) * e + f, when we're looking up the
 	 * last node in the array.
 	 */
-	p = BPF_MUST_CHECK(p);
-	if (p > (arr_sz - 1) * elem_sz + field_off)
-		return NULL;
-	return (struct avl_node*)((uint8_t*)arr + p);
+	return (struct avl_node*)
+		BOUNDED_ARRAY_IDX((uint8_t*)arr,
+				  (arr_sz - 1) * elem_sz + field_off,
+				  p);
 }
 
 static inline __attribute__((always_inline))

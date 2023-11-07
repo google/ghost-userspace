@@ -12,6 +12,12 @@
 #ifndef GHOST_LIB_ARR_STRUCTS_BPF_H_
 #define GHOST_LIB_ARR_STRUCTS_BPF_H_
 
+#ifdef __BPF__
+#include "third_party/bpf/common.bpf.h"
+#else
+#define BOUNDED_ARRAY_IDX(arr, arr_sz, idx) &(arr)[(idx)]
+#endif
+
 /* For older gcc, typeof may be undefined. */
 #ifndef typeof
 #define typeof(x) __typeof__(x)
@@ -24,18 +30,10 @@
 
 /*
  * Lookup the elem for an id.  Returns a pointer to the elem or NULL.
- *
- * Need to prevent the compiler from optimizing the bounds check on __idx so
- * that the verifier knows it was checked.
  */
 #define __id_to_elem(arr, arr_sz, id) ({				\
-	typeof(&arr[0]) ret = NULL;					\
-	if (id) {							\
-		unsigned int __idx = id - 1;				\
-		if (BPF_MUST_CHECK(__idx) < (arr_sz))			\
-			ret = &(arr)[__idx];				\
-	}								\
-	ret;								\
+	size_t ___id = id;						\
+	___id ? BOUNDED_ARRAY_IDX(arr, arr_sz, ___id - 1) : NULL;	\
 })
 
 /*
