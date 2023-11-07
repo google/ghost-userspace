@@ -2252,13 +2252,14 @@ TEST(ApiTest, GhostTaskPriorityViaGetSetPriority) {
   int64_t response_code = 0;
   int32_t state = 0;
   do {
-    AgentRpcArgs args{.arg0 = index};
-    AgentRpcResponse resp =
-        ap.RpcWithResponse(FullMessageAgent<LocalEnclave>::kMessageAt, args);
+    auto args = std::make_unique<AgentRpcArgs>();
+    args->arg0 = index;
+    std::unique_ptr<AgentRpcResponse> resp =
+        ap.RpcWithResponse(FullMessageAgent<LocalEnclave>::kMessageAt, *args);
 
-    response_code = resp.response_code;
+    response_code = resp->response_code;
     if (!response_code) {
-      Message message(reinterpret_cast<ghost_msg*>(resp.buffer.data.data()));
+      Message message(reinterpret_cast<ghost_msg*>(resp->buffer.data.data()));
       if (message.type() == MSG_TASK_NEW) {
         EXPECT_THAT(state, Eq(0));
         EXPECT_THAT(message.gtid(), Eq(gtid));
@@ -2369,13 +2370,14 @@ TEST(ApiTest, GhostTaskPriorityViaSchedGetSetAttr) {
   int64_t response_code = 0;
   int32_t state = 0;
   do {
-    AgentRpcArgs args{.arg0 = index};
-    AgentRpcResponse resp =
-        ap.RpcWithResponse(FullMessageAgent<LocalEnclave>::kMessageAt, args);
+    auto args = std::make_unique<AgentRpcArgs>();
+    args->arg0 = index;
+    std::unique_ptr<AgentRpcResponse> resp =
+        ap.RpcWithResponse(FullMessageAgent<LocalEnclave>::kMessageAt, *args);
 
-    response_code = resp.response_code;
+    response_code = resp->response_code;
     if (!response_code) {
-      Message message(reinterpret_cast<ghost_msg*>(resp.buffer.data.data()));
+      Message message(reinterpret_cast<ghost_msg*>(resp->buffer.data.data()));
       if (message.type() == MSG_TASK_NEW) {
         EXPECT_THAT(state, Eq(0));
         EXPECT_THAT(message.gtid(), Eq(gtid));
