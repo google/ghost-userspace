@@ -494,11 +494,10 @@ class SpinningAgent : public LocalAgent {
 class TickConfig : public AgentConfig {
  public:
   TickConfig(Topology* topology, CpuList cpus, int numa_node)
-      : AgentConfig(topology, cpus), numa_node_(numa_node) {
-        tick_config_ = CpuTickConfig::kAllTicks;
+      : AgentConfig(topology, cpus) {
+    numa_node_ = numa_node;
+    tick_config_ = CpuTickConfig::kAllTicks;
   }
-
-  int numa_node_;
 };
 
 // Drain 'channel' and return the number of CPU_TICK messages.
