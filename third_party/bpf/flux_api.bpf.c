@@ -641,7 +641,8 @@ handle_latch_failure(struct bpf_ghost_msg *msg)
 		return;
 
 	if (!t->f.pending_latch) {
-		bpf_printd("latch_failure didn't have the ball!");
+		bpf_printd("latch_failure didn't have the ball! p %d e %d",
+			   gtid_to_pid(lf->gtid), lf->errno);
 		smp_store_release(&t->f.seqnum, msg->seqnum);
 		return;
 	}

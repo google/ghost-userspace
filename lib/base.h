@@ -127,6 +127,8 @@ inline pid_t GetTID() {
   return tid;
 }
 
+int ghost_tid_seqnum_bits(void);
+
 // Returns the raw GTID (ghOSt thread identifier) of the calling thread.
 //
 // A ghost tid is a 64-bit identifier for a task (as opposed to a TID

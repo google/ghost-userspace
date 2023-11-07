@@ -199,21 +199,21 @@ static inline struct flux_sched *get_parent(struct flux_sched *s)
 #define __thread_cat_op(SCHED, OP) __cat_op(SCHED, _thread_ ## OP)
 #define __cpu_cat_op(SCHED, OP) __cat_op(SCHED, _cpu_ ## OP)
 
-#define __thread_op_thr(thr, seq, msg, op) ({				\
+#define __thread_op_thr(thr, seq, args, op) ({				\
 	struct flux_sched *__sched = get_sched((thr)->f.sched);		\
 	if (!__sched)							\
 		return;							\
 	switch (__sched->f.type) {					\
-	__gen_thread_op_cases(__thread_cat_op, op, __sched, thr, msg)	\
+	__gen_thread_op_cases(__thread_cat_op, op, __sched, thr, args)	\
 	};								\
 	smp_store_release(&(thr)->f.seqnum, seq);			\
 })
 
-#define __thread_op(gtid, seq, msg, op) ({				\
+#define __thread_op(gtid, seq, args, op) ({				\
 	struct flux_thread *__thr = gtid_to_thread(gtid);		\
 	if (!__thr)							\
 		return;							\
-	__thread_op_thr(__thr, seq, msg, op);				\
+	__thread_op_thr(__thr, seq, args, op);				\
 	__thr;								\
 })
 

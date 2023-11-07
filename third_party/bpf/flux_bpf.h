@@ -18,7 +18,6 @@
 #include "third_party/bpf/flux_header_bpf.h"
 #include "third_party/bpf/idle_flux_bpf.h"
 #include "third_party/bpf/roci_flux_bpf.h"
-#include "lib/queue.bpf.h"
 
 struct flux_sched {
 	struct __flux_sched f;

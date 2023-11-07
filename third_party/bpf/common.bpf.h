@@ -185,6 +185,14 @@ clr_must_resched(struct bpf_ghost_sched *ctx)
 {
 	ctx->must_resched = false;
 }
+
+const volatile int ghost_gtid_seqnum_bits;
+
+static inline int gtid_to_pid(uint64_t gtid)
+{
+	return gtid >> ghost_gtid_seqnum_bits;
+}
+
 #pragma GCC diagnostic pop
 #endif  // GHOST_VERSION
 

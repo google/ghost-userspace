@@ -46,6 +46,7 @@ FluxScheduler::FluxScheduler(Enclave* enclave, CpuList cpulist,
                          BPF_PROG_TYPE_GHOST_SELECT_RQ, BPF_GHOST_SELECT_RQ);
 
   bpf_obj_->rodata->enable_bpf_printd = CapHas(CAP_PERFMON);
+  bpf_obj_->rodata->ghost_gtid_seqnum_bits = ghost_tid_seqnum_bits();
 
   CHECK_EQ(flux_bpf__load(bpf_obj_), 0);
 
