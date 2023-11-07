@@ -3,6 +3,7 @@
 
 load("@rules_license//rules:license.bzl", "license")
 load("//:bpf/bpf.bzl", "bpf_skeleton")
+load("//:abi.bzl", "cc_library_ghost", "define_ghost_uapi")
 
 package(
     default_applicable_licenses = ["//:license"],
@@ -41,44 +42,45 @@ bpf_linkopts = [
     "-lz",
 ]
 
-cc_library(
-    name = "agent",
-    srcs = [
-        "bpf/user/agent.c",
-        "lib/agent.cc",
-        "lib/channel.cc",
-        "lib/enclave.cc",
-    ],
-    hdrs = [
-        "bpf/user/agent.h",
-        "bpf/user/schedghostidle_bpf.skel.h",
-        "lib/agent.h",
-        "lib/channel.h",
-        "lib/enclave.h",
-        "lib/scheduler.h",
-        "//third_party:iovisor_bcc/trace_helpers.h",
-    ],
-    copts = compiler_flags,
-    linkopts = bpf_linkopts + ["-lnuma"],
-    deps = [
-        ":base",
-        ":ghost",
-        ":ghost_uapi",
-        ":shared",
-        ":topology",
-        ":trivial_status",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/synchronization",
-        "@linux//:libbpf",
-    ],
-)
+agent_lib_srcs = [
+    "bpf/user/agent.c",
+    "lib/agent.cc",
+    "lib/channel.cc",
+    "lib/enclave.cc",
+]
+
+agent_lib_hdrs = [
+    "//third_party:iovisor_bcc/trace_helpers.h",
+    "bpf/user/agent.h",
+    "bpf/user/schedghostidle_bpf.skel.h",
+    "lib/agent.h",
+    "lib/channel.h",
+    "lib/enclave.h",
+    "lib/scheduler.h",
+]
+
+agent_lib_visibility = [
+    "//prodkernel/ghost:__subpackages__",
+]
+
+agent_lib_deps = [
+    ":base",
+    ":ghost",
+    ":ghost_uapi",
+    ":shared",
+    ":topology",
+    ":trivial_status",
+    "@com_google_absl//absl/base:core_headers",
+    "@com_google_absl//absl/container:flat_hash_map",
+    "@com_google_absl//absl/container:flat_hash_set",
+    "@com_google_absl//absl/flags:flag",
+    "@com_google_absl//absl/status",
+    "@com_google_absl//absl/status:statusor",
+    "@com_google_absl//absl/strings",
+    "@com_google_absl//absl/strings:str_format",
+    "@com_google_absl//absl/synchronization",
+    "@linux//:libbpf",
+]
 
 cc_library(
     name = "trivial_status",
@@ -778,37 +780,54 @@ cc_test(
     ],
 )
 
-cc_library(
-    name = "ghost",
-    srcs = [
-        "lib/ghost.cc",
-    ],
-    hdrs = [
-        "lib/ghost.h",
-    ],
-    copts = compiler_flags,
-    linkopts = ["-lnuma"],
-    deps = [
-        ":base",
-        ":ghost_uapi",
-        ":topology",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-    ],
+ghost_lib_srcs = [
+    "lib/ghost.cc",
+]
+
+ghost_lib_hdrs = [
+    "lib/ghost.h",
+]
+
+ghost_lib_visibility = [
+    "//prodkernel/api/base:__subpackages__",
+    "//prodkernel/ghost:__subpackages__",
+]
+
+ghost_lib_deps = [
+    ":base",
+    ":ghost_uapi",
+    ":topology",
+    "@com_google_absl//absl/container:flat_hash_map",
+    "@com_google_absl//absl/container:flat_hash_set",
+    "@com_google_absl//absl/flags:flag",
+    "@com_google_absl//absl/log",
+    "@com_google_absl//absl/strings",
+    "@com_google_absl//absl/strings:str_format",
+]
+
+define_ghost_uapi(
+    name = "ghost_uapi",
+    abi = "latest",
 )
 
-cc_library(
-    name = "ghost_uapi",
-    srcs = [
-        "abi/latest/kernel/ghost.h",
-    ],
-    hdrs = [
-        "lib/ghost_uapi.h",
-    ],
+cc_library_ghost(
+    name = "ghost",
+    srcs = ghost_lib_srcs,
+    hdrs = ghost_lib_hdrs,
+    abi = "latest",
+    copts = compiler_flags,
+    linkopts = ["-lnuma"],
+    deps = ghost_lib_deps,
+)
+
+cc_library_ghost(
+    name = "agent",
+    srcs = agent_lib_srcs,
+    hdrs = agent_lib_hdrs,
+    abi = "latest",
+    copts = compiler_flags,
+    linkopts = bpf_linkopts + ["-lnuma"],
+    deps = agent_lib_deps,
 )
 
 cc_test(
