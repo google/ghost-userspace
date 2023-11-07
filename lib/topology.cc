@@ -14,7 +14,9 @@
 #include <string>
 #include <thread>
 
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_split.h"
 #include <numa.h>
 
 namespace ghost {
@@ -124,15 +126,6 @@ absl::flat_hash_map<int, CpuList> Topology::GetAllSiblings(
   return siblings;
 }
 
-static std::vector<std::string> split(const std::string& s, std::string regex) {
-  std::vector<std::string> result;
-  std::regex split_on(regex);
-
-  std::sregex_token_iterator iter(s.begin(), s.end(), split_on, -1), end;
-  for (; iter != end; iter++) result.push_back(*iter);
-  return result;
-}
-
 int Topology::GetHighestNodeIdx(const std::filesystem::path& path) const {
   std::ifstream f(path);
   CHECK(f.is_open());
@@ -141,8 +134,12 @@ int Topology::GetHighestNodeIdx(const std::filesystem::path& path) const {
   CHECK(!f.fail());
 
   int highest_idx = 0;
-  for (const auto& node_idx_s : split(node_possible_str, "[,-]"))
-    highest_idx = std::max(highest_idx, std::stoi(node_idx_s));
+  for (absl::string_view node_idx_s :
+       absl::StrSplit(node_possible_str, absl::ByAnyChar(",-"))) {
+    int node_idx;
+    CHECK(absl::SimpleAtoi(node_idx_s, &node_idx));
+    highest_idx = std::max(highest_idx, node_idx);
+  }
 
   return highest_idx;
 }
