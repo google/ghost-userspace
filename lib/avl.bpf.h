@@ -168,7 +168,8 @@ struct avl_tree {
 	unsigned int first_orphan_id;
 };
 
-static inline void avl_tree_init(struct avl_tree *t)
+static inline __attribute__((always_inline))
+void avl_tree_init(struct avl_tree *t)
 {
 	t->root = t->first_orphan_id = 0;
 #ifdef AVL_CACHING
@@ -199,23 +200,27 @@ struct avl_node {
  * elem_sz (sizeof some struct) and field_off (offsetof some field) both must be
  * 32 bits or less, which is always the case for our usage.
  */
-static uint64_t el_off(size_t elem_sz, size_t field_off)
+static inline __attribute__((always_inline))
+uint64_t el_off(size_t elem_sz, size_t field_off)
 {
 	return (elem_sz << 32) | field_off;
 }
 
-static size_t __el_off_elem(uint64_t el_off)
+static inline __attribute__((always_inline))
+size_t __el_off_elem(uint64_t el_off)
 {
 	return el_off >> 32;
 }
 
-static size_t __el_off_field(uint64_t el_off)
+static inline __attribute__((always_inline))
+size_t __el_off_field(uint64_t el_off)
 {
 	return el_off & ((1ULL << 32) - 1);
 }
 
-static struct avl_node *__avl_id_to_node(void *arr, size_t arr_sz,
-					 uint64_t el_off, unsigned int id)
+static inline __attribute__((always_inline))
+struct avl_node *__avl_id_to_node(void *arr, size_t arr_sz,
+				  uint64_t el_off, unsigned int id)
 {
 	size_t p;
 	size_t elem_sz = __el_off_elem(el_off);
@@ -244,8 +249,9 @@ static struct avl_node *__avl_id_to_node(void *arr, size_t arr_sz,
 	return (struct avl_node*)((uint8_t*)arr + p);
 }
 
-static unsigned int __avl_node_to_id(void *arr, uint64_t el_off,
-				     const struct avl_node *node)
+static inline __attribute__((always_inline))
+unsigned int __avl_node_to_id(void *arr, uint64_t el_off,
+			      const struct avl_node *node)
 {
 	size_t elem_sz = __el_off_elem(el_off);
 	size_t field_off = __el_off_field(el_off);
@@ -303,8 +309,9 @@ static unsigned int __avl_node_to_id(void *arr, uint64_t el_off,
  *
  * Instead, we have just the list operations we need: insert, remove, pop_first.
  */
-static void __insert_orphan(void *arr, size_t arr_sz, uint64_t el_off,
-			    struct avl_tree *t, struct avl_node *node)
+static inline __attribute__((always_inline))
+void __insert_orphan(void *arr, size_t arr_sz, uint64_t el_off,
+		     struct avl_tree *t, struct avl_node *node)
 {
 	struct avl_node *next;
 	unsigned int next_id, node_id;
@@ -322,8 +329,9 @@ static void __insert_orphan(void *arr, size_t arr_sz, uint64_t el_off,
 	node->prev_orphan_id = 0;
 }
 
-static void __remove_orphan(void *arr, size_t arr_sz, uint64_t el_off,
-			    struct avl_tree *t, struct avl_node *node)
+static inline __attribute__((always_inline))
+void __remove_orphan(void *arr, size_t arr_sz, uint64_t el_off,
+		     struct avl_tree *t, struct avl_node *node)
 {
 	struct avl_node *prev, *next;
 	unsigned int prev_id, next_id, node_id;
@@ -348,8 +356,9 @@ static void __remove_orphan(void *arr, size_t arr_sz, uint64_t el_off,
 	node->prev_orphan_id = 0;
 }
 
-static struct avl_node *__pop_first_orphan(void *arr, size_t arr_sz,
-					   uint64_t el_off, struct avl_tree *t)
+static inline __attribute__((always_inline))
+struct avl_node *__pop_first_orphan(void *arr, size_t arr_sz, uint64_t el_off,
+				    struct avl_tree *t)
 {
 	struct avl_node *first, *next;
 	unsigned int next_id;
@@ -371,9 +380,9 @@ static struct avl_node *__pop_first_orphan(void *arr, size_t arr_sz,
 	return first;
 }
 
-static struct avl_node *avl_tree_lookup(void *arr, size_t arr_sz,
-					uint64_t el_off, struct avl_tree *t,
-					uint64_t key)
+static inline __attribute__((always_inline))
+struct avl_node *avl_tree_lookup(void *arr, size_t arr_sz, uint64_t el_off,
+				 struct avl_tree *t, uint64_t key)
 {
 	struct avl_node *x;
 
@@ -392,8 +401,9 @@ static struct avl_node *avl_tree_lookup(void *arr, size_t arr_sz,
 	return NULL;
 }
 
-static struct avl_node *avl_min_node(void *arr, size_t arr_sz, uint64_t el_off,
-				     struct avl_node *x)
+static inline __attribute__((always_inline))
+struct avl_node *avl_min_node(void *arr, size_t arr_sz, uint64_t el_off,
+			      struct avl_node *x)
 {
 	for (int i = 0; i < MAX_AVL_HEIGHT; i++) {
 		if (!BPF_MUST_CHECK(x))
@@ -405,14 +415,16 @@ static struct avl_node *avl_min_node(void *arr, size_t arr_sz, uint64_t el_off,
 	return NULL;
 }
 
-static struct avl_node *avl_min_node_id(void *arr, size_t arr_sz,
-					uint64_t el_off, unsigned int id)
+static inline __attribute__((always_inline))
+struct avl_node *avl_min_node_id(void *arr, size_t arr_sz, uint64_t el_off,
+				 unsigned int id)
 {
 	return avl_min_node(arr, arr_sz, el_off, avl_id_to_node(id));
 }
 
-static struct avl_node *avl_tree_min(void *arr, size_t arr_sz, uint64_t el_off,
-				     struct avl_tree *t)
+static inline __attribute__((always_inline))
+struct avl_node *avl_tree_min(void *arr, size_t arr_sz, uint64_t el_off,
+			      struct avl_tree *t)
 {
 #ifdef AVL_CACHING
 	return avl_id_to_node(t->min_id);
@@ -421,8 +433,9 @@ static struct avl_node *avl_tree_min(void *arr, size_t arr_sz, uint64_t el_off,
 #endif
 }
 
-static struct avl_node *avl_max_node(void *arr, size_t arr_sz, uint64_t el_off,
-				     struct avl_node *x)
+static inline __attribute__((always_inline))
+struct avl_node *avl_max_node(void *arr, size_t arr_sz, uint64_t el_off,
+			      struct avl_node *x)
 {
 	for (int i = 0; i < MAX_AVL_HEIGHT; i++) {
 		if (!BPF_MUST_CHECK(x))
@@ -434,14 +447,16 @@ static struct avl_node *avl_max_node(void *arr, size_t arr_sz, uint64_t el_off,
 	return NULL;
 }
 
-static struct avl_node *avl_max_node_id(void *arr, size_t arr_sz,
-					uint64_t el_off, unsigned int id)
+static inline __attribute__((always_inline))
+struct avl_node *avl_max_node_id(void *arr, size_t arr_sz, uint64_t el_off,
+				 unsigned int id)
 {
 	return avl_max_node(arr, arr_sz, el_off, avl_id_to_node(id));
 }
 
-static struct avl_node *avl_tree_max(void *arr, size_t arr_sz, uint64_t el_off,
-				     struct avl_tree *t)
+static inline __attribute__((always_inline))
+struct avl_node *avl_tree_max(void *arr, size_t arr_sz, uint64_t el_off,
+			      struct avl_tree *t)
 {
 #ifdef AVL_CACHING
 	return avl_id_to_node(t->max_id);
@@ -450,8 +465,9 @@ static struct avl_node *avl_tree_max(void *arr, size_t arr_sz, uint64_t el_off,
 #endif
 }
 
-static struct avl_node *__avl_next_node(void *arr, size_t arr_sz,
-					uint64_t el_off, struct avl_node *x)
+static inline __attribute__((always_inline))
+struct avl_node *__avl_next_node(void *arr, size_t arr_sz, uint64_t el_off,
+				 struct avl_node *x)
 {
 	struct avl_node *parent;
 	unsigned int x_id;
@@ -473,8 +489,9 @@ static struct avl_node *__avl_next_node(void *arr, size_t arr_sz,
 	return NULL;
 }
 
-static struct avl_node *__avl_prev_node(void *arr, size_t arr_sz,
-					uint64_t el_off, struct avl_node *x)
+static inline __attribute__((always_inline))
+struct avl_node *__avl_prev_node(void *arr, size_t arr_sz, uint64_t el_off,
+				 struct avl_node *x)
 {
 	struct avl_node *parent;
 	unsigned int x_id;
@@ -531,10 +548,9 @@ static struct avl_node *__avl_prev_node(void *arr, size_t arr_sz,
  * nodes and trees, which is the sorted, in-order traversal of the keys in each
  * node.  the order both before and after the rotation is: t1, x, t2e, z, t4.
  */
-static struct avl_node *__avl_rotate_left(void *arr, size_t arr_sz,
-					  uint64_t el_off,
-					  struct avl_node *x,
-					  struct avl_node *z)
+static inline __attribute__((always_inline))
+struct avl_node *__avl_rotate_left(void *arr, size_t arr_sz, uint64_t el_off,
+				   struct avl_node *x, struct avl_node *z)
 {
 	unsigned int t23_id, x_id, z_id;
 	struct avl_node *t23;
@@ -580,10 +596,9 @@ static struct avl_node *__avl_rotate_left(void *arr, size_t arr_sz,
  * h+1    /   t23                           t1     t23   t4                   
  * h+2   t1    *                                    *                         
  */
-static struct avl_node *__avl_rotate_right(void *arr, size_t arr_sz,
-					   uint64_t el_off,
-					   struct avl_node *x,
-					   struct avl_node *z)
+static inline __attribute__((always_inline))
+struct avl_node *__avl_rotate_right(void *arr, size_t arr_sz, uint64_t el_off,
+				    struct avl_node *x, struct avl_node *z)
 {
 	unsigned int t23_id, x_id, z_id;
 	struct avl_node *t23;
@@ -636,10 +651,10 @@ static struct avl_node *__avl_rotate_right(void *arr, size_t arr_sz,
  * The first rotation is "Z-Y right", then "X-Y left".  For the code, we don't
  * have to do the intermediate rotation and just jump right to the final state.
  */
-static struct avl_node *__avl_rotate_right_left(void *arr, size_t arr_sz,
-						uint64_t el_off,
-						struct avl_node *x,
-						struct avl_node *z)
+static inline __attribute__((always_inline))
+struct avl_node *__avl_rotate_right_left(void *arr, size_t arr_sz,
+					 uint64_t el_off, struct avl_node *x,
+					 struct avl_node *z)
 {
 	unsigned int t2_id, t3_id, x_id, y_id, z_id;
 	struct avl_node *t2, *t3, *y;
@@ -716,10 +731,10 @@ static struct avl_node *__avl_rotate_right_left(void *arr, size_t arr_sz,
  * The first rotation is "Z-Y eft", then "X-Y right".  For the code, we don't
  * have to do the intermediate rotation and just jump right to the final state.
  */
-static struct avl_node *__avl_rotate_left_right(void *arr, size_t arr_sz,
-						uint64_t el_off,
-						struct avl_node *x,
-						struct avl_node *z)
+static inline __attribute__((always_inline))
+struct avl_node *__avl_rotate_left_right(void *arr, size_t arr_sz,
+					 uint64_t el_off, struct avl_node *x,
+					 struct avl_node *z)
 {
 	unsigned int t2_id, t3_id, x_id, y_id, z_id;
 	struct avl_node *t2, *t3, *y;
@@ -775,8 +790,9 @@ static struct avl_node *__avl_rotate_left_right(void *arr, size_t arr_sz,
 }
 
 /* Insert node into t.  Caller must set node->key. */
-static void avl_tree_insert(void *arr, size_t arr_sz, uint64_t el_off,
-			    struct avl_tree *t, struct avl_node *node)
+static inline __attribute__((always_inline))
+void avl_tree_insert(void *arr, size_t arr_sz, uint64_t el_off,
+		     struct avl_tree *t, struct avl_node *node)
 {
 	struct avl_node *x = NULL;
 	unsigned int x_id = 0;
@@ -988,8 +1004,9 @@ static void avl_tree_insert(void *arr, size_t arr_sz, uint64_t el_off,
  * stuff in with el_off.  But don't worry!  I wrap it in a macro for our own
  * use, which may be more or less disgusting, depending on your taste.
  */
-static bool __avl_replace_node(void *arr, size_t arr_sz, uint64_t el_off,
-			       const struct avl_node *x, unsigned int with_id)
+static inline __attribute__((always_inline))
+bool __avl_replace_node(void *arr, size_t arr_sz, uint64_t el_off,
+			const struct avl_node *x, unsigned int with_id)
 {
 	struct avl_node *x_parent, *with;
 	bool x_was_root = x->parent_id == 0;
@@ -1090,8 +1107,9 @@ static bool __avl_replace_node(void *arr, size_t arr_sz, uint64_t el_off,
  *
  * I think.
  */
-static void avl_tree_delete(void *arr, size_t arr_sz, uint64_t el_off,
-			    struct avl_tree *t, struct avl_node *node)
+static inline __attribute__((always_inline))
+void avl_tree_delete(void *arr, size_t arr_sz, uint64_t el_off,
+		     struct avl_tree *t, struct avl_node *node)
 {
 	struct avl_node *x, *o;
 	unsigned int x_id;
@@ -1357,8 +1375,9 @@ static void avl_tree_delete(void *arr, size_t arr_sz, uint64_t el_off,
 		avl_tree_insert(arr, arr_sz, el_off, t, o);
 }
 
-static struct avl_node *avl_tree_pop_min(void *arr, size_t arr_sz,
-					 uint64_t el_off, struct avl_tree *t)
+static inline __attribute__((always_inline))
+struct avl_node *avl_tree_pop_min(void *arr, size_t arr_sz, uint64_t el_off,
+				  struct avl_tree *t)
 {
 	struct avl_node *min = avl_tree_min(arr, arr_sz, el_off, t);
 
@@ -1367,8 +1386,9 @@ static struct avl_node *avl_tree_pop_min(void *arr, size_t arr_sz,
 	return min;
 }
 
-static struct avl_node *avl_tree_pop_max(void *arr, size_t arr_sz,
-					 uint64_t el_off, struct avl_tree *t)
+static inline __attribute__((always_inline))
+struct avl_node *avl_tree_pop_max(void *arr, size_t arr_sz, uint64_t el_off,
+				  struct avl_tree *t)
 {
 	struct avl_node *max = avl_tree_max(arr, arr_sz, el_off, t);
 
