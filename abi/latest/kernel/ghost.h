@@ -26,7 +26,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION 86
+#define GHOST_VERSION 87
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -455,6 +455,22 @@ struct bpf_ghost_select_rq {
 
 struct bpf_ghost_halt_poll {
 	__u32 type; /* one of the enum GHOST_***_HALT_POLL options */
+};
+
+#define BPF_SYNC_COMMIT_MAX_CPUS        2
+
+/* Used with bpf_sync_commit */
+struct bpf_sync_commit_args {
+	/*
+	 * Fewer than MAX cpus can be used in the sync commit by specifying -1
+	 * for the other cpus.
+	 */
+	int cpus[BPF_SYNC_COMMIT_MAX_CPUS];
+	uint64_t gtids[BPF_SYNC_COMMIT_MAX_CPUS];
+	uint32_t task_barriers[BPF_SYNC_COMMIT_MAX_CPUS];
+
+	int run_flags[BPF_SYNC_COMMIT_MAX_CPUS];
+	int commit_flags[BPF_SYNC_COMMIT_MAX_CPUS];
 };
 
 #ifdef __cplusplus

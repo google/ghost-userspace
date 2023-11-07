@@ -148,6 +148,12 @@ static long (*bpf_ghost_resched_cpu)(__u32 cpu, __u64 cpu_seqnum) = (void *) 300
 #if GHOST_VERSION >= 79
 static long (*bpf_ghost_resched_cpu2)(__u32 cpu, __u32 flags) = (void *) 3003;
 #endif
+
+#if GHOST_VERSION >= 87
+static long (*bpf_ghost_sync_commit)(struct bpf_dynptr *args) =
+    (void *)3004;
+#endif
+
 #endif  // !GHOST_BPF */
 
 #if GHOST_VERSION >= 84

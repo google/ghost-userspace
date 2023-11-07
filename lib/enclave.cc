@@ -756,10 +756,24 @@ std::string RunRequest::StateToString(ghost_txn_state state) {
 
 void LocalRunRequest::Open(const RunRequestOptions& options) {
   // Wait for current owner to relinquish ownership of the sync_group txn.
+  // NOTE: We must acquire ownership of the sync group first, before we modify
+  // any transaction fields. This serves as a pseudo-lock to avoid transaction
+  // fields getting clobbered by BPF (e.g. via bpf_sync_commit).
   if (options.sync_group_owner != kSyncGroupNotOwned) {
-    while (sync_group_owned()) {
-      Pause();
+    while (true) {
+      int32_t current_owner = sync_group_owner_get();
+
+      if (current_owner == kSyncGroupNotOwned) {
+        if (sync_group_take_ownership(options.sync_group_owner)) {
+          break;
+        }
+      } else if (current_owner != options.sync_group_owner) {
+        Pause();
+      } else {
+        break;
+      }
     }
+    CHECK(sync_group_owned());
   } else {
     CHECK(!sync_group_owned());
   }
@@ -776,9 +790,6 @@ void LocalRunRequest::Open(const RunRequestOptions& options) {
   txn_->task_barrier = options.target_barrier;
   txn_->run_flags = options.run_flags;
   txn_->commit_flags = options.commit_flags;
-  if (options.sync_group_owner != kSyncGroupNotOwned) {
-    sync_group_owner_set(options.sync_group_owner);
-  }
   allow_txn_target_on_cpu_ = options.allow_txn_target_on_cpu;
   if (allow_txn_target_on_cpu_) CHECK(sync_group_owned());
   txn_->state.store(GHOST_TXN_READY, std::memory_order_release);
