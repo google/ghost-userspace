@@ -540,7 +540,8 @@ class Topology {
   // These two functions use the private `Topology` constructor.
   friend Topology* MachineTopology();
   friend void UpdateTestTopology(const std::filesystem::path& test_directory,
-                                 bool has_l3_cache);
+                                 bool has_l3_cache,
+                                 bool use_consecutive_smt_numbering);
   friend void UpdateCustomTopology(const std::vector<Cpu::Raw>& cpus);
   friend Topology* CustomTopology();
 
@@ -613,6 +614,9 @@ class Topology {
   // Returns the number of numa nodes in this topology.
   uint32_t num_numa_nodes() const { return highest_node_idx_ + 1; }
 
+  // Returns true if the system uses consecutive SMT numbering.
+  bool consecutive_smt_numbering() const { return consecutive_smt_numbering_; }
+
   // Returns the CPU with ID 'cpu'.
   Cpu cpu(int cpu) const {
     DCHECK_GE(cpu, 0);
@@ -677,7 +681,7 @@ class Topology {
   // If `has_l3_cache` is true, creates an L3 cache. Otherwise, does not create
   // an L3 cache.
   Topology(InitTest, const std::filesystem::path& test_directory,
-           bool has_l3_cache);
+           bool has_l3_cache, bool use_consecutive_smt_numbering);
 
   Topology(InitCustom, std::vector<Cpu::Raw> cpus);
 
@@ -727,8 +731,12 @@ class Topology {
   //
   // If `has_l3_cache` is true, creates an L3 cache. Otherwise, does not create
   // an L3 cache.
+  //
+  // If `use_consecutive_smt_numbering` is true, this will use an SMT offset of
+  // 1.
   std::filesystem::path SetUpTestSiblings(
-      const std::filesystem::path& test_directory, bool has_l3_cache) const;
+      const std::filesystem::path& test_directory, bool has_l3_cache,
+      bool use_consecutive_smt_numbering) const;
 
   // Initializes test directory with a node possible file.
   std::filesystem::path SetupTestNodePossible(
@@ -751,6 +759,8 @@ class Topology {
 
   int highest_node_idx_ = -1;
 
+  bool consecutive_smt_numbering_ = false;
+
   std::vector<CpuList> cpus_on_node_;
 };
 
@@ -762,10 +772,13 @@ Topology* MachineTopology();
 // Creates a topology used by the topology tests and replaces the current test
 // topology if one exists. This topology has 112 CPUs, 2 hardware threads per
 // physical core (so there are 56 physical cores in total), and 2 NUMA nodes.
-// CPU 0 is co-located with CPU 56 on the same physical core, CPU 1 is
-// co-located with CPU 57, ..., and CPU 55 is co-located with CPU 111. This is
-// how Linux configures CPUs. Lastly, CPUs 0-27 and 56-83 are on NUMA node 0 and
-// CPUs 28-55 and 84-111 are on NUMA node 1.
+// If `use_consecutive_smt_numbering` is false, CPU 0 is co-located with CPU 56
+// on the same physical core, CPU 1 is co-located with CPU 57, ..., and CPU 55
+// is co-located with CPU 111. Otherwise, CPU 0 is co-located with CPU 1, CPU 2
+// with CPU 3, etc. Lastly, CPUs 0-27 and 56-83 are on NUMA node 0 and CPUs
+// 28-55 and 84-111 are on NUMA node 1 when we have
+// !use_consecutive_smt_numbering. Otherwise, NUMA 0 has CPUs 0-55 and NUMA 1
+// has CPUs 56-111.
 //
 // If `has_l3_cache` is true, an L3 cache is created. All CPUs in a NUMA node
 // share the same L3 cache. If `has_l3_cache` is false, then the topology is
@@ -773,8 +786,11 @@ Topology* MachineTopology();
 //
 // `test_directory` is a path to scratch space in the file system that the
 // topology can use.
+//
+// If `use_consecutive_smt_numbering` is true, the SMT offset will be set to 1.
 void UpdateTestTopology(const std::filesystem::path& test_directory,
-                        bool has_l3_cache);
+                        bool has_l3_cache,
+                        bool use_consecutive_smt_numbering = false);
 
 // Returns the test topology described above. The pointer is never null and is
 // owned by the `TestTopology` function. The pointer lives until the process
