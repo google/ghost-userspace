@@ -17,7 +17,7 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
-#include "bpf/user/schedghostidle_bpf.skel.h"
+#include "bpf/user/bpf_schedghostidle.skel.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
 
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
@@ -186,17 +186,17 @@ void agent_bpf_destroy(void)
 
 static void *sgi_make_skel_obj(void)
 {
-	struct schedghostidle_bpf *obj;
+	struct bpf_schedghostidle_bpf *obj;
 
-	obj = schedghostidle_bpf__open_and_load();
+	obj = bpf_schedghostidle_bpf__open_and_load();
 	if (!obj) {
 		fprintf(stderr, "failed to open/load schedghostidle\n");
 		return NULL;
 	}
 
-	if (schedghostidle_bpf__attach(obj)) {
+	if (bpf_schedghostidle_bpf__attach(obj)) {
 		fprintf(stderr, "failed to attach schedghostidle\n");
-		schedghostidle_bpf__destroy(obj);
+		bpf_schedghostidle_bpf__destroy(obj);
 		return NULL;
 	}
 	return obj;
@@ -207,7 +207,7 @@ static void *sgi_make_skel_obj(void)
 
 static void sgi_output(void *obj, FILE *to)
 {
-	struct schedghostidle_bpf *sgi_obj = obj;
+	struct bpf_schedghostidle_bpf *sgi_obj = obj;
 	unsigned int nr_cpus = libbpf_num_possible_cpus();
 	unsigned int hist[SGI_NR_SLOTS] = {0};
 	uint64_t *count;
@@ -238,7 +238,7 @@ static void sgi_output(void *obj, FILE *to)
 
 static void sgi_reset(void *obj)
 {
-	struct schedghostidle_bpf *sgi_obj = obj;
+	struct bpf_schedghostidle_bpf *sgi_obj = obj;
 	unsigned int nr_cpus = libbpf_num_possible_cpus();
 	uint64_t *zeros;
 	int fd = bpf_map__fd(sgi_obj->maps.hist);

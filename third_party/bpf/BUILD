@@ -29,6 +29,7 @@ exports_files(
         "schedlat.h",
         "schedrun.h",
         "topology.bpf.h",
+        "schedghostidle.bpf.c",
     ],
 )
 
@@ -124,18 +125,6 @@ bpf_program(
         "//third_party:iovisor_bcc/bits.bpf.h",
     ],
     bpf_object = "schedfair_bpf.o",
-)
-
-bpf_program(
-    name = "schedghostidle_bpf",
-    src = "schedghostidle.bpf.c",
-    hdrs = [
-        "common.bpf.h",
-        "//:abi/latest/kernel/ghost.h",
-        "//:lib/ghost_uapi.h",
-        "//third_party:iovisor_bcc/bits.bpf.h",
-    ],
-    bpf_object = "schedghostidle_bpf.o",
 )
 
 bpf_program(

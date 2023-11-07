@@ -3,7 +3,7 @@
 
 load("@rules_license//rules:license.bzl", "license")
 load("//:bpf/bpf.bzl", "bpf_skeleton")
-load("//:abi.bzl", "cc_library_ghost", "define_ghost_uapi")
+load("//:abi.bzl", "bpf_skel_ghost", "cc_library_ghost", "define_ghost_uapi")
 
 package(
     default_applicable_licenses = ["//:license"],
@@ -52,7 +52,7 @@ agent_lib_srcs = [
 agent_lib_hdrs = [
     "//third_party:iovisor_bcc/trace_helpers.h",
     "bpf/user/agent.h",
-    "bpf/user/schedghostidle_bpf.skel.h",
+    "bpf/user/bpf_schedghostidle.skel.h",
     "lib/agent.h",
     "lib/channel.h",
     "lib/enclave.h",
@@ -951,17 +951,25 @@ cc_binary(
     ],
 )
 
-bpf_skeleton(
-    name = "schedghostidle_bpf_skel",
-    bpf_object = "//third_party/bpf:schedghostidle_bpf",
-    skel_hdr = "bpf/user/schedghostidle_bpf.skel.h",
+schedghostidle_src = "//third_party/bpf:schedghostidle.bpf.c"
+
+schedghostidle_hdrs = [
+    "//third_party/bpf:common.bpf.h",
+    "//third_party:iovisor_bcc/bits.bpf.h",
+]
+
+bpf_skel_ghost(
+    name = "schedghostidle",
+    src = schedghostidle_src,
+    hdrs = schedghostidle_hdrs,
+    objdir = "bpf/user",
 )
 
 cc_binary(
     name = "schedghostidle",
     srcs = [
+        "bpf/user/bpf_schedghostidle.skel.h",
         "bpf/user/schedghostidle.c",
-        "bpf/user/schedghostidle_bpf.skel.h",
         "//third_party:iovisor_bcc/trace_helpers.h",
     ],
     copts = compiler_flags,
