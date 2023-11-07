@@ -52,7 +52,7 @@ CpuMap::CpuMap(const Topology& topology)
 
 Cpu CpuList::GetNthCpu(uint32_t n) const {
   for (uint32_t i = 0; i < map_size_; i++) {
-    uint64_t word = bitmap_[i];
+    uint64_t word = GetMapConst()[i];
     int count = absl::popcount(word);
     // `n` is zero-indexed, so if `count` == `n`, then the `n`th bit set is
     // not in this word.

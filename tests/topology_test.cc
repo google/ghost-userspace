@@ -1159,6 +1159,58 @@ TEST(TopologyTest, CpuMapEmpty) {
   EXPECT_THAT(l.Empty(), IsFalse());
 }
 
+TEST(TopologyTest, WrappedCpuListTest) {
+  uint64_t map[CpuMap::kMapCapacity] = {0};
+
+  WrappedCpuList l(*TestTopology(), map, CpuMap::kMapCapacity);
+
+  for (int slot = 0; slot < l.map_size(); slot++) {
+    constexpr int kCpu0Base = 2;
+    int cpu0 = kCpu0Base + slot * CpuMap::kIntsBits;
+    EXPECT_THAT(l.Empty(), IsTrue());
+    l.Set(cpu0);
+    EXPECT_THAT(l.Empty(), IsFalse());
+    EXPECT_THAT(l.IsSet(cpu0), IsTrue());
+    EXPECT_THAT(l.Size(), Eq(1));
+    EXPECT_EQ(
+        map[slot],
+        1ULL << kCpu0Base);  // Make sure that updates are going to our map.
+
+    l.Clear(cpu0);
+    EXPECT_THAT(l.Empty(), IsTrue());
+    EXPECT_THAT(l.IsSet(cpu0), IsFalse());
+    EXPECT_THAT(l.Size(), Eq(0));
+    EXPECT_EQ(map[slot], 0);
+
+    // Now test from the other direction; updates directly to our map.
+    constexpr int kCpu1Base = 3;
+    int cpu1 = kCpu1Base + slot * CpuMap::kIntsBits;
+    map[slot] = 1ULL << kCpu1Base;
+    EXPECT_THAT(l.Empty(), IsFalse());
+    EXPECT_THAT(l.IsSet(cpu1), IsTrue());
+    EXPECT_THAT(l.Size(), Eq(1));
+
+    map[slot] = 0;
+    EXPECT_THAT(l.Empty(), IsTrue());
+    EXPECT_THAT(l.IsSet(cpu1), IsFalse());
+    EXPECT_THAT(l.Size(), Eq(0));
+  }
+  // Rest of the test case assumes the map is empty now.
+  ASSERT_THAT(l.Empty(), IsTrue());
+
+  // Comparison between regular CpuList and WrappedCpuList.
+  CpuList l2 = TestTopology()->EmptyCpuList();
+  int num_cpus = TestTopology()->num_cpus();
+  for (int i = 0; i < num_cpus; i += 5) {
+    l.Set(i);
+    l2.Set(i);
+  }
+  EXPECT_THAT(l == l2, IsTrue());
+  l.Clear(num_cpus - 1);
+  l2.Set(num_cpus - 1);
+  EXPECT_THAT(l == l2, IsFalse());
+}
+
 }  // namespace
 }  // namespace ghost
 

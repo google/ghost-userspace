@@ -15,6 +15,7 @@
 #include <sched.h>
 
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <vector>
 
@@ -128,6 +129,11 @@ class Cpu {
 //  ..
 class CpuMap {
  public:
+  // The number of bits in the `uint64_t` type.
+  static constexpr size_t kIntsBits = CHAR_BIT * sizeof(uint64_t);
+  // The number of "slots" allocated to the bitmap.
+  static constexpr size_t kMapCapacity = MAX_CPUS / kIntsBits;
+
   explicit CpuMap(const Topology& topology);
 
   virtual ~CpuMap() = default;
@@ -225,13 +231,9 @@ class CpuMap {
   // Returns number of set bits in the bitmap.
   uint32_t Size() const { return CountSetCpus(); }
 
+  size_t map_size() const { return map_size_; }
+
  protected:
-  // The number of bits in the `uint64_t` type.
-  static constexpr size_t kIntsBits = CHAR_BIT * sizeof(uint64_t);
-
-  // The number of "slots" allocated to the bitmap.
-  static constexpr size_t kMapCapacity = MAX_CPUS / kIntsBits;
-
   // Returns number of set cpus in the map.
   uint32_t CountSetCpus() const {
     uint32_t ret = 0;
@@ -263,8 +265,9 @@ class CpuList : public CpuMap {
   // Returns true if `this` and `other` have identical bitmaps, false
   // otherwise.
   bool operator==(const CpuList& other) const {
-    return std::equal(std::begin(bitmap_), std::end(bitmap_),
-                      std::begin(other.bitmap_));
+    const uint64_t* bitmap = GetMapConst();
+    const uint64_t* compare = other.GetMapConst();
+    return !memcmp(bitmap, compare, sizeof(*bitmap) * map_size_);
   }
 
   // Returns the Union of `this` and `other`.
@@ -325,7 +328,8 @@ class CpuList : public CpuMap {
   // ...
   // a.Intersection(b);  // Mutates `a`.
   void Intersection(const CpuList& src) {
-    std::transform(bitmap_, bitmap_ + map_size_, src.bitmap_, bitmap_,
+    uint64_t* bitmap = GetMap();
+    std::transform(bitmap, bitmap + map_size_, src.GetMapConst(), bitmap,
                    [](uint64_t a, uint64_t b) { return a & b; });
   }
 
@@ -338,7 +342,8 @@ class CpuList : public CpuMap {
   // ...
   // a.Union(b);  // Mutates `a`.
   void Union(const CpuList& src) {
-    std::transform(bitmap_, bitmap_ + map_size_, src.bitmap_, bitmap_,
+    uint64_t* bitmap = GetMap();
+    std::transform(bitmap, bitmap + map_size_, src.GetMapConst(), bitmap,
                    [](uint64_t a, uint64_t b) { return a | b; });
   }
 
@@ -352,7 +357,8 @@ class CpuList : public CpuMap {
   // ...
   // a.Subtract(b);  // Mutates `a`.
   void Subtract(const CpuList& src) {
-    std::transform(bitmap_, bitmap_ + map_size_, src.bitmap_, bitmap_,
+    uint64_t* bitmap = GetMap();
+    std::transform(bitmap, bitmap + map_size_, src.GetMapConst(), bitmap,
                    [](uint64_t a, uint64_t b) { return a & ~b; });
   }
 
@@ -361,7 +367,7 @@ class CpuList : public CpuMap {
     DCHECK_GE(id, 0);
     DCHECK_LT(id, MAX_CPUS);
 
-    bitmap_[id / kIntsBits] |= (1ULL << (id % kIntsBits));
+    GetMap()[id / kIntsBits] |= (1ULL << (id % kIntsBits));
   }
   using CpuMap::Set;
 
@@ -370,7 +376,7 @@ class CpuList : public CpuMap {
     DCHECK_GE(id, 0);
     DCHECK_LT(id, MAX_CPUS);
 
-    bitmap_[id / kIntsBits] &= ~(1ULL << (id % kIntsBits));
+    GetMap()[id / kIntsBits] &= ~(1ULL << (id % kIntsBits));
   }
   using CpuMap::Clear;
 
@@ -379,7 +385,7 @@ class CpuList : public CpuMap {
     DCHECK_GE(id, 0);
     DCHECK_LT(id, MAX_CPUS);
 
-    return bitmap_[id / kIntsBits] & (1ULL << (id % kIntsBits));
+    return GetMapConst()[id / kIntsBits] & (1ULL << (id % kIntsBits));
   }
   using CpuMap::IsSet;
 
@@ -409,8 +415,9 @@ class CpuList : public CpuMap {
   std::string CpuMaskStr() const {
     std::string s;
     bool emitted_nibble = false;
-    const uint8_t* bitmap_bytes = reinterpret_cast<const uint8_t*>(bitmap_);
-    size_t len = map_size_ * sizeof(bitmap_[0]);
+    const uint8_t* bitmap_bytes =
+        reinterpret_cast<const uint8_t*>(GetMapConst());
+    size_t len = map_size_ * sizeof(*GetMapConst());
     // The bitmap is stored with the lowest bits at the beginning of the map.
     // Print the MSB first, both backwards and the upper nibble first.
     for (int i = len - 1; i >= 0; --i) {
@@ -452,13 +459,42 @@ class CpuList : public CpuMap {
   }
 
  private:
+  virtual uint64_t* GetMap() {
+    return bitmap_internal_;
+  }
+
+  virtual const uint64_t* GetMapConst() const {
+    return bitmap_internal_;
+  }
+
   uint64_t GetNthMap(int n) const override {
     DCHECK_GE(n, 0);
     DCHECK_LT(n, kMapCapacity);
-    return bitmap_[n];
+    return GetMapConst()[n];
   }
 
-  uint64_t bitmap_[kMapCapacity] = {0};
+  // Only the above helpers should use this directly, since derived classes
+  // may override them.
+  uint64_t bitmap_internal_[kMapCapacity] = {0};
+};
+
+// A CpuList derived class that wraps a pointer to a remote bitmap, rather than
+// use class-local storage.
+class WrappedCpuList : public CpuList {
+ public:
+  explicit WrappedCpuList(const Topology& topology, uint64_t* map, size_t slots)
+      : CpuList(topology), bitmap_ptr_(map) {
+    CHECK_EQ(slots, kMapCapacity);
+  }
+
+ private:
+  uint64_t* GetMap() override { return bitmap_ptr_; }
+
+  const uint64_t* GetMapConst() const override {
+    return bitmap_ptr_;
+  }
+
+  uint64_t* const bitmap_ptr_ = nullptr;
 };
 
 // An atomic implementation of a CpuMap. Useful for cases where it would be
