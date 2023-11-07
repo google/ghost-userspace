@@ -17,7 +17,14 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
+#ifndef GHOST_SELECT_ABI
 #include "bpf/user/bpf_schedghostidle.skel.h"
+#elif GHOST_SELECT_ABI == 84
+#include "bpf/user/84/bpf_schedghostidle.skel.h"
+#else
+#error "missing an abi?"
+#endif
+
 #include "third_party/iovisor_bcc/trace_helpers.h"
 
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))

@@ -830,6 +830,33 @@ cc_library_ghost(
     deps = agent_lib_deps,
 )
 
+# buildifier: disable=duplicated-name
+define_ghost_uapi(
+    name = "ghost_uapi",
+    abi = 84,
+)
+
+# buildifier: disable=duplicated-name
+cc_library_ghost(
+    name = "ghost",
+    srcs = ghost_lib_srcs,
+    hdrs = ghost_lib_hdrs,
+    abi = 84,
+    copts = compiler_flags,
+    deps = ghost_lib_deps,
+)
+
+# buildifier: disable=duplicated-name
+cc_library_ghost(
+    name = "agent",
+    srcs = agent_lib_srcs,
+    hdrs = agent_lib_hdrs,
+    abi = 84,
+    copts = compiler_flags,
+    linkopts = bpf_linkopts,
+    deps = agent_lib_deps,
+)
+
 cc_test(
     name = "prio_table_test",
     size = "small",
@@ -962,6 +989,15 @@ bpf_skel_ghost(
     name = "schedghostidle",
     src = schedghostidle_src,
     hdrs = schedghostidle_hdrs,
+    objdir = "bpf/user",
+)
+
+# buildifier: disable=duplicated-name
+bpf_skel_ghost(
+    name = "schedghostidle",
+    src = schedghostidle_src,
+    hdrs = schedghostidle_hdrs,
+    abi = 84,
     objdir = "bpf/user",
 )
 
