@@ -185,27 +185,26 @@ static inline struct flux_sched *get_parent(struct flux_sched *s)
  *
  * The including scheduler must define macros to generate the case statements:
  * __gen_thread_op_cases and __gen_cpu_op_cases.
- *
- * TODO: consider adding pre and post hooks around the switch statements.
- * That way, the "composing" scheduler can do a little work for certain messages
- * without changing a child scheduler.  e.g. if you want to use prio change to
- * mean "move the thread from biff to cfs-bpf", you can do that without changing
- * biff_flux.bpf.c.  Something like pre_thread_op(thr, msg, op) that expands to
- * the right function for each message type, all of which are conditionally
- * defined to an empty function.
  */
 
 #define __cat_op(SCHED, OP) SCHED ## OP
 #define __thread_cat_op(SCHED, OP) __cat_op(SCHED, _thread_ ## OP)
 #define __cpu_cat_op(SCHED, OP) __cat_op(SCHED, _cpu_ ## OP)
 
+#define __pre_thread_op_thr(sched, thr, args, op)				\
+	__thread_cat_op(pre, op)(sched, thr, args)
+#define __post_thread_op_thr(sched, thr, args, op)				\
+	__thread_cat_op(post, op)(sched, thr, args)
+
 #define __thread_op_thr(thr, seq, args, op) ({				\
 	struct flux_sched *__sched = get_sched((thr)->f.sched);		\
 	if (!__sched)							\
 		return;							\
+	__pre_thread_op_thr(__sched, thr, args, op);				\
 	switch (__sched->f.type) {					\
 	__gen_thread_op_cases(__thread_cat_op, op, __sched, thr, args)	\
 	};								\
+	__post_thread_op_thr(__sched, thr, args, op);				\
 	smp_store_release(&(thr)->f.seqnum, seq);			\
 })
 

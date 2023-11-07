@@ -56,6 +56,7 @@ agent_lib_hdrs = [
     "lib/agent.h",
     "lib/channel.h",
     "lib/enclave.h",
+    "lib/flux.h",
     "lib/scheduler.h",
 ]
 

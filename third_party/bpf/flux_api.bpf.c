@@ -13,6 +13,90 @@
 
 /* Manually #include this C file in your BPF program after your sched ops. */
 
+#ifndef pre_thread_new
+#define pre_thread_new(...)
+#endif
+#ifndef post_thread_new
+#define post_thread_new(...)
+#endif
+
+#ifndef pre_thread_on_cpu
+#define pre_thread_on_cpu(...)
+#endif
+#ifndef post_thread_on_cpu
+#define post_thread_on_cpu(...)
+#endif
+
+#ifndef pre_thread_blocked
+#define pre_thread_blocked(...)
+#endif
+#ifndef post_thread_blocked
+#define post_thread_blocked(...)
+#endif
+
+#ifndef pre_thread_runnable
+#define pre_thread_runnable(...)
+#endif
+#ifndef post_thread_runnable
+#define post_thread_runnable(...)
+#endif
+
+#ifndef pre_thread_wakeup
+#define pre_thread_wakeup(...)
+#endif
+#ifndef post_thread_wakeup
+#define post_thread_wakeup(...)
+#endif
+
+#ifndef pre_thread_yielded
+#define pre_thread_yielded(...)
+#endif
+#ifndef post_thread_yielded
+#define post_thread_yielded(...)
+#endif
+
+#ifndef pre_thread_preempted
+#define pre_thread_preempted(...)
+#endif
+#ifndef post_thread_preempted
+#define post_thread_preempted(...)
+#endif
+
+#ifndef pre_thread_switchto
+#define pre_thread_switchto(...)
+#endif
+#ifndef post_thread_switchto
+#define post_thread_switchto(...)
+#endif
+
+#ifndef pre_thread_affinity_changed
+#define pre_thread_affinity_changed(...)
+#endif
+#ifndef post_thread_affinity_changed
+#define post_thread_affinity_changed(...)
+#endif
+
+#ifndef pre_thread_prio_changed
+#define pre_thread_prio_changed(...)
+#endif
+#ifndef post_thread_prio_changed
+#define post_thread_prio_changed(...)
+#endif
+
+#ifndef pre_thread_departed
+#define pre_thread_departed(...)
+#endif
+#ifndef post_thread_departed
+#define post_thread_departed(...)
+#endif
+
+#ifndef pre_thread_dead
+#define pre_thread_dead(...)
+#endif
+#ifndef post_thread_dead
+#define post_thread_dead(...)
+#endif
+
 
 /********************* FLUX API *********************/
 
