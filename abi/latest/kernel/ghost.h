@@ -26,7 +26,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION 85
+#define GHOST_VERSION 86
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -417,10 +417,15 @@ struct bpf_ghost_msg {
 	/*
 	 * BPF can inform the kernel which cpu it would prefer to wake up
 	 * in response to this message.
-	 * -1 indicates no preference.
+	 * Special values may be used here (see below).
+	 * The default value is BPF_GHOST_MSG_NO_WAKEUP_PREF.
 	 */
 	int pref_cpu;
 };
+
+/* Special values for msg->pref_cpu */
+#define BPF_GHOST_MSG_NO_WAKEUP_PREF		-1
+#define BPF_GHOST_MSG_SKIP_AGENT_WAKE		-2
 
 struct bpf_ghost_sched {
 	__u8 agent_on_rq;	/* there is an agent, it can run if poked */
