@@ -277,12 +277,6 @@ class BasicDispatchScheduler : public Scheduler {
             // Reclaim the orphaned status_word (it is not reachable from
             // the task associated with sw_gtid).
             //
-            // TODO: harden this further by never resetting the sw->barrier
-            // across incarnations (i.e. msg->seqnum increases monotonically
-            // even if the task departs and comes back into ghost). Without
-            // this it is possible for the association to "succeed" and the
-            // status_word to leak.
-            //
             // TODO: this is relevant only if a task has the same gtid across
             // incarnations (this is the case currently). However if we adopt
             // an approach where each incarnation allocates a new gtid then we
