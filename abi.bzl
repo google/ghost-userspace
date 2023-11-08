@@ -96,6 +96,7 @@ def define_ghost_uapi(name, abi):
         name = name,
         srcs = [
             "abi/" + str(abi) + "/kernel/ghost.h",
+            "lib/ghost_uapi.cc",
         ],
         hdrs = [
             "lib/ghost_uapi.h",
@@ -103,6 +104,7 @@ def define_ghost_uapi(name, abi):
         defines = defines,
         visibility = [
         ],
+        alwayslink = 1,
     )
 
 def cc_library_ghost(name, abi, srcs, hdrs, deps, visibility = [], copts = [], linkopts = []):
