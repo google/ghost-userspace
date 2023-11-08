@@ -65,6 +65,9 @@ class Agent {
   // Agents should test Finished() before each call to Run()
   bool Finished() const { return finished_.HasBeenNotified(); }
 
+  // Waits for finished_ to be notified.
+  void WaitForFinished() { finished_.WaitForNotification(); }
+
   Cpu cpu() const { return cpu_; }
 
   // Schedule the Agent to run on its CPU.  Can fail only if the CPU is
