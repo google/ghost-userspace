@@ -21,6 +21,8 @@
 #include "bpf/user/bpf_schedghostidle.skel.h"
 #elif GHOST_SELECT_ABI == 84
 #include "bpf/user/84/bpf_schedghostidle.skel.h"
+#elif GHOST_SELECT_ABI == 90
+#include "bpf/user/90/bpf_schedghostidle.skel.h"
 #else
 #error "missing an abi?"
 #endif

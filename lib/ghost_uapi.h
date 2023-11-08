@@ -5,6 +5,8 @@
 #include "abi/latest/kernel/ghost.h"
 #elif GHOST_SELECT_ABI == 84
 #include "abi/84/kernel/ghost.h"
+#elif GHOST_SELECT_ABI == 90
+#include "abi/90/kernel/ghost.h"
 #else
 #error "missing an abi?"
 #endif
