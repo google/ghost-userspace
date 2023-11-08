@@ -20,9 +20,24 @@
 
 #include "lib/queue.bpf.h"
 
+/*
+ * TODO: ROCI assumes it is the top of the hierarchy and that "idle_id" is
+ * actually the idle scheduler.  There are a few assumptions baked in here:
+ * - the idle_id (secondary child) always wants a cpu.  So we never yield in
+ *   PNT.
+ * - We never ask our parent for cpus, since we assume there is no parent to
+ *   ask.
+ * - We're extremely aggressive about taking cpus from idle.  This is fine if it
+ *   is actually idle, but can get excessive.  Specifically, we look at
+ *   nr_cpus_needed, not nr_cpus (which was the request from that call).  If you
+ *   have two cpus making requests at the same time, ROCI might double-up and
+ *   preempt 2x the cpus needed.
+ */
 struct roci_flux_sched {
 	struct arr_list primary_cpus;
 	struct arr_list idle_cpus;
+	unsigned int primary_id;
+	unsigned int idle_id;
 };
 
 struct roci_flux_cpu {

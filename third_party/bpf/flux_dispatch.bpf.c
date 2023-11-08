@@ -205,7 +205,7 @@ static inline struct flux_sched *get_parent(struct flux_sched *s)
 })
 
 #define __request_for_cpus(sched, child_id, nr_cpus) ({			\
-	int __ret = -1;							\
+	int __ret;							\
 	switch ((sched)->f.type) {					\
 	__gen_cpu_op_cases(__cat_op, _request_for_cpus, sched,		\
 			   child_id, nr_cpus, &__ret)			\
@@ -341,6 +341,18 @@ static void flux_run_current(struct flux_cpu *cpu, struct bpf_ghost_sched *ctx);
 static void flux_restart_pnt(struct flux_cpu *cpu, struct bpf_ghost_sched *ctx);
 static void flux_join_scheduler(struct flux_thread *t, int new_sched_id,
 				bool runnable);
+
+/*
+ * Returns how many more cpus the scheduler *might* want.  This is racy.  If we
+ * grant more than necessary, the child will just yield the excess.  If we grant
+ * less than necessary, we'll eventually notice on the next edge.
+ */
+static inline uint64_t flux_sched_nr_cpus_needed(struct flux_sched *s)
+{
+	int64_t delta = READ_ONCE(s->f.nr_cpus_wanted) -
+			READ_ONCE(s->f.nr_cpus);
+	return delta < 0 ? 0 : delta;
+}
 
 /* For getting s's storage in a flux_cpu. */
 #define __sched_cpu_union(s) __s[bounded_idx((s)->f.id, FLUX_NR_SCHEDS)]

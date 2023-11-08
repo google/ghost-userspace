@@ -56,6 +56,14 @@ FluxScheduler::FluxScheduler(Enclave* enclave, CpuList cpulist,
   for (int i = 0; i < FLUX_NR_SCHEDS; i++) {
     s.f.id = i;
     s.f.type = IdToType(i);
+    // All idle *sched types* should have their nr_cpus_wanted set
+    if (s.f.type == FLUX_SCHED_TYPE_IDLE) {
+      s.f.nr_cpus_wanted = MachineTopology()->num_cpus();
+    }
+    if (s.f.id == FLUX_SCHED_ROCI) {
+      s.roci.primary_id = FLUX_SCHED_BIFF;
+      s.roci.idle_id = FLUX_SCHED_IDLE;
+    }
     CHECK_EQ(bpf_map_update_elem(bpf_map__fd(bpf_obj_->maps.schedulers),
                                  &i, &s, BPF_ANY), 0);
   }

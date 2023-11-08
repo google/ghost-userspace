@@ -116,21 +116,6 @@ static int top_tier_sched_id(void)
 
 /********************* SCHED OPS *********************/
 
-/*
- * Roci wants a couple helpers, so that it knows the IDs of its "one child" /
- * primary scheduler (biff) and idle.
- */
-
-static int __roci_primary_sched_id(void)
-{
-	return FLUX_SCHED_BIFF;
-}
-
-static int __roci_idle_sched_id(void)
-{
-	return FLUX_SCHED_IDLE;
-}
-
 #include "third_party/bpf/roci_flux.bpf.c"
 #include "third_party/bpf/biff_flux.bpf.c"
 #include "third_party/bpf/idle_flux.bpf.c"
