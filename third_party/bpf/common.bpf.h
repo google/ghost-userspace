@@ -154,6 +154,16 @@ static long (*bpf_ghost_sync_commit)(struct bpf_dynptr *args) =
     (void *)3004;
 #endif
 
+#if GHOST_VERSION >= 91
+static long (*bpf_ghost_get_affinity)(__s64 gtid, __u8 *mask, __u32 size) =
+    (void *)3005;
+#endif
+
+#if GHOST_VERSION >= 91
+static long (*bpf_ghost_get_comm)(__s64 gtid, char *buf, __u32 size) =
+    (void *)3006;
+#endif
+
 #endif  // !GHOST_BPF */
 
 #if GHOST_VERSION >= 84
