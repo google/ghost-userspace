@@ -52,8 +52,8 @@ FluxScheduler::FluxScheduler(Enclave* enclave, CpuList cpulist,
     cpu_data_[i].f.id = i;
   }
   struct flux_sched s;
-  memset(&s, 0, sizeof(struct flux_sched));
   for (int i = 0; i < FLUX_NR_SCHEDS; i++) {
+    memset(&s, 0, sizeof(struct flux_sched));
     s.f.id = i;
     s.f.type = IdToType(i);
     // All idle *sched types* should have their nr_cpus_wanted set
