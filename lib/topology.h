@@ -24,9 +24,7 @@
 #include "lib/base.h"
 
 // We carry some definitions currently which anchor on this for convenience.
-// LINT.IfChange
 #define MAX_CPUS 512
-// LINT.ThenChange(//depot/google3/third_party/ghost/bpf/bpf/schedghostidle.bpf.c)
 
 namespace ghost {
 
@@ -301,7 +299,13 @@ class CpuList : public CpuMap {
     cpus.reserve(size);
 
     for (uint32_t i = 0; i < size; i++) {
-      cpus.push_back(GetNthCpu(i));
+      Cpu cpu = GetNthCpu(i);
+      // If the list is modified concurrently, there might be fewer than `size`
+      // cpus left in the mask.
+      if (!cpu.valid()) {
+        break;
+      }
+      cpus.push_back(cpu);
     }
     return cpus;
   }
@@ -313,7 +317,13 @@ class CpuList : public CpuMap {
     cpus.reserve(size);
 
     for (uint32_t i = 0; i < size; i++) {
-      cpus.push_back(GetNthCpu(i).id());
+      // If the list is modified concurrently, there might be fewer than `size`
+      // cpus left in the mask.
+      Cpu cpu = GetNthCpu(i);
+      if (!cpu.valid()) {
+        break;
+      }
+      cpus.push_back(cpu.id());
     }
     return cpus;
   }
