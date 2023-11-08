@@ -359,6 +359,11 @@ struct AgentRpcBuffer {
     return deserialize_status.value().ToStatusOr();
   }
 
+  // If the buffer is filled in directly with serialized data (e.g., serialized
+  // data that arrives via the network), then we want to manually set
+  // `is_serialized` to true so that the buffer can be deserialized.
+  void ForceMarkSerialized() { is_serialized = true; }
+
   // This is a region where arbitrary bytes of data can be written (ie. when the
   // RPC mechanism needs to return more than just a response code). Intended to
   // be used with the Serialize/Deserialize methods. We use a byte array instead
