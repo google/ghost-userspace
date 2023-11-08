@@ -90,14 +90,15 @@ bool CapHas(cap_value_t cap);
 //
 // See `Documentation/memory-barriers.txt` in the Linux kernel for more details.
 template <typename T>
-inline T READ_ONCE(const T& x) {
-  return reinterpret_cast<const std::atomic<T>*>(&x)->load(
-      std::memory_order_relaxed);
+inline T READ_ONCE(const T& x,
+                   std::memory_order order = std::memory_order_relaxed) {
+  return reinterpret_cast<const std::atomic<T>*>(&x)->load(order);
 }
 
 template <typename T>
-inline void WRITE_ONCE(T& x, T val) {
-  reinterpret_cast<std::atomic<T>*>(&x)->store(val, std::memory_order_relaxed);
+inline void WRITE_ONCE(T& x, T val,
+                       std::memory_order order = std::memory_order_relaxed) {
+  reinterpret_cast<std::atomic<T>*>(&x)->store(val, order);
 }
 
 // You can pass the `-Wunused-result` flag to some compilers, which generates a
