@@ -49,6 +49,8 @@ filegroup(
         "biff_flux_bpf.h",
         "idle_flux.bpf.c",
         "idle_flux_bpf.h",
+        "prov_flux.bpf.c",
+        "prov_flux_bpf.h",
         "roci_flux.bpf.c",
         "roci_flux_bpf.h",
     ],
