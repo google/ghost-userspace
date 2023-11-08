@@ -26,7 +26,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION 89
+#define GHOST_VERSION 90
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -367,6 +367,8 @@ struct ghost_msg_payload_cpu_not_idle {
 
 struct ghost_msg_payload_cpu_tick {
 	int cpu;
+	/* Whether this tick hit a ghost agent process. */
+	int is_agent;
 };
 
 struct ghost_msg_payload_timer {
