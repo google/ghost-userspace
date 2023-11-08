@@ -13,6 +13,20 @@
 
 /* Biff scheduler implementation for Flux. */
 
+#define biff_cpu(s, cpu) (cpu)->__sched_cpu_union(s).biff
+
+#define biff_arr_list_pop_first(head, field)				\
+	arr_list_pop_first(__t_arr, FLUX_MAX_GTIDS, head, field)
+
+#define biff_arr_list_remove(head, elem, field)				\
+	arr_list_remove(__t_arr, FLUX_MAX_GTIDS, head, elem, field)
+
+#define biff_arr_list_insert_head(head, elem, field)			\
+	arr_list_insert_head(__t_arr, FLUX_MAX_GTIDS, head, elem, field)
+
+#define biff_arr_list_insert_tail(head, elem, field)			\
+	arr_list_insert_tail(__t_arr, FLUX_MAX_GTIDS, head, elem, field)
+
 static void biff_request_for_cpus(struct flux_sched *b, int child_id,
 				  int nr_cpus, int *ret)
 {
@@ -56,9 +70,9 @@ static void biff_cpu_ticked(struct flux_sched *b, int child_id,
 	 * remotely preempt, we'd need to be a little more careful, since the
 	 * thread could be concurrently yielding/departing/etc.
 	 */
-	if (!cpu->biff.current)
+	if (!biff_cpu(b, cpu).current)
 		return;
-	t = gtid_to_thread(cpu->biff.current);
+	t = gtid_to_thread(biff_cpu(b, cpu).current);
 	if (!t)
 		return;
 	/* Arbitrary policy: kick anyone off cpu after 50ms
@@ -113,8 +127,7 @@ static void __biff_enqueue_task(struct flux_sched *b, struct flux_thread *t)
 	t->biff.times_up = false;
 
 	bpf_spin_lock(&b->lock);
-	arr_list_insert_tail(__t_arr, FLUX_MAX_GTIDS, &b->biff.rq, t,
-			     biff.link);
+	biff_arr_list_insert_tail(&b->biff.rq, t, biff.link);
 	t->biff.enqueued = true;
 	bpf_spin_unlock(&b->lock);
 }
@@ -129,7 +142,7 @@ static struct flux_thread *__biff_pick_first_to_run(struct flux_sched *b,
 	if (!__t_arr)
 		return NULL;
 	bpf_spin_lock(&b->lock);
-	t = arr_list_pop_first(__t_arr, FLUX_MAX_GTIDS, &b->biff.rq, biff.link);
+	t = biff_arr_list_pop_first(&b->biff.rq, biff.link);
 	if (t) {
 		t->biff.enqueued = false;
 		flux_prepare_to_run(t, cpu);
@@ -146,26 +159,27 @@ static void __biff_dequeue_task(struct flux_sched *b, struct flux_thread *t)
 		return;
 	bpf_spin_lock(&b->lock);
 	if (t->biff.enqueued) {
-		arr_list_remove(__t_arr, FLUX_MAX_GTIDS, &b->biff.rq, t,
-				biff.link);
+		biff_arr_list_remove(&b->biff.rq, t, biff.link);
 		t->biff.enqueued = false;
 	}
 	bpf_spin_unlock(&b->lock);
 }
 
-static void __biff_task_started(struct flux_thread *t, int cpu_id, u64 at_us)
+static void __biff_task_started(struct flux_sched *b, struct flux_thread *t,
+				int cpu_id, u64 at_us)
 {
 	struct flux_cpu *cpu;
 
 	cpu = cpuid_to_cpu(cpu_id);
 	if (!cpu)
 		return;
-	cpu->biff.current = t->f.gtid;
+	biff_cpu(b, cpu).current = t->f.gtid;
 
 	t->biff.ran_at = at_us;
 }
 
-static void __biff_task_stopped(struct flux_thread *t, int cpu_id, u64 at_us)
+static void __biff_task_stopped(struct flux_sched *b, struct flux_thread *t,
+				int cpu_id, u64 at_us)
 {
 	struct flux_cpu *cpu;
 
@@ -180,7 +194,7 @@ static void __biff_task_stopped(struct flux_thread *t, int cpu_id, u64 at_us)
 	cpu = cpuid_to_cpu(cpu_id);
 	if (!cpu)
 		return;
-	cpu->biff.current = 0;
+	biff_cpu(b, cpu).current = 0;
 
 	t->biff.ran_until = at_us;
 }
@@ -205,7 +219,7 @@ static void biff_pick_next_task(struct flux_sched *b, struct flux_cpu *cpu,
 {
 	struct flux_thread *t, *current;
 
-	current = gtid_to_thread(cpu->biff.current);
+	current = gtid_to_thread(biff_cpu(b, cpu).current);
 	if (current && !current->biff.times_up) {
 		flux_run_current(cpu, ctx);
 		return;
@@ -248,14 +262,14 @@ static void biff_thread_new(struct flux_sched *b, struct flux_thread *t,
 static void biff_thread_on_cpu(struct flux_sched *b, struct flux_thread *t,
 			       struct flux_args_on_cpu *on_cpu)
 {
-	__biff_task_started(t, on_cpu->cpu, bpf_ktime_get_us());
+	__biff_task_started(b, t, on_cpu->cpu, bpf_ktime_get_us());
 	t->biff.cpu = on_cpu->cpu;
 }
 
 static void biff_thread_blocked(struct flux_sched *b, struct flux_thread *t,
 				struct flux_args_blocked *block)
 {
-	__biff_task_stopped(t, block->cpu, bpf_ktime_get_us());
+	__biff_task_stopped(b, t, block->cpu, bpf_ktime_get_us());
 	flux_request_cpus(b, -1);
 }
 
@@ -277,7 +291,7 @@ static void biff_thread_yielded(struct flux_sched *b, struct flux_thread *t,
 {
 	u64 now = bpf_ktime_get_us();
 
-	__biff_task_stopped(t, yield->cpu, now);
+	__biff_task_stopped(b, t, yield->cpu, now);
 	/*
 	 * If you wanted to, you could switch schedulers here.  Instead of
 	 * marking the task runnable, you could hand it off to another
@@ -295,7 +309,7 @@ static void biff_thread_preempted(struct flux_sched *b, struct flux_thread *t,
 	u64 now = bpf_ktime_get_us();
 
 	if (!preempt->was_latched)
-		__biff_task_stopped(t, preempt->cpu, now);
+		__biff_task_stopped(b, t, preempt->cpu, now);
 	__biff_task_runnable(b, t, now);
 }
 
@@ -349,7 +363,7 @@ static void biff_thread_departed(struct flux_sched *b, struct flux_thread *t,
 	 */
 
 	if (departed->was_current)
-		__biff_task_stopped(t, departed->cpu, bpf_ktime_get_us());
+		__biff_task_stopped(b, t, departed->cpu, bpf_ktime_get_us());
 
 	/*
 	 * Will dequeue the task it if was enqueued.  If it was pending_latch,

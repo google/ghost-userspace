@@ -341,3 +341,6 @@ static void flux_run_current(struct flux_cpu *cpu, struct bpf_ghost_sched *ctx);
 static void flux_restart_pnt(struct flux_cpu *cpu, struct bpf_ghost_sched *ctx);
 static void flux_join_scheduler(struct flux_thread *t, int new_sched_id,
 				bool runnable);
+
+/* For getting s's storage in a flux_cpu. */
+#define __sched_cpu_union(s) __s[bounded_idx((s)->f.id, FLUX_NR_SCHEDS)]

@@ -271,4 +271,23 @@ static inline int gtid_to_pid(uint64_t gtid)
 	___arr;								\
 })
 
+/*
+ * Forces the verifier to ensure idx is less than bound.  Returns 0 if idx is
+ * not less than bound.  The compiler won't know the value of idx after this, so
+ * it can't copy idx to another register *before* this bounds check and then use
+ * it in place of idx.
+ *
+ * Interestingly enough, both "less than" and "greater-equal" versions of this
+ * worked.  I was under the impression BPF_JLT wasn't in BPF ISA v1, but
+ * apparently it works.  (BPF ISA v2 is supported as of 4.14 and LLVM 6.0).
+ */
+static inline size_t bounded_idx(size_t idx, int bound)
+{
+	asm volatile("if %[__idx] < %[__bound] goto 1f;	\
+		      %[__idx] = 0;			\
+		      1:"
+		      : [__idx]"+r"(idx) : [__bound]"i"(bound) : "cc");
+	return idx;
+}
+
 #endif  // GHOST_LIB_BPF_COMMON_BPF_H_

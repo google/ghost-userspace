@@ -13,6 +13,24 @@
 
 /* ROCI scheduler implementation for Flux. */
 
+#define roci_cpu(s, cpu) (cpu)->__sched_cpu_union(s).roci
+
+#define roci_arr_list_pop_first(head, field)				\
+	arr_list_pop_first(cpus, FLUX_MAX_CPUS, head,			\
+			   __sched_cpu_union(r).field)
+
+#define roci_arr_list_remove(head, elem, field)				\
+	arr_list_remove(cpus, FLUX_MAX_CPUS, head, elem,		\
+			__sched_cpu_union(r).field)
+
+#define roci_arr_list_insert_head(head, elem, field)			\
+	arr_list_insert_head(cpus, FLUX_MAX_CPUS, head, elem,		\
+			     __sched_cpu_union(r).field)
+
+#define roci_arr_list_insert_tail(head, elem, field)			\
+	arr_list_insert_tail(cpus, FLUX_MAX_CPUS, head, elem,		\
+			     __sched_cpu_union(r).field)
+
 /*
  * We need a limit for the BPF verifier.
  *
@@ -63,15 +81,14 @@ static void roci_request_for_cpus(struct flux_sched *r, int child_id,
 	}
 	for (int i = 0; i < nr_needed && i < ROCI_MAX_NR_PREEMPTS; i++) {
 		bpf_spin_lock(&r->lock);
-		victim = arr_list_pop_first(cpus, FLUX_MAX_CPUS,
-					    &r->roci.idle_cpus, roci.link);
+		victim = roci_arr_list_pop_first(&r->roci.idle_cpus, roci.link);
 		/*
 		 * preempt_pending is an earmark/signal that we already removed
 		 * the cpu from the idle list.  That matters in case of a
 		 * concurrent yield/preempt.
 		 */
 		if (victim)
-			victim->roci.preempt_pending = true;
+			roci_cpu(r, victim).preempt_pending = true;
 		bpf_spin_unlock(&r->lock);
 		if (!victim)
 			break;
@@ -102,15 +119,15 @@ static void __roci_cpu_returned(struct flux_sched *r, int child_id,
 		return;
 
 	bpf_spin_lock(&r->lock);
-	if (cpu->roci.preempt_pending) {
+	if (roci_cpu(r, cpu).preempt_pending) {
 		/*
 		 * We attempted to preempt this cpu, but our child yielded
 		 * before the preemption hit and got the roci lock first.
 		 */
-		cpu->roci.preempt_pending = false;
+		roci_cpu(r, cpu).preempt_pending = false;
 
 	} else {
-		arr_list_remove(cpus, FLUX_MAX_CPUS, child_list, cpu, roci.link);
+		roci_arr_list_remove(child_list, cpu, roci.link);
 	}
 
 	bpf_spin_unlock(&r->lock);
@@ -155,8 +172,8 @@ static void roci_cpu_preemption_completed(struct flux_sched *r, int child_id,
 	bool wasnt_pending;
 
 	bpf_spin_lock(&r->lock);
-	wasnt_pending = !cpu->roci.preempt_pending;
-	cpu->roci.preempt_pending = false;
+	wasnt_pending = !roci_cpu(r, cpu).preempt_pending;
+	roci_cpu(r, cpu).preempt_pending = false;
 	bpf_spin_unlock(&r->lock);
 
 	if (wasnt_pending)
@@ -189,7 +206,7 @@ static void roci_pick_next_task(struct flux_sched *r, struct flux_cpu *cpu,
 	if (!cpus)
 		return;
 	bpf_spin_lock(&r->lock);
-	arr_list_insert_head(cpus, FLUX_MAX_CPUS, child_list, cpu, roci.link);
+	roci_arr_list_insert_head(child_list, cpu, roci.link);
 	bpf_spin_unlock(&r->lock);
 
 	flux_cpu_grant(r, child_id, cpu);
