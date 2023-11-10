@@ -74,3 +74,16 @@ par_binary(
         requirement("absl-py"),
     ],
 )
+
+# Run shinjuku_dynamic_interval experiment.
+par_binary(
+    name = "shinjuku_dynamic_interval",
+    srcs = [
+        "shinjuku_dynamic_interval.py",
+    ],
+    python_version = "PY3",
+    deps = [
+        ":experiments",
+        requirement("absl-py"),
+    ],
+)
