@@ -184,7 +184,7 @@ class RocksDBOptions:
     ghost_qos: If ghOSt is used, this is the QoS (Quality-of-Service) class
       assigned to RocksDB threads.
   """
-  print_format: PrintFormat = PrintFormat.CSV
+  print_format: PrintFormat = PrintFormat.PRETTY
   print_distribution: bool = False
   print_ns: bool = False
   print_get: bool = True
@@ -225,7 +225,7 @@ class AntagonistOptions:
     ghost_qos: If ghOSt is used, this is the QoS (Quality-of-Service) class
       assigned to Antagonist threads.
   """
-  print_format: PrintFormat = PrintFormat.CSV
+  print_format: PrintFormat = PrintFormat.PRETTY
   work_share: float = 1.0
   # Add 1 since the Antagonist is also co-located with the dispatcher (for CFS)
   # and the global agent (for ghOSt).
