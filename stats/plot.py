@@ -168,40 +168,39 @@ def parse_preemption_stats(filepath: str) -> PreemptionStats:
     return PreemptionStats(preemption_interval_us, exp_stats)
 
 
-def plot_preemption_stats(preemption_stats_list: list[PreemptionStats]):
+def plot_preemption_stats(preemption_stats_list: list[PreemptionStats], key: str):
     for preemption_stats in preemption_stats_list:
         preemption_interval_us = preemption_stats.preemption_interval_us
         exp_stats = preemption_stats.exp_stats
 
         # Initialize lists to store throughput and latency values
         throughputs: list[int] = []
-        latencies_99pc: list[int] = []
+        latencies: list[int] = []
 
         for exp_stat in exp_stats:
             throughput = exp_stat.throughput
-            latency_99pc = exp_stat.all_stats.total.latency_99pc_us
+            latency = exp_stat.all_stats.total.__dict__[key]
 
             throughputs.append(throughput)
-            latencies_99pc.append(latency_99pc)
+            latencies.append(latency)
 
-        # Create a line plot for 99th percentile latency vs. throughput
         plt.plot(
             throughputs,
-            latencies_99pc,
+            latencies,
             label=f"{preemption_interval_us}us",
         )
 
     # Set plot labels and legend
     plt.xlabel("Throughput (req/s)")
-    plt.ylabel("99th Percentile Latency (us)")
+    plt.ylabel(f"{key}")
     plt.legend()
-    plt.title(
-        "99th Percentile Latency vs. Throughput for Different Preemption Intervals"
-    )
+    plt.title(f"{key} vs. Throughput for Different Preemption Intervals")
 
     # Show the plot
     plt.show()
 
 
-preemption_stats = [parse_preemption_stats("shinjuku_ghost_stats.txt")]
-plot_preemption_stats(preemption_stats)
+preemption_stats = [
+    parse_preemption_stats(f"shinjuku_{i}.txt") for i in range(5, 35, 5)
+]
+plot_preemption_stats(preemption_stats, key="latency_99_9pc_us")
