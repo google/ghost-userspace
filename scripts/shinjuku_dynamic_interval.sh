@@ -7,6 +7,8 @@ do
   for j in {1..10}
   do
     # Use the variables in the command and redirect output to the desired file
-    sudo bazel-bin/experiments/scripts/shinjuku_dynamic_interval.par $i | tee "shinjuku_${i}_${j}.txt"
+    $FILENAME=shinjuku_$i_$j.txt
+    echo "Writing $FILENAME"
+    sudo bazel-bin/experiments/scripts/shinjuku_dynamic_interval.par $i 20000 300000 20000 > ./stats/$FILENAME
   done
 done
