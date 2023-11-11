@@ -27,7 +27,7 @@ _NUM_CFS_WORKERS = _NUM_CPUS - 2
 _NUM_GHOST_WORKERS = 200
 
 
-def RunCfs():
+def RunCfs(ratio: float= 0.005):
   """Runs the CFS (Linux Completely Fair Scheduler) experiment."""
   e: Experiment = Experiment()
   # Run throughputs 10000, 20000, 30000, and 40000.
@@ -35,14 +35,14 @@ def RunCfs():
   # Toward the end, run throughputs 50000, 51000, 52000, ..., 80000.
   e.throughputs.extend(list(i for i in range(50000, 81000, 1000)))
   e.rocksdb = GetRocksDBOptions(Scheduler.CFS, _NUM_CPUS, _NUM_CFS_WORKERS)
-  e.rocksdb.range_query_ratio = 0.005
+  e.rocksdb.range_query_ratio = ratio
   e.antagonist = None
   e.ghost = None
 
   Run(e)
 
 
-def RunGhost():
+def RunGhost(ratio: float = 0.005, time_slice: str='30us' ):
   """Runs the ghOSt experiment."""
   e: Experiment = Experiment()
   # Run throughputs 1000, 20000, 30000, ..., 130000.
@@ -50,34 +50,37 @@ def RunGhost():
   # Toward the end, run throughputs 140000, 141000, 142000, ..., 150000.
   e.throughputs.extend(list(i for i in range(140000, 151000, 1000)))
   e.rocksdb = GetRocksDBOptions(Scheduler.GHOST, _NUM_CPUS, _NUM_GHOST_WORKERS)
-  e.rocksdb.range_query_ratio = 0.005
+  e.rocksdb.range_query_ratio = ratio
   e.antagonist = None
   e.ghost = GetGhostOptions(_NUM_CPUS)
-  e.ghost.preemption_time_slice = '30us'
+  e.ghost.preemption_time_slice = time_slice
 
   Run(e)
 
 
 def main(argv: Sequence[str]):
-  if len(argv) > 3:
+  if len(argv) > 5:
     raise app.UsageError('Too many command-line arguments.')
   elif len(argv) == 1:
     raise app.UsageError(
         'No experiment specified. Pass `cfs` and/or `ghost` as arguments.')
 
   # First check that all of the command line arguments are valid.
-  if not CheckSchedulers(argv[1:]):
+  if not CheckSchedulers([argv[1]]):
+    print(argv[1])
     raise ValueError('Invalid scheduler specified.')
 
   # Run the experiments.
-  for i in range(1, len(argv)):
-    scheduler = Scheduler(argv[i])
-    if scheduler == Scheduler.CFS:
-      RunCfs()
-    else:
+  # for i in range(1, len(argv)):
+  scheduler = Scheduler(argv[1])
+  ratio = float(argv[2])
+  time_slice = str(argv[3])
+  if scheduler == Scheduler.CFS:
+      RunCfs(ratio)
+  else:
       if scheduler != Scheduler.GHOST:
-        raise ValueError(f'Unknown scheduler {scheduler}.')
-      RunGhost()
+          raise ValueError(f'Unknown scheduler {scheduler}.')
+      RunGhost(ratio, time_slice)
 
 
 if __name__ == '__main__':
