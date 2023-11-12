@@ -3,7 +3,7 @@
 # This script runs a scheduler along with a workload, collect benchmarks,
 # and clean everything up after the workload is finished.
 
-if [ "$#" -lt 2 ]; then
+if [ "$#" -lt 1 ]; then
   echo "Usage: $0 <path_to_test_case>"
   echo "Example: $0 tests/custom_ghost_test.cc"
   exit 1
