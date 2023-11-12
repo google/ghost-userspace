@@ -26,7 +26,7 @@ int main() {
         } else {
             threads.push_back(std::make_unique<ghost::GhostThread>(
                 ghost::GhostThread::KernelScheduler::kGhost, [] {
-                    std::this_thread::sleep_for(std::chrono::microseconds(5))
+                    std::this_thread::sleep_for(std::chrono::microseconds(5));
                 }));
         }
     }
