@@ -51,7 +51,7 @@ TEST_BIN=bazel-bin/$TEST_NAME
 # Run test case
 echo "=== Running $TEST_NAME ==="
 time $TEST_BIN
-echo "=== Finished running $TEST_NAME ==="
 TEST_STATUS=$?
+echo "=== Finished running $TEST_NAME ==="
 
 echo "Test case finished. Status: $TEST_STATUS"
