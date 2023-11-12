@@ -19,15 +19,19 @@ int main() {
 
     for (int i = 0; i < NUM_THREADS; ++i) {
         if (rand() % 10 == 1) {
-            GhostThread t(GhostThread::KernelScheduler::kGhost, []() {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            });
+            threads.push_back(std::make_unique<ghost::GhostThread>(
+                ghost::GhostThread::KernelScheduler::kGhost, []() {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }));
         } else {
-            GhostThread t(GhostThread::KernelScheduler::kGhost, [] {
-                std::this_thread::sleep_for(std::chrono::microseconds(5))
-            });
+            threads.push_back(std::make_unique<ghost::GhostThread>(
+                ghost::GhostThread::KernelScheduler::kGhost, [] {
+                    std::this_thread::sleep_for(std::chrono::microseconds(5))
+                }));
         }
     }
+
+    for (const auto& t : threads) t->Join();
 
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> diff = end - start;
