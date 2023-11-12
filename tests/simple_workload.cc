@@ -12,7 +12,6 @@
 #include "lib/base.h"
 #include "lib/ghost.h"
 
-using std::chrono::duration;
 using std::chrono::steady_clock;
 
 template <typename T>
@@ -34,18 +33,18 @@ int main() {
         if (rand() % 10 == 1) {
             threads.push_back(std::make_unique<ghost::GhostThread>(
                 ghost::GhostThread::KernelScheduler::kGhost,
-                make_work(duration::milliseconds(10))));
+                make_work(std::chrono::duration::milliseconds(10))));
         } else {
             threads.push_back(std::make_unique<ghost::GhostThread>(
                 ghost::GhostThread::KernelScheduler::kGhost,
-                make_work(duration::microseconds(5))));
+                make_work(std::chrono::duration::microseconds(5))));
         }
     }
 
     for (const auto& t : threads) t->Join();
 
     auto end = steady_clock::now();
-    duration<double> diff = end - start;
+    std::chrono::duration<double> diff = end - start;
     std::cout << "Finished running threads in " << diff.count() << " seconds"
               << std::endl;
 }
