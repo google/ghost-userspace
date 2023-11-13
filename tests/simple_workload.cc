@@ -54,12 +54,12 @@ int main() {
     for (int i = 0; i < NUM_LONG_TASKS; ++i) {
         threads.push_back(std::make_unique<ghost::GhostThread>(
             ghost::GhostThread::KernelScheduler::kGhost,
-            make_work(lt_times[i], std::chrono::milliseconds(10))));
+            make_work(&lt_times[i], std::chrono::milliseconds(10))));
     }
     for (int i = 0; i < NUM_SHORT_TASKS; ++i) {
         threads.push_back(std::make_unique<ghost::GhostThread>(
             ghost::GhostThread::KernelScheduler::kGhost,
-            make_work(st_times[i], std::chrono::microseconds(5))));
+            make_work(&st_times[i], std::chrono::microseconds(5))));
     }
 
     for (const auto& t : threads) t->Join();
