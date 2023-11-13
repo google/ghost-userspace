@@ -1,5 +1,7 @@
 #include <unistd.h>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <functional>
@@ -14,20 +16,39 @@
 
 using std::chrono::steady_clock;
 
+constexpr int NUM_THREADS = 1000;
+std::array<double, NUM_THREADS> experimentTimes;
+
 template <typename T>
-std::function<void()> make_work(T duration) {
+std::function<void()> make_work(int threadId, T duration) {
     return [duration] {
         auto t1 = steady_clock::now();
         while (steady_clock::now() < t1 + duration) {
         }
+        auto t2 = steady_clock::now();
+        std::chrono::duration<double> diff = t2 - t1;
+        experimentTimes[threadId] = diff.count();
     };
 }
 
+// return percentile of experimentTimes
+// assumes array is sorted
+double percentile(double n) {
+    double idx = n * (experimentTimes.size() - 1);
+    int a = static_cast<int>(idx);
+    int b = a + 1;
+
+    if (b >= experimentTimes.size()) {
+        return experimentTimes[a];
+    }
+
+    double w = idx - a;
+    return (1 - w) * experimentTimes[a] + w * experimentTimes[b];
+}
+
 int main() {
-    int NUM_THREADS = 1000;
     std::mutex m;
-    std::vector<std::unique_ptr<ghost::GhostThread>> threads;
-    auto start = steady_clock::now();
+    std::array<std::unique_ptr<ghost::GhostThread>, NUM_THREADS> threads;
 
     for (int i = 0; i < NUM_THREADS; ++i) {
         if (rand() % 10 == 1) {
@@ -43,8 +64,14 @@ int main() {
 
     for (const auto& t : threads) t->Join();
 
-    auto end = steady_clock::now();
-    std::chrono::duration<double> diff = end - start;
-    std::cout << "Finished running threads in " << diff.count() << " seconds"
-              << std::endl;
+    std::sort(experimentTimes.begin(), experimentTimes.end());
+
+    printf("Finished running %d threads.\n", NUM_THREADS);
+    printf("0th percentile: %.3f\n", percentile(0));
+    printf("25th percentile: %.3f\n", percentile(0.25));
+    printf("50th percentile: %.3f\n", percentile(0.5));
+    printf("75th percentile: %.3f\n", percentile(0.75));
+    printf("90th percentile: %.3f\n", percentile(0.9));
+    printf("99th percentile: %.3f\n", percentile(0.99));
+    printf("100th percentile: %.3f\n", percentile(1));
 }
