@@ -25,7 +25,9 @@ steady_clock::time_point lt_ends[NUM_LONG_TASKS];
 template <typename T>
 std::function<void()> make_work(steady_clock::time_point* tp, T duration) {
     return [tp, duration] {
-        std::this_thread::sleep_for(duration);
+        auto t1 = steady_clock::now();
+        while (steady_clock::now() < t1 + duration) {
+        }
         *tp = steady_clock::now();
     };
 }
@@ -46,21 +48,34 @@ double percentile(const std::vector<double>& v, double n) {
     return (1 - w) * v[a] + w * v[b];
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    if (argc != 2) {
+        std::cout << "Usage: " << argv[0] << " ghost|cfs" << std::endl;
+        return 0;
+    }
+    ghost::GhostThread::KernelScheduler ks_mode;
+    if (argv[1][0] == 'g')
+        ks_mode = ghost::GhostThread::KernelScheduler::kGhost;
+    else if (argv[1][0] == 'c')
+        ks_mode = ghost::GhostThread::KernelScheduler::kCfs;
+    else {
+        std::cout << "invalid scheduler option" << std::endl;
+        return 0;
+    }
+
     std::mutex m;
     std::vector<std::unique_ptr<ghost::GhostThread>> threads;
 
     for (int i = 0; i < NUM_LONG_TASKS; ++i) {
         lt_starts[i] = steady_clock::now();
         threads.push_back(std::make_unique<ghost::GhostThread>(
-            ghost::GhostThread::KernelScheduler::kGhost,
-            make_work(&lt_ends[i], std::chrono::milliseconds(10))));
+            ks_mode, make_work(&lt_ends[i], std::chrono::milliseconds(10))));
     }
+    std::this_thread::sleep_for(std::chrono::nanoseconds(1));
     for (int i = 0; i < NUM_SHORT_TASKS; ++i) {
         st_starts[i] = steady_clock::now();
         threads.push_back(std::make_unique<ghost::GhostThread>(
-            ghost::GhostThread::KernelScheduler::kGhost,
-            make_work(&st_ends[i], std::chrono::microseconds(5))));
+            ks_mode, make_work(&st_ends[i], std::chrono::microseconds(5))));
     }
 
     for (const auto& t : threads) t->Join();
