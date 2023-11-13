@@ -11,6 +11,9 @@ fi
 
 TEST_CASE="$1" # path to workload (test case)
 
+shift 1
+TEST_ARGS=("$@")
+
 # Build the test case
 # Make a copy of the BUILD config
 cp BUILD BUILD.original
@@ -50,7 +53,7 @@ TEST_BIN=bazel-bin/$TEST_NAME
 
 # Run test case
 echo "=== Running $TEST_NAME ==="
-time $TEST_BIN
+time $TEST_BIN ${TEST_ARGS[@]}
 TEST_STATUS=$?
 echo "=== Finished running $TEST_NAME ==="
 
