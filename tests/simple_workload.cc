@@ -51,13 +51,13 @@ int main() {
     std::vector<std::unique_ptr<ghost::GhostThread>> threads;
 
     for (int i = 0; i < NUM_LONG_TASKS; ++i) {
-        lt_starts[i] = now();
+        lt_starts[i] = steady_clock::now();
         threads.push_back(std::make_unique<ghost::GhostThread>(
             ghost::GhostThread::KernelScheduler::kGhost,
             make_work(&lt_ends[i], std::chrono::milliseconds(10))));
     }
     for (int i = 0; i < NUM_SHORT_TASKS; ++i) {
-        st_starts[i] = now();
+        st_starts[i] = steady_clock::now();
         threads.push_back(std::make_unique<ghost::GhostThread>(
             ghost::GhostThread::KernelScheduler::kGhost,
             make_work(&st_ends[i], std::chrono::microseconds(5))));
