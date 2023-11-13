@@ -21,7 +21,7 @@ std::array<double, NUM_THREADS> experimentTimes;
 
 template <typename T>
 std::function<void()> make_work(int threadId, T duration) {
-    return [duration] {
+    return [threadId, duration] {
         auto t1 = steady_clock::now();
         while (steady_clock::now() < t1 + duration) {
         }
@@ -54,11 +54,11 @@ int main() {
         if (rand() % 10 == 1) {
             threads[i] = std::make_unique<ghost::GhostThread>(
                 ghost::GhostThread::KernelScheduler::kGhost,
-                make_work(std::chrono::milliseconds(10)));
+                make_work(i, std::chrono::milliseconds(10)));
         } else {
             threads[i] = std::make_unique<ghost::GhostThread>(
                 ghost::GhostThread::KernelScheduler::kGhost,
-                make_work(std::chrono::microseconds(5)));
+                make_work(i, std::chrono::microseconds(5)));
         }
     }
 
