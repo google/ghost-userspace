@@ -20,15 +20,16 @@ constexpr int NUM_LONG_TASKS = 100;
 double st_times[NUM_SHORT_TASKS];
 double lt_times[NUM_LONG_TASKS];
 
+double now() {
+    return std::chrono::duration_cast<double>(steady_clock::now()).count();
+}
+
 template <typename T>
 std::function<void()> make_work(double* runtime, T duration) {
     return [runtime, duration] {
-        auto t1 = steady_clock::now();
-        while (steady_clock::now() < t1 + duration) {
-        }
-        auto t2 = steady_clock::now();
-        std::chrono::duration<double> diff = t2 - t1;
-        *runtime = diff.count() * 1000000;  // measure runtime in us
+        std::this_thread::sleep_for(duration);
+        double diff = now() - *runtime;
+        *runtime = diff * 1000000;  // measure runtime in us
     };
 }
 
@@ -52,11 +53,13 @@ int main() {
     std::vector<std::unique_ptr<ghost::GhostThread>> threads;
 
     for (int i = 0; i < NUM_LONG_TASKS; ++i) {
+        lt_times[i] = now();
         threads.push_back(std::make_unique<ghost::GhostThread>(
             ghost::GhostThread::KernelScheduler::kGhost,
             make_work(&lt_times[i], std::chrono::milliseconds(10))));
     }
     for (int i = 0; i < NUM_SHORT_TASKS; ++i) {
+        st_times[i] = now();
         threads.push_back(std::make_unique<ghost::GhostThread>(
             ghost::GhostThread::KernelScheduler::kGhost,
             make_work(&st_times[i], std::chrono::microseconds(5))));
