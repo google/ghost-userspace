@@ -64,7 +64,8 @@ int main() {
 
     for (const auto& t : threads) t->Join();
 
-    std::sort(experimentTimes.begin(), experimentTimes.end());
+    std::sort(&st_times[0], &st_times[NUM_SHORT_TASKS]);
+    std::sort(&lt_times[0], &lt_times[NUM_LONG_TASKS]);
 
     printf("Finished running.\n");
     printf("== Short task stats ==\n");
