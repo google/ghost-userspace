@@ -1,7 +1,6 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <functional>
@@ -16,63 +15,83 @@
 
 using std::chrono::steady_clock;
 
-constexpr int NUM_THREADS = 1000;
-std::array<double, NUM_THREADS> experimentTimes;
+constexpr int NUM_SHORT_TASKS = 10000;
+constexpr int NUM_LONG_TASKS = 1000;
+double st_times[NUM_SHORT_TASKS];
+double lt_times[NUM_LONG_TASKS];
 
 template <typename T>
-std::function<void()> make_work(int threadId, T duration) {
-    return [threadId, duration] {
+std::function<void()> make_work(double* runtime, T duration) {
+    return [runtime, duration] {
         auto t1 = steady_clock::now();
         while (steady_clock::now() < t1 + duration) {
         }
         auto t2 = steady_clock::now();
         std::chrono::duration<double> diff = t2 - t1;
-        experimentTimes[threadId] =
-            diff.count() * 1000000;  // measure runtime in us
+        *runtime = diff.count() * 1000000;  // measure runtime in us
     };
 }
 
 // return percentile of experimentTimes
 // assumes array is sorted
-double percentile(double n) {
-    double idx = n * (experimentTimes.size() - 1);
+double percentile(double* arr, int sz, double n) {
+    double idx = n * (sz - 1);
     int a = static_cast<int>(idx);
     int b = a + 1;
 
-    if (b >= experimentTimes.size()) {
-        return experimentTimes[a];
+    if (b >= sz) {
+        return arr[a];
     }
 
     double w = idx - a;
-    return (1 - w) * experimentTimes[a] + w * experimentTimes[b];
+    return (1 - w) * arr[a] + w * arr[b];
 }
 
 int main() {
     std::mutex m;
-    std::array<std::unique_ptr<ghost::GhostThread>, NUM_THREADS> threads;
+    std::vector<std::unique_ptr<ghost::GhostThread>> threads;
 
-    for (int i = 0; i < NUM_THREADS; ++i) {
-        if (rand() % 10 == 1) {
-            threads[i] = std::make_unique<ghost::GhostThread>(
-                ghost::GhostThread::KernelScheduler::kGhost,
-                make_work(i, std::chrono::milliseconds(10)));
-        } else {
-            threads[i] = std::make_unique<ghost::GhostThread>(
-                ghost::GhostThread::KernelScheduler::kGhost,
-                make_work(i, std::chrono::microseconds(5)));
-        }
+    for (int i = 0; i < NUM_LONG_TASKS; ++i) {
+        threads.push_back(std::make_unique<ghost::GhostThread>(
+            ghost::GhostThread::KernelScheduler::kGhost,
+            make_work(lt_times[i], std::chrono::milliseconds(10))));
+    }
+    for (int i = 0; i < NUM_SHORT_TASKS; ++i) {
+        threads.push_back(std::make_unique<ghost::GhostThread>(
+            ghost::GhostThread::KernelScheduler::kGhost,
+            make_work(st_times[i], std::chrono::microseconds(5))));
     }
 
     for (const auto& t : threads) t->Join();
 
     std::sort(experimentTimes.begin(), experimentTimes.end());
 
-    printf("Finished running %d threads.\n", NUM_THREADS);
-    printf("0th percentile: %.3f\n", percentile(0));
-    printf("25th percentile: %.3f\n", percentile(0.25));
-    printf("50th percentile: %.3f\n", percentile(0.5));
-    printf("75th percentile: %.3f\n", percentile(0.75));
-    printf("90th percentile: %.3f\n", percentile(0.9));
-    printf("99th percentile: %.3f\n", percentile(0.99));
-    printf("100th percentile: %.3f\n", percentile(1));
+    printf("Finished running.\n");
+    printf("== Short task stats ==\n");
+    printf("0th percentile: %.3f\n", percentile(st_times, NUM_SHORT_TASKS, 0));
+    printf("25th percentile: %.3f\n",
+           percentile(st_times, NUM_SHORT_TASKS, 0.25));
+    printf("50th percentile: %.3f\n",
+           percentile(st_times, NUM_SHORT_TASKS, 0.5));
+    printf("75th percentile: %.3f\n",
+           percentile(st_times, NUM_SHORT_TASKS, 0.75));
+    printf("90th percentile: %.3f\n",
+           percentile(st_times, NUM_SHORT_TASKS, 0.9));
+    printf("99th percentile: %.3f\n",
+           percentile(st_times, NUM_SHORT_TASKS, 0.99));
+    printf("100th percentile: %.3f\n",
+           percentile(st_times, NUM_SHORT_TASKS, 1));
+    printf("== Long task stats ==\n");
+    printf("0th percentile: %.3f\n", percentile(lt_times, NUM_LONG_TASKS, 0));
+    printf("25th percentile: %.3f\n",
+           percentile(lt_times, NUM_LONG_TASKS, 0.25));
+    printf("50th percentile: %.3f\n",
+           percentile(lt_times, NUM_LONG_TASKS, 0.5));
+    printf("75th percentile: %.3f\n",
+           percentile(lt_times, NUM_LONG_TASKS, 0.75));
+    printf("90th percentile: %.3f\n",
+           percentile(lt_times, NUM_LONG_TASKS, 0.9));
+    printf("99th percentile: %.3f\n",
+           percentile(lt_times, NUM_LONG_TASKS, 0.99));
+    printf("100th percentile: %.3f\n", percentile(lt_times, NUM_LONG_TASKS, 1));
 }
