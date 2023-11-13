@@ -52,13 +52,13 @@ int main() {
 
     for (int i = 0; i < NUM_THREADS; ++i) {
         if (rand() % 10 == 1) {
-            threads.push_back(std::make_unique<ghost::GhostThread>(
+            threads[i] = std::make_unique<ghost::GhostThread>(
                 ghost::GhostThread::KernelScheduler::kGhost,
-                make_work(std::chrono::milliseconds(10))));
+                make_work(std::chrono::milliseconds(10)));
         } else {
-            threads.push_back(std::make_unique<ghost::GhostThread>(
+            threads[i] = std::make_unique<ghost::GhostThread>(
                 ghost::GhostThread::KernelScheduler::kGhost,
-                make_work(std::chrono::microseconds(5))));
+                make_work(std::chrono::microseconds(5)));
         }
     }
 
