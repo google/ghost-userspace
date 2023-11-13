@@ -69,16 +69,12 @@ int main() {
     std::vector<double> lt_runtimes(NUM_LONG_TASKS);
 
     for (int i = 0; i < NUM_SHORT_TASKS; ++i) {
-        st_runtimes[i] =
-            std::chrono::duration_cast<double>(st_ends[i] - st_starts[i])
-                .count() *
-            1000000;  // measure in us
+        std::chrono::duration<double> diff = st_ends[i] - st_starts[i];
+        st_runtimes[i] = diff.count() * 1000000;  // measure in us
     }
     for (int i = 0; i < NUM_LONG_TASKS; ++i) {
-        lt_runtimes[i] =
-            std::chrono::duration_cast<double>(lt_ends[i] - lt_starts[i])
-                .count() *
-            1000000;  // measure in us
+        std::chrono::duration<double> diff = lt_ends[i] - lt_starts[i];
+        lt_runtimes[i] = diff.count() * 1000000;  // measure in us
     }
 
     std::sort(st_runtimes.begin(), st_runtimes.end());
