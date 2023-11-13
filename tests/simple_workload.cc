@@ -27,7 +27,8 @@ std::function<void()> make_work(int threadId, T duration) {
         }
         auto t2 = steady_clock::now();
         std::chrono::duration<double> diff = t2 - t1;
-        experimentTimes[threadId] = diff.count();
+        experimentTimes[threadId] =
+            diff.count() * 1000000;  // measure runtime in us
     };
 }
 
