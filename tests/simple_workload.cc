@@ -21,7 +21,9 @@ double st_times[NUM_SHORT_TASKS];
 double lt_times[NUM_LONG_TASKS];
 
 double now() {
-    return std::chrono::duration_cast<double>(steady_clock::now()).count();
+    return std::chrono::duration_cast<double>(
+               steady_clock::now().time_since_epoch())
+        .count();
 }
 
 template <typename T>
