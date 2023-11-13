@@ -24,7 +24,7 @@ steady_clock::time_point lt_ends[NUM_LONG_TASKS];
 
 template <typename T>
 std::function<void()> make_work(steady_clock::time_point* tp, T duration) {
-    return [runtime, duration] {
+    return [tp, duration] {
         std::this_thread::sleep_for(duration);
         *tp = steady_clock::now();
     };
