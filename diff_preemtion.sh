@@ -1,5 +1,5 @@
-arr=("30us" "35us" "40us" "45us" "50us" )
-ratios=("0.025" "0.05" "0.07")
+arr=("60us" "65us" "70us" "80us")
+ratios=("0.08" "0.09" "0.1")
 
 for ratio in ${ratios[@]}; do
 	for time_slice in ${arr[@]}; do
