@@ -9,7 +9,7 @@
 pid_t delegate_to_child(std::function<void()> work) {
     pid_t child_pid = fork();
     if (child_pid == -1) {
-        perror("fork error");
+        perror("fork");
         exit(1);
     }
 
@@ -29,10 +29,9 @@ pid_t delegate_to_child(std::function<void()> work) {
 }
 
 void terminate_child(pid_t child_pid) {
-    // send a SIGINT to child's pgid (negative child_pid, set in
-    // delegate_to_child)
-    if (kill(-child_pid, SIGINT) == -1) {
-        perror("failed to kill child");
+    // send SIGINT to allow for graceful cleanup
+    if (kill(child_pid, SIGINT) == -1) {
+        perror("kill");
         exit(1);
     }
 
@@ -51,21 +50,13 @@ void terminate_child(pid_t child_pid) {
 }
 
 int main(int argc, char* argv[]) {
-    // Create child to run enclave cleanup (HACK)
-    delegate_to_child([] {
-        char* args[] = {"../scripts/cleanup.sh", NULL};
-        execv(args[0], args);
-        perror("failed to call cleanup.sh");
-        exit(1);
-    });
-
-    // Create child process (which will run the scheduler)
+    // Create child process to run scheduler
     pid_t child_pid = delegate_to_child([] {
         // run FIFO scheduler
         char* args[] = {"/usr/bin/sudo", "../bazel-bin/fifo_per_cpu_agent",
                         "--ghost_cpus", "0-1", NULL};
         execv(args[0], args);
-        perror("execv failed");
+        perror("execv");
         exit(1);
     });
 
