@@ -47,7 +47,7 @@ void terminate_child(pid_t child_pid) {
 int main(int argc, char* argv[]) {
     // Create child to run enclave cleanup (HACK)
     delegate_to_child([] {
-        char* args[] = {"../scripts/cleanup.sh"};
+        char* args[] = {"../scripts/cleanup.sh", NULL};
         execv(args[0], args);
         perror("failed to call cleanup.sh");
         exit(1);
