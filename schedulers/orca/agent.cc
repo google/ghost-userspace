@@ -91,16 +91,6 @@ int main(int argc, char *argv[])
     // manually flush `stdout`.
     fflush(stdout);
 
-    sleep(5);
-
-    ghost::CfsConfig cfsConfig;
-    ghost::ParseAgentConfig(&cfsConfig);
-
-    printf("Initializing... CFS\n");
-    auto uap_cfs = new ghost::AgentProcess<ghost::FullCfsAgent<ghost::LocalEnclave>,
-                                           ghost::CfsConfig>(cfsConfig);
-    // ghost::GhostHelper()->InitCore();
-
     ghost::Notification exit;
     ghost::GhostSignals::AddHandler(SIGINT, [&exit](int)
                                     {
@@ -119,6 +109,18 @@ int main(int argc, char *argv[])
     uap->Rpc(ghost::FifoScheduler::kDebugRunqueue);
     return false; });
 
+    sleep(5);
+
+    delete uap;
+
+    ghost::CfsConfig cfsConfig;
+    ghost::ParseAgentConfig(&cfsConfig);
+
+    printf("Initializing... CFS\n");
+    auto uap_cfs = new ghost::AgentProcess<ghost::FullCfsAgent<ghost::LocalEnclave>,
+                                           ghost::CfsConfig>(cfsConfig);
+    // ghost::GhostHelper()->InitCore();
+
     ghost::GhostSignals::AddHandler(SIGUSR1, [uap_cfs](int)
                                     {
     uap_cfs->Rpc(ghost::FifoScheduler::kDebugRunqueue);
@@ -126,7 +128,6 @@ int main(int argc, char *argv[])
 
     exit.WaitForNotification();
 
-    delete uap;
     delete uap_cfs;
 
     printf("\nDone!\n");
