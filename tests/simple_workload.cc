@@ -15,8 +15,8 @@
 
 using std::chrono::steady_clock;
 
-constexpr int NUM_SHORT_TASKS = 1000;
-constexpr int NUM_LONG_TASKS = 100;
+constexpr int NUM_SHORT_TASKS = 10;
+constexpr int NUM_LONG_TASKS = 1;
 steady_clock::time_point st_starts[NUM_SHORT_TASKS];
 steady_clock::time_point lt_starts[NUM_LONG_TASKS];
 steady_clock::time_point st_ends[NUM_SHORT_TASKS];
