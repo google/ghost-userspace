@@ -97,8 +97,8 @@ int main(int argc, char *argv[])
     ghost::ParseAgentConfig(&cfsConfig);
 
     printf("Initializing... CFS\n");
-    auto uap = new ghost::AgentProcess<ghost::FullCfsAgent<ghost::LocalEnclave>,
-                                       ghost::CfsConfig>(config);
+    auto uap_cfs = new ghost::AgentProcess<ghost::FullCfsAgent<ghost::LocalEnclave>,
+                                           ghost::CfsConfig>(cfsConfig);
     ghost::GhostHelper()->InitCore();
 
     ghost::Notification exit;
@@ -119,9 +119,15 @@ int main(int argc, char *argv[])
     uap->Rpc(ghost::FifoScheduler::kDebugRunqueue);
     return false; });
 
+    ghost::GhostSignals::AddHandler(SIGUSR1, [uap_cfs](int)
+                                    {
+    uap_cfs->Rpc(ghost::FifoScheduler::kDebugRunqueue);
+    return false; });
+
     exit.WaitForNotification();
 
     delete uap;
+    delete uap_cfs;
 
     printf("\nDone!\n");
 
