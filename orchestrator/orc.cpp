@@ -18,7 +18,9 @@ int main(int argc, char* argv[]) {
         char* args[] = {"/usr/bin/sudo", "../bazel-bin/fifo_per_cpu_agent",
                         "--ghost_cpus", "0-1"};
         printf("Starting scheduler\n");
-        execv(args[0], args);
+        execvp("sudo", args);
+        printf("Happening?\n");
+        // execvp("sudo", args);
     } else {
         // we are the parent
         printf("Child pid: %d\n", child_pid);
