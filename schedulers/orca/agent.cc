@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
     printf("Initializing... CFS\n");
     auto uap_cfs = new ghost::AgentProcess<ghost::FullCfsAgent<ghost::LocalEnclave>,
                                            ghost::CfsConfig>(cfsConfig);
-    ghost::GhostHelper()->InitCore();
+    // ghost::GhostHelper()->InitCore();
 
     ghost::Notification exit;
     ghost::GhostSignals::AddHandler(SIGINT, [&exit](int)
