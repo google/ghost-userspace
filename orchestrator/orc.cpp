@@ -14,18 +14,24 @@ pid_t delegate_to_child(std::function<void()> work) {
     }
 
     if (child_pid == 0) {
+        // set our process group id (pgid) to our own pid
+        // this allows our parent to kill us
+        if (setpgid(0, 0) == -1) {
+            perror("setpgid");
+            exit(1);
+        }
+
         work();
         exit(0);
     } else {
         return child_pid;
     }
-
-    // unreachable
-    exit(1);
 }
 
 void terminate_child(pid_t child_pid) {
-    if (kill(child_pid, SIGKILL) == -1) {
+    // send a SIGINT to child's pgid (negative child_pid, set in
+    // delegate_to_child)
+    if (kill(-child_pid, SIGINT) == -1) {
         perror("failed to kill child");
         exit(1);
     }
