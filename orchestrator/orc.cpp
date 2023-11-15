@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
 
         printf("Killing scheduler\n");
 
-        if (kill(child_pid, SIGTERM) == -1) {
+        if (kill(child_pid, SIGINT) == -1) {
             perror("failed to kill child");
             return 1;
         }
