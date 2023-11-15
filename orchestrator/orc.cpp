@@ -18,9 +18,12 @@ int main(int argc, char* argv[]) {
         char* args[] = {"/usr/bin/sudo", "../bazel-bin/fifo_per_cpu_agent",
                         "--ghost_cpus", "0-1"};
         printf("Starting scheduler\n");
-        execvp("sudo", args);
-        printf("Happening?\n");
-        // execvp("sudo", args);
+        int status = execv(args[0], args);
+
+        printf("status: %d\n");
+
+        perror("execv failed");
+        return 1;
     } else {
         // we are the parent
         printf("Child pid: %d\n", child_pid);
@@ -30,7 +33,7 @@ int main(int argc, char* argv[]) {
         printf("Killing scheduler\n");
 
         if (kill(child_pid, SIGTERM) == -1) {
-            printf("failed to kill child\n");
+            perror("failed to kill child");
             return 1;
         }
 
