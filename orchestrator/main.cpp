@@ -13,16 +13,15 @@ int main(int argc, char* argv[]) {
 
     if (child_pid == 0) {
         // we are the child
-        printf("we are the child\n");
 
         // Run FIFO scheduler
-        char* args[] = {"../bazel-bin/fifo_per_cpu_agent", "--ghost_cpus",
-                        "0-1"};
+        char* args[] = {"/usr/bin/sudo", "../bazel-bin/fifo_per_cpu_agent",
+                        "--ghost_cpus", "0-1"};
         printf("Starting scheduler\n");
         execv(args[0], args);
     } else {
         // we are the parent
-        printf("we are the parent\n");
+        printf("Child pid: %d\n", child_pid);
 
         sleep(5);
 
