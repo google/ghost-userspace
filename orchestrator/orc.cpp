@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
 
         // Run FIFO scheduler
         char* args[] = {"/usr/bin/sudo", "../bazel-bin/fifo_per_cpu_agent",
-                        "--ghost_cpus", "0-1"};
+                        "--ghost_cpus", "0-1", NULL};
         printf("Starting scheduler\n");
         int status = execv(args[0], args);
 
