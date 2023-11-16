@@ -53,6 +53,7 @@ def RunGhost(ratio: float = 0.005, time_slice: str='30us', tput_start: int = 100
   # e.throughputs.extend(list(i for i in range(140000, 151000, 1000)))
   e.rocksdb = GetRocksDBOptions(Scheduler.GHOST, _NUM_CPUS, _NUM_GHOST_WORKERS)
   e.rocksdb.range_query_ratio = ratio
+  e.rocksdb.experiment_duration = "30s"
   e.antagonist = None
   e.ghost = GetGhostOptions(_NUM_CPUS)
   e.ghost.preemption_time_slice = time_slice
