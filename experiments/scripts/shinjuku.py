@@ -36,6 +36,7 @@ def RunCfs(ratio: float= 0.005, tput_start: int = 10000, tput_end:int = 151000, 
   e.throughputs = list(i for i in range(tput_start, tput_end, tput_step))
   # e.throughputs.extend(list(i for i in range(50000, 81000, 1000)))
   e.rocksdb = GetRocksDBOptions(Scheduler.CFS, _NUM_CPUS, _NUM_CFS_WORKERS)
+  e.rocksdb.experiment_duration = "30s"
   e.rocksdb.range_query_ratio = ratio
   e.antagonist = None
   e.ghost = None
