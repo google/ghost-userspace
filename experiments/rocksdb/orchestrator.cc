@@ -214,7 +214,7 @@ void Orchestrator::HandleRange(Request& request, std::string& response,
 void Orchestrator::PrintResultsHelper(
     const std::string& results_name, absl::Duration experiment_duration,
     const std::vector<Request>& requests) const {
-  std::cout << results_name << ":" << requests.size() <<std::endl;
+  std::cout << results_name << ": " << requests.size() <<std::endl;
   latency::Print(requests, experiment_duration, options_.print_options);
 }
 

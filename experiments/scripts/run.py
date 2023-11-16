@@ -405,15 +405,15 @@ def HandleRocksDBOutput(stream: TextIO, outputs: OutputFiles):
     line = line.decode("ascii").strip()
     print(line)
 
-    if line == "Get:":
+    if line.startswith("Get:"):
       if output:
         raise ValueError("Unexpected start of Get request results.")
       output = outputs.rocksdb_get
-    elif line == "Range:":
+    elif line.startswith("Range:"):
       if output != outputs.rocksdb_get:
         raise ValueError("Unexpected start of Range query results.")
       output = outputs.rocksdb_range
-    elif line == "All:":
+    elif line.startswith("All:"):
       if output != outputs.rocksdb_range:
         raise ValueError("Unexpected start of All results.")
       output = outputs.rocksdb
