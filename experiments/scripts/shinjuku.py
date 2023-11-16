@@ -27,13 +27,14 @@ _NUM_CFS_WORKERS = _NUM_CPUS - 2
 _NUM_GHOST_WORKERS = 200
 
 
-def RunCfs(ratio: float= 0.005):
+def RunCfs(ratio: float= 0.005, tput_start: int = 10000, tput_end:int = 151000, tput_step:int = 10000):
   """Runs the CFS (Linux Completely Fair Scheduler) experiment."""
   e: Experiment = Experiment()
   # Run throughputs 10000, 20000, 30000, and 40000.
-  e.throughputs = list(i for i in range(10000, 50000, 10000))
+  # e.throughputs = list(i for i in range(10000, 50000, 10000))
   # Toward the end, run throughputs 50000, 51000, 52000, ..., 80000.
-  e.throughputs.extend(list(i for i in range(50000, 81000, 1000)))
+  e.throughputs = list(i for i in range(tput_start, tput_end, tput_step))
+  # e.throughputs.extend(list(i for i in range(50000, 81000, 1000)))
   e.rocksdb = GetRocksDBOptions(Scheduler.CFS, _NUM_CPUS, _NUM_CFS_WORKERS)
   e.rocksdb.range_query_ratio = ratio
   e.antagonist = None
@@ -42,13 +43,14 @@ def RunCfs(ratio: float= 0.005):
   Run(e)
 
 
-def RunGhost(ratio: float = 0.005, time_slice: str='30us' ):
+def RunGhost(ratio: float = 0.005, time_slice: str='30us', tput_start: int = 10000, tput_end:int = 151000, tput_step:int = 10000):
   """Runs the ghOSt experiment."""
   e: Experiment = Experiment()
   # Run throughputs 1000, 20000, 30000, ..., 130000.
-  e.throughputs = list(i for i in range(10000, 140000, 10000))
+  # e.throughputs = list(i for i in range(10000, 140000, 10000))
+  e.throughputs = list(i for i in range(tput_start, tput_end, tput_step))
   # Toward the end, run throughputs 140000, 141000, 142000, ..., 150000.
-  e.throughputs.extend(list(i for i in range(140000, 151000, 1000)))
+  # e.throughputs.extend(list(i for i in range(140000, 151000, 1000)))
   e.rocksdb = GetRocksDBOptions(Scheduler.GHOST, _NUM_CPUS, _NUM_GHOST_WORKERS)
   e.rocksdb.range_query_ratio = ratio
   e.antagonist = None
@@ -59,11 +61,11 @@ def RunGhost(ratio: float = 0.005, time_slice: str='30us' ):
 
 
 def main(argv: Sequence[str]):
-  if len(argv) > 5:
-    raise app.UsageError('Too many command-line arguments.')
-  elif len(argv) == 1:
-    raise app.UsageError(
-        'No experiment specified. Pass `cfs` and/or `ghost` as arguments.')
+  # if len(argv) > 5:
+  #   raise app.UsageError('Too many command-line arguments.')
+  # elif len(argv) == 1:
+  #   raise app.UsageError(
+  #       'No experiment specified. Pass `cfs` and/or `ghost` as arguments.')
 
   # First check that all of the command line arguments are valid.
   if not CheckSchedulers([argv[1]]):
@@ -75,12 +77,15 @@ def main(argv: Sequence[str]):
   scheduler = Scheduler(argv[1])
   ratio = float(argv[2])
   time_slice = str(argv[3])
+  tput_start = int(argv[4])
+  tput_end = int(argv[5])
+  tput_step = int(argv[6])
   if scheduler == Scheduler.CFS:
-      RunCfs(ratio)
+      RunCfs(ratio, tput_start=tput_start, tput_end=tput_end, tput_step=tput_step)
   else:
       if scheduler != Scheduler.GHOST:
           raise ValueError(f'Unknown scheduler {scheduler}.')
-      RunGhost(ratio, time_slice)
+      RunGhost(ratio, time_slice,tput_start=tput_start, tput_end=tput_end, tput_step=tput_step)
 
 
 if __name__ == '__main__':

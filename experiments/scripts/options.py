@@ -202,7 +202,7 @@ class RocksDBOptions:
   range_duration: str = "5000us"
   get_exponential_mean: str = "0us"
   batch: int = 1
-  experiment_duration: str = "15s"
+  experiment_duration: str = "20s"
   discard_duration: str = "2s"
   scheduler: Scheduler = Scheduler.CFS
   ghost_qos: int = 2

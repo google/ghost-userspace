@@ -237,7 +237,7 @@ bool Orchestrator::ShouldDiscard(const Request& request) const {
 }
 
 void Orchestrator::PrintResults(absl::Duration experiment_duration) const {
-  std::cout << "Stats:" << std::endl;
+  std::cout << "Stats: " << "Requests_ size = " << requests_.size() << std::endl;
   // We discard some of the results, so subtract this discard period from the
   // experiment duration so that the correct throughput is calculated.
   absl::Duration tracked_duration =
