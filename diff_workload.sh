@@ -1,10 +1,34 @@
-arr=("0.025" "0.05" "0.07" "0.08" "0.09" "0.1" )
+arr=("0.1" "0.2" "0.3" "0.4" "0.5" )
 
-for time_slice in ${arr[@]}; do
-	echo "RUN $time_slice"
-	sudo bazel-bin/experiments/scripts/shinjuku.par ghost $time_slice 30us | tee ghost_$time_slice.out
-	echo "Done ghost_$time_slice.out"
-	sudo bazel-bin/experiments/scripts/shinjuku.par cfs $time_slice 30us | tee cfs_$time_slice.out
-	echo "Done cfs_$time_slice.out"
+# 0.005 0.025 0.05 0.07 0.08 0.09 0.1
+
+for workload in ${arr[@]}; do
+	echo "RUN $workload"
+	if ! test -f ./diff_workloads/ghost_$workload.out.done; then
+		sudo bazel-bin/experiments/scripts/shinjuku.par ghost $workload 30us 10000 151000 10000 | tee ./diff_workloads/ghost_$workload.out
+		mv ./diff_workloads/ghost_$workload.out ./diff_workloads/ghost_$workload.out.done
+		echo "Done ghost_$workload.out"
+	fi
+
+	if ! test -f ./diff_workloads/cfs_$workload.out.done; then
+		sudo bazel-bin/experiments/scripts/shinjuku.par cfs $workload 30us 10000 151000 10000 | tee ./diff_workloads/cfs_$workload.out
+		mv ./diff_workloads/cfs_$workload.out ./diff_workloads/cfs_$workload.out.done
+		echo "Done cfs_$workload.out"
+	fi
+
+	if ! test -f ./diff_workloads/shenango_$workload.out.done; then
+		sudo bazel-bin/experiments/scripts/shenango.par ghost $workload 10000 151000 10000 | tee ./diff_workloads/shenango_$workload.out
+		mv ./diff_workloads/shenango_$workload.out ./diff_workloads/shenango_$workload.out.done
+		echo "Done shenango_$workload.out"
+	fi
+
+	if ! test -f ./diff_workloads/c-queue_$workload.out.done; then
+		sudo bazel-bin/experiments/scripts/centralized_queuing.par ghost $workload 10000 151000 10000 | tee ./diff_workloads/c-queue_$workload.out
+		mv ./diff_workloads/c-queue_$workload.out ./diff_workloads/c-queue_$workload.out.done
+		echo "Done c-queue_$workload.out"
+	fi
+
+	
+	
 done 
 
