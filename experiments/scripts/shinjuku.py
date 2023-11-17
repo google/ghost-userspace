@@ -61,7 +61,10 @@ def RunGhost(ratio: float = 0.005, time_slice: str='30us', tput_start: int = 100
   e.binaries.ghost = os.path.join(TMPFS_MOUNT, agent)
   print("Bin ghost path:",e.binaries.ghost)
   e.ghost = GetGhostOptions(_NUM_CPUS)
-  e.ghost.preemption_time_slice = time_slice
+  if agent == "agent_shinjuku":
+    e.ghost.preemption_time_slice = time_slice
+  else:
+    e.ghost.preemption_time_slice = 'inf'
 
   Run(e)
 
