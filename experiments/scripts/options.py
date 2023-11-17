@@ -108,7 +108,9 @@ class Paths:
   ghost: str = os.path.join(TMPFS_MOUNT, "agent_shinjuku")
 
   def __post_init__(self, agent: str = "agent_shinjuku"):
+    print("Before ",self.ghost)
     self.ghost = os.path.join(TMPFS_MOUNT, agent)
+    print("After",self.ghost)
 
 
 def GetDefaultRocksDBWorkerCpus():
