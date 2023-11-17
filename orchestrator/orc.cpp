@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
     // Create child process to run scheduler
     pid_t child_pid = delegate_to_child([] {
         // run FIFO scheduler
-        char* args[] = {"/usr/bin/sudo", "../bazel-bin/fifo_per_cpu_agent",
+        char* args[] = {"/usr/bin/sudo", "bazel-bin/fifo_per_cpu_agent",
                         "--ghost_cpus", "0-1", NULL};
         execv(args[0], args);
         perror("execv");
