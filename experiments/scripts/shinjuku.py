@@ -13,9 +13,10 @@ blocking). The preempted requests are added to the back of the FIFO. For CFS,
 requests are run to completion.
 """
 
+import os
 from typing import Sequence
 from absl import app
-from experiments.scripts.options import CheckSchedulers, GetBinaryPaths
+from experiments.scripts.options import TMPFS_MOUNT, CheckSchedulers, GetBinaryPaths
 from experiments.scripts.options import GetGhostOptions
 from experiments.scripts.options import GetRocksDBOptions
 from experiments.scripts.options import Scheduler
@@ -56,8 +57,9 @@ def RunGhost(ratio: float = 0.005, time_slice: str='30us', tput_start: int = 100
   e.rocksdb.range_query_ratio = ratio
   e.rocksdb.experiment_duration = exp_duration
   e.antagonist = None
-  print("Get Bin Path", agent)
-  e.binaries = GetBinaryPaths(agent)
+  e.binaries = GetBinaryPaths()
+  e.binaries.ghost = os.path.join(TMPFS_MOUNT, agent)
+  print("Bin ghost path:",e.binaries.ghost)
   e.ghost = GetGhostOptions(_NUM_CPUS)
   e.ghost.preemption_time_slice = time_slice
 

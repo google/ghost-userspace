@@ -107,11 +107,6 @@ class Paths:
   antagonist: str = os.path.join(TMPFS_MOUNT, "antagonist")
   ghost: str = os.path.join(TMPFS_MOUNT, "agent_shinjuku")
 
-  def __post_init__(self, agent: str = "agent_shinjuku"):
-    print("Before ",self.ghost)
-    self.ghost = os.path.join(TMPFS_MOUNT, agent)
-    print("After",self.ghost)
-
 
 def GetDefaultRocksDBWorkerCpus():
   """Returns the default list of worker CPUs for RocksDB.
@@ -266,9 +261,9 @@ class GhostOptions:
   preemption_time_slice: str = "inf"
 
 
-def GetBinaryPaths(agent: str = "agent_shinjuku"):
+def GetBinaryPaths():
   """Returns the paths to each of the binaries."""
-  return Paths(agent)
+  return Paths()
 
 
 def GetRocksDBOptions(scheduler: Scheduler, num_cpus: int, num_workers: int):
