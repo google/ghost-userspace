@@ -56,6 +56,7 @@ def RunGhost(ratio: float = 0.005, time_slice: str='30us', tput_start: int = 100
   e.rocksdb.range_query_ratio = ratio
   e.rocksdb.experiment_duration = exp_duration
   e.antagonist = None
+  print("Get Bin Path", agent)
   e.binaries = GetBinaryPaths(agent)
   e.ghost = GetGhostOptions(_NUM_CPUS)
   e.ghost.preemption_time_slice = time_slice
@@ -95,6 +96,7 @@ def main(argv: Sequence[str]):
   else:
       if scheduler != Scheduler.GHOST:
           raise ValueError(f'Unknown scheduler {scheduler}.')
+      print("Agent", agent , "exp_duration", exp_duration)
       RunGhost(ratio, time_slice,tput_start=tput_start, tput_end=tput_end, tput_step=tput_step,exp_duration=exp_duration, agent=agent)
 
 
