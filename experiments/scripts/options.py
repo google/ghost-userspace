@@ -107,7 +107,7 @@ class Paths:
   antagonist: str = os.path.join(TMPFS_MOUNT, "antagonist")
   ghost: str = os.path.join(TMPFS_MOUNT, "agent_shinjuku")
 
-  def __post_init__(self, agent: str):
+  def __post_init__(self, agent: str = "agent_shinjuku"):
     self.ghost = os.path.join(TMPFS_MOUNT, agent)
 
 
