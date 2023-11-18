@@ -338,9 +338,7 @@ GhostThread::GhostThread(KernelScheduler ksched, std::function<void()> work,
       CHECK_EQ(ret, 0);
     }
 
-    std::cout << "GhostThread starting workload. tid=" << tid_ << ", gtid=" << gtid_ << std::endl;
     std::move(w)();
-    std::cout << "GhostThread finishing workload. tid=" << tid_ << ", gtid=" << gtid_ << std::endl;
   });
   started_.WaitForNotification();
 }
