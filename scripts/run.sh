@@ -30,6 +30,8 @@ cc_binary(
     deps = [
         \":base\",
         \":ghost\",
+        \":shared\",
+        \"@com_google_absl//absl/flags:parse\",
     ],
 )" >> BUILD
 
