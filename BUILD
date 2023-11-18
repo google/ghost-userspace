@@ -1310,3 +1310,26 @@ cc_test(
         "@com_google_googletest//:gtest",
     ],
 )
+
+cc_binary(
+    name = "orca_agent",
+    srcs = [
+        "schedulers/orca/agent.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":agent",
+        ":fifo_per_cpu_scheduler",
+        ":cfs_scheduler",
+        "@com_google_absl//absl/debugging:symbolize",
+        "@com_google_absl//absl/flags:parse",
+        ":base",
+        ":topology",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+    ],
+)

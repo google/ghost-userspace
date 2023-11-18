@@ -214,7 +214,7 @@ void Orchestrator::HandleRange(Request& request, std::string& response,
 void Orchestrator::PrintResultsHelper(
     const std::string& results_name, absl::Duration experiment_duration,
     const std::vector<Request>& requests) const {
-  std::cout << results_name << ": " << requests.size() <<std::endl;
+  std::cout << results_name << ":" << std::endl;
   latency::Print(requests, experiment_duration, options_.print_options);
 }
 
@@ -237,7 +237,7 @@ bool Orchestrator::ShouldDiscard(const Request& request) const {
 }
 
 void Orchestrator::PrintResults(absl::Duration experiment_duration) const {
-  std::cout << "Stats: " << std::endl;
+  std::cout << "Stats:" << std::endl;
   // We discard some of the results, so subtract this discard period from the
   // experiment duration so that the correct throughput is calculated.
   absl::Duration tracked_duration =
