@@ -1,3 +1,4 @@
+#include <sched.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -171,7 +172,7 @@ std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
             }
         });
         update_sched_item(prio_table, 0, kWcRepeatable, SCHED_ITEM_RUNNABLE,
-                          t.gtid(), absl::Milliseconds(100));
+                          thread->gtid(), absl::Milliseconds(100));
         worker_threads.push_back(std::move(thread));
     }
 
