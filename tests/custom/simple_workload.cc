@@ -2,12 +2,14 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <thread>
 #include <vector>
 
@@ -22,7 +24,7 @@ using ghost::GhostThread;
 // Stopwatch answers queries "how much time has elapsed since the stopwatch
 // started?" The stopwatch begins upon construction.
 class Stopwatch {
-  public:
+public:
     Stopwatch() : start(steady_clock::now()) {}
 
     // Get elapsed time in seconds.
@@ -32,7 +34,7 @@ class Stopwatch {
         return diff.count();
     }
 
-  private:
+private:
     steady_clock::time_point start;
 };
 
@@ -56,54 +58,85 @@ double percentile(std::vector<double> &v, double n) {
     return (1 - w) * v[a] + w * v[b];
 }
 
-struct TaskStats {
-    double task_runtime;   // time it takes to run the task
-    double actual_runtime; // time it actually took for the task to complete
+enum JobType { Short, Long };
+struct Job {
+    JobType type;
+    steady_clock::time_point submitted;
+    steady_clock::time_point finished;
 };
 
-std::vector<TaskStats>
-run_experiment(GhostThread::KernelScheduler ks_mode, int reqs_per_sec,
-               int runtime_secs,
-               std::function<double()> workload_distribution) {
-    int total_reqs = reqs_per_sec * runtime_secs;
-    std::vector<std::unique_ptr<Stopwatch>> req_timers(total_reqs);
-    std::vector<std::unique_ptr<GhostThread>> threads(total_reqs);
-    std::vector<TaskStats> stats(total_reqs);
-
-    Stopwatch exp_timer;
-
+std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
+                                int reqs_per_sec, int runtime_secs,
+                                int num_workers, double proportion_long_jobs) {
     std::cout << "Spawning worker threads..." << std::endl;
 
-    for (int i = 0; i < total_reqs; ++i) {
-        double scheduled_for = (double)i / total_reqs * runtime_secs;
-        if (exp_timer.elapsed() >= scheduled_for) {
-            req_timers[i] = std::make_unique<Stopwatch>();
-            threads[i] = std::make_unique<GhostThread>(
-                ks_mode,
-                [&req_timers, &threads, &stats, &workload_distribution, i]() {
-                    double runtime = workload_distribution();
-                    while (req_timers[i]->elapsed() < runtime) {
+    int num_jobs = reqs_per_sec * runtime_secs;
+    std::vector<Job> jobs(num_jobs);
+    std::atomic<bool> isdead(false);
+    std::queue<Job *> work_q;
+    std::mutex work_q_m;
+
+    // Spawn worker threads
+    std::vector<std::unique_ptr<GhostThread>> worker_threads;
+    worker_threads.reserve(num_workers);
+    for (int i = 0; i < num_workers; ++i) {
+        worker_threads.emplace_back(
+            std::make_unique<GhostThread>(ks_mode, [&isdead] {
+                while (!isdead) {
+                    work_q_m.lock();
+                    auto job = work_q.front();
+                    work_q.pop();
+                    work_q_m.unlock();
+
+                    auto start = steady_clock::now();
+                    if (job.type == JobType::Short) {
+                        while (std::chrono::duration<double>(
+                                   steady_clock::now() - start)
+                                   .count() < 1e-6) {
+                        }
+                    } else if (job.type == JobType::Long) {
+                        while (std::chrono::duration<double>(
+                                   steady_clock::now() - start)
+                                   .count() < 1e-3) {
+                        }
                     }
-                    stats[i] = {runtime, req_timers[i]->elapsed()};
-                });
-        } else {
-            --i;
+                }
+            }));
+    }
+
+    // Send requests into work queue
+    steady_clock::time_point t1 = steady_clock::now();
+    for (int i = 0; i < num_jobs; ++i) {
+        work_q_m.lock();
+        work_q.push(&jobs[i]);
+        work_q_m.unlock();
+        double next_scheduled_for = (double)(i + 1) / num_jobs * runtime_secs;
+        std::this_thread::sleep_until(
+            t1 + std::chrono::duration<double>(next_scheduled_for));
+    }
+
+    // Shutdown workers
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::lock_guard(work_q_m);
+        if (work_q.empty()) {
+            isdead = true;
+            break;
         }
     }
-
-    for (const auto &t : threads) {
+    for (const auto &t : worker_threads) {
         t->Join();
     }
+    std::cout << "Finished running worker threads." << std::endl;
 
-    std::cout << "Finished running " << total_reqs << " worker threads."
-              << std::endl;
-    return stats;
+    return jobs;
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 4) {
+    if (argc != 5) {
         std::cout << "Usage: " << argv[0]
-                  << " ghost|cfs reqs_per_sec runtime_secs" << std::endl;
+                  << " ghost|cfs reqs_per_sec runtime_secs num_workers"
+                  << std::endl;
         return 0;
     }
     GhostThread::KernelScheduler ks_mode;
@@ -117,25 +150,29 @@ int main(int argc, char *argv[]) {
     }
     int reqs_per_sec = std::atoi(argv[2]);
     int runtime_secs = std::atoi(argv[3]);
+    int num_workers = std::atoi(argv[4]);
 
-    auto stats = run_experiment(ks_mode, reqs_per_sec, runtime_secs, [] {
-        if (rand() % 1000 < 25) {
-            return 0.001;
-        } else {
-            return 0.000001;
-        }
-    });
+    auto jobs =
+        run_experiment(ks_mode, reqs_per_sec, runtime_secs, num_workers, [] {
+            if (rand() % 1000 < 25) {
+                return 0.001;
+            } else {
+                return 0.000001;
+            }
+        });
 
     std::vector<double> short_runtimes;
     std::vector<double> long_runtimes;
 
-    for (const auto &stat : stats) {
-        if (stat.task_runtime < 0.0001) {
-            // convert to us
-            short_runtimes.push_back(stat.actual_runtime * 1e6);
-        } else {
-            // convert to us
-            long_runtimes.push_back(stat.actual_runtime * 1e6);
+    for (const auto &job : jobs) {
+        if (job.type == JobType::Short) {
+            short_runtimes.push_back(
+                std::chrono::duration<double>(job.finished - job.submitted) *
+                1e6);
+        } else if (job.type == JobType::Long) {
+            long_runtimes.push_back(
+                std::chrono::duration<double>(job.finished - job.submitted) *
+                1e6);
         }
     }
 
