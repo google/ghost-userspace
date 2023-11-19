@@ -82,6 +82,8 @@ run_experiment(GhostThread::KernelScheduler ks_mode, int reqs_per_sec,
                     }
                     stats[i] = {runtime, req_timers[i]->elapsed()};
                 });
+        } else {
+            --i;
         }
     }
 
