@@ -163,11 +163,13 @@ int main(int argc, char *argv[]) {
     for (const auto &job : jobs) {
         if (job.type == JobType::Short) {
             short_runtimes.push_back(
-                std::chrono::duration<double>(job.finished - job.submitted) *
+                std::chrono::duration<double>(job.finished - job.submitted)
+                    .count() *
                 1e6);
         } else if (job.type == JobType::Long) {
             long_runtimes.push_back(
-                std::chrono::duration<double>(job.finished - job.submitted) *
+                std::chrono::duration<double>(job.finished - job.submitted)
+                    .count() *
                 1e6);
         }
     }
