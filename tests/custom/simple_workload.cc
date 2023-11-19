@@ -151,24 +151,8 @@ int main(int argc, char *argv[]) {
     printf("0th percentile: %.3f\n", percentile(long_runtimes, 0));
     printf("25th percentile: %.3f\n", percentile(long_runtimes, 0.25));
     printf("50th percentile: %.3f\n", percentile(long_runtimes, 0.5));
-    printf("75th percentdouble percentile(std::vector<double> &v, double n) {
-    sort(v.begin(), v.end());
-    int sz = (int)v.size();
-    double idx = n * (sz - 1);
-    int a = static_cast<int>(idx);
-    int b = a + 1;
-
-    std::cout 
-
-    if (b >= sz) {
-        return v[a];
-    }
-
-    double w = idx - a;
-    return (1 - w) * v[a] + w * v[b];
-}
-ile : % .3f\n ", percentile(long_runtimes, 0.75));
-      printf("90th percentile: %.3f\n", percentile(long_runtimes, 0.9));
-printf("99th percentile: %.3f\n", percentile(long_runtimes, 0.99));
-printf("100th percentile: %.3f\n", percentile(long_runtimes, 1));
+    printf("75th percentile: %.3f\n", percentile(long_runtimes, 0.75));
+    printf("90th percentile: %.3f\n", percentile(long_runtimes, 0.9));
+    printf("99th percentile: %.3f\n", percentile(long_runtimes, 0.99));
+    printf("100th percentile: %.3f\n", percentile(long_runtimes, 1));
 }
