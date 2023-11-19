@@ -100,7 +100,7 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
                                    .count() < 1e-3) {
                         }
                     }
-                    job->finsihed = steady_clock::now();
+                    job->finished = steady_clock::now();
                 }
             }));
     }
