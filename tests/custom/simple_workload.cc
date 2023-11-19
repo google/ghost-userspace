@@ -113,6 +113,13 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
     // Send requests into work queue
     steady_clock::time_point t1 = steady_clock::now();
     for (int i = 0; i < num_jobs; ++i) {
+        if (rand() % 10000 < (int)(proportion_long_jobs * 10000)) {
+            job.type = JobType::Long;
+        } else {
+            job.type = JobType::Short;
+        }
+        job.submitted = steady_clock::now();
+
         work_q_m.lock();
         work_q.push(&jobs[i]);
         work_q_m.unlock();
