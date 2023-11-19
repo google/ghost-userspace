@@ -22,7 +22,10 @@
 using std::chrono::steady_clock;
 
 using ghost::GhostThread;
+using ghost::Gtid;
 using ghost::PrioTable;
+using ghost::sched_item;
+using ghost::work_class;
 
 /*
  * PrioTable code adapted from simple_edf.cc
