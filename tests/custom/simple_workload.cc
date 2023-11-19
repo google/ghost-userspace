@@ -147,35 +147,35 @@ std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
     std::vector<std::unique_ptr<GhostThread>> worker_threads;
     worker_threads.reserve(num_workers);
     for (int i = 0; i < num_workers; ++i) {
-        auto thread = std::make_unique<GhostThread>(ks_mode, [&isdead, &work_q,
-                                                              &work_q_m] {
-            while (!isdead) {
-                Job *job;
-                {
-                    std::lock_guard lg(work_q_m);
-                    if (work_q.empty()) {
-                        continue;
+        auto thread = std::make_unique<GhostThread>(
+            ks_mode, [i, &isdead, &work_q, &work_q_m] {
+                while (!isdead) {
+                    Job *job;
+                    {
+                        std::lock_guard lg(work_q_m);
+                        if (work_q.empty()) {
+                            continue;
+                        }
+                        job = work_q.front();
+                        work_q.pop();
                     }
-                    job = work_q.front();
-                    work_q.pop();
-                }
 
-                std::cout << i << std::endl;
-                auto start = steady_clock::now();
-                if (job->type == JobType::Short) {
-                    while (std::chrono::duration<double>(steady_clock::now() -
-                                                         start)
-                               .count() < 1e-6) {
+                    std::cout << i << std::endl;
+                    auto start = steady_clock::now();
+                    if (job->type == JobType::Short) {
+                        while (std::chrono::duration<double>(
+                                   steady_clock::now() - start)
+                                   .count() < 1e-6) {
+                        }
+                    } else if (job->type == JobType::Long) {
+                        while (std::chrono::duration<double>(
+                                   steady_clock::now() - start)
+                                   .count() < 1e-3) {
+                        }
                     }
-                } else if (job->type == JobType::Long) {
-                    while (std::chrono::duration<double>(steady_clock::now() -
-                                                         start)
-                               .count() < 1e-3) {
-                    }
+                    job->finished = steady_clock::now();
                 }
-                job->finished = steady_clock::now();
-            }
-        });
+            });
         update_sched_item(prio_table, 0, kWcOneShot, SCHED_ITEM_RUNNABLE,
                           thread->gtid(), absl::Milliseconds(100));
         worker_threads.push_back(std::move(thread));
