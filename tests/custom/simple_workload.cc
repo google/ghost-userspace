@@ -89,17 +89,18 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
                     work_q_m.unlock();
 
                     auto start = steady_clock::now();
-                    if (job.type == JobType::Short) {
+                    if (job->type == JobType::Short) {
                         while (std::chrono::duration<double>(
                                    steady_clock::now() - start)
                                    .count() < 1e-6) {
                         }
-                    } else if (job.type == JobType::Long) {
+                    } else if (job->type == JobType::Long) {
                         while (std::chrono::duration<double>(
                                    steady_clock::now() - start)
                                    .count() < 1e-3) {
                         }
                     }
+                    job->finsihed = steady_clock::now();
                 }
             }));
     }
