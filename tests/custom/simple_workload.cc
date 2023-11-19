@@ -131,9 +131,11 @@ int main(int argc, char *argv[]) {
 
     for (const auto &stat : stats) {
         if (stat.task_runtime < 0.0001) {
-            short_runtimes.push_back(stat.actual_runtime);
+            // convert to us
+            short_runtimes.push_back(stat.actual_runtime * 1e6);
         } else {
-            long_runtimes.push_back(stat.actual_runtime);
+            // convert to us
+            long_runtimes.push_back(stat.actual_runtime * 1e6);
         }
     }
 
