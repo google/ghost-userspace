@@ -160,6 +160,7 @@ std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
                     work_q.pop();
                 }
 
+                std::cout << i << std::endl;
                 auto start = steady_clock::now();
                 if (job->type == JobType::Short) {
                     while (std::chrono::duration<double>(steady_clock::now() -
@@ -175,7 +176,7 @@ std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
                 job->finished = steady_clock::now();
             }
         });
-        update_sched_item(prio_table, 0, kWcRepeatable, SCHED_ITEM_RUNNABLE,
+        update_sched_item(prio_table, 0, kWcOneShot, SCHED_ITEM_RUNNABLE,
                           thread->gtid(), absl::Milliseconds(100));
         worker_threads.push_back(std::move(thread));
     }
