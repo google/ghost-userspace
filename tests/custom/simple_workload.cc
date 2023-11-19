@@ -74,12 +74,13 @@ run_experiment(GhostThread::KernelScheduler ks_mode, int reqs_per_sec,
         double scheduled_for = (double)i / total_reqs * runtime_secs;
         if (exp_timer.elapsed() >= scheduled_for) {
             req_timers[i] = std::make_unique<Stopwatch>();
-            threads[i] = std::make_unique<GhostThread>(ks_mode, [&]() {
-                double runtime = workload_distribution();
-                while (req_timers[i]->elapsed() < runtime) {
-                }
-                stats[i] = {runtime, req_timers[i]->elapsed()};
-            });
+            threads[i] = std::make_unique<GhostThread>(
+                ks_mode, [&req_timers, &threads, &stats, i]() {
+                    double runtime = workload_distribution();
+                    while (req_timers[i]->elapsed() < runtime) {
+                    }
+                    stats[i] = {runtime, req_timers[i]->elapsed()};
+                });
         }
     }
 
@@ -110,14 +111,13 @@ int main(int argc, char *argv[]) {
     int reqs_per_sec = std::atoi(argv[2]);
     int runtime_secs = std::atoi(argv[3]);
 
-    auto stats =
-        run_experiment(ks_mode, reqs_per_sec, runtime_secs, [] -> double {
-            if (rand() % 1000 < 25) {
-                return 0.001;
-            } else {
-                return 0.000001;
-            }
-        });
+    auto stats = run_experiment(ks_mode, reqs_per_sec, runtime_secs, [] {
+        if (rand() % 1000 < 25) {
+            return 0.001;
+        } else {
+            return 0.000001;
+        }
+    });
 
     std::vector<double> short_runtimes;
     std::vector<double> long_runtimes;
@@ -130,7 +130,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("Finished running.\n");
+    printf("Finished running. %d short tasks, %d long tasks ran.\n",
+           (int)short_runtimes.size(), (int)long_runtimes.size());
     printf("== Short task stats ==\n");
     printf("0th percentile: %.3f\n", percentile(short_runtimes, 0));
     printf("25th percentile: %.3f\n", percentile(short_runtimes, 0.25));
