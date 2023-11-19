@@ -133,9 +133,10 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 5) {
+    if (argc != 6) {
         std::cout << "Usage: " << argv[0]
-                  << " ghost|cfs reqs_per_sec runtime_secs num_workers"
+                  << " ghost|cfs reqs_per_sec runtime_secs num_workers "
+                     "proportion_long_jobs"
                   << std::endl;
         return 0;
     }
@@ -151,15 +152,10 @@ int main(int argc, char *argv[]) {
     int reqs_per_sec = std::atoi(argv[2]);
     int runtime_secs = std::atoi(argv[3]);
     int num_workers = std::atoi(argv[4]);
+    double proportion_long_jobs = std::atof(argv[5]);
 
-    auto jobs =
-        run_experiment(ks_mode, reqs_per_sec, runtime_secs, num_workers, [] {
-            if (rand() % 1000 < 25) {
-                return 0.001;
-            } else {
-                return 0.000001;
-            }
-        });
+    auto jobs = run_experiment(ks_mode, reqs_per_sec, runtime_secs, num_workers,
+                               proportion_long_jobs);
 
     std::vector<double> short_runtimes;
     std::vector<double> long_runtimes;
