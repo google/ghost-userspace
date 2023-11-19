@@ -75,7 +75,8 @@ run_experiment(GhostThread::KernelScheduler ks_mode, int reqs_per_sec,
         if (exp_timer.elapsed() >= scheduled_for) {
             req_timers[i] = std::make_unique<Stopwatch>();
             threads[i] = std::make_unique<GhostThread>(
-                ks_mode, [&req_timers, &threads, &stats, i]() {
+                ks_mode,
+                [&req_timers, &threads, &stats, &workload_distribution, i]() {
                     double runtime = workload_distribution();
                     while (req_timers[i]->elapsed() < runtime) {
                     }
