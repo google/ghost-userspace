@@ -80,8 +80,8 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
     std::vector<std::unique_ptr<GhostThread>> worker_threads;
     worker_threads.reserve(num_workers);
     for (int i = 0; i < num_workers; ++i) {
-        worker_threads.emplace_back(
-            std::make_unique<GhostThread>(ks_mode, [&isdead] {
+        worker_threads.emplace_back(std::make_unique<GhostThread>(
+            ks_mode, [&isdead, &work_q, &work_q_m] {
                 while (!isdead) {
                     work_q_m.lock();
                     auto job = work_q.front();
