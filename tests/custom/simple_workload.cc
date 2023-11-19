@@ -31,7 +31,7 @@ using ghost::PrioTable;
 enum { kWcIdle, kWcOneShot, kWcRepeatable, kWcNum };
 
 bool sched_item_runnable(const std::unique_ptr<PrioTable> &table_, int sidx) {
-    struct sched_item *src = table_->sched_item(sidx);
+    sched_item *src = table_->sched_item(sidx);
     uint32_t begin, flags;
     bool success;
 
@@ -45,7 +45,7 @@ bool sched_item_runnable(const std::unique_ptr<PrioTable> &table_, int sidx) {
 }
 
 void mark_sched_item_idle(const std::unique_ptr<PrioTable> &table_, int sidx) {
-    struct sched_item *si = table_->sched_item(sidx);
+    sched_item *si = table_->sched_item(sidx);
 
     uint32_t seq = si->seqcount.write_begin();
     si->flags &= ~SCHED_ITEM_RUNNABLE;
@@ -55,7 +55,7 @@ void mark_sched_item_idle(const std::unique_ptr<PrioTable> &table_, int sidx) {
 
 void mark_sched_item_runnable(const std::unique_ptr<PrioTable> &table_,
                               int sidx) {
-    struct sched_item *si = table_->sched_item(sidx);
+    sched_item *si = table_->sched_item(sidx);
 
     uint32_t seq = si->seqcount.write_begin();
     si->flags |= SCHED_ITEM_RUNNABLE;
@@ -66,7 +66,7 @@ void mark_sched_item_runnable(const std::unique_ptr<PrioTable> &table_,
 void update_sched_item(const std::unique_ptr<PrioTable> &table_, uint32_t sidx,
                        uint32_t wcid, uint32_t flags, const Gtid &gtid,
                        absl::Duration d) {
-    struct sched_item *si;
+    sched_item *si;
 
     si = table_->sched_item(sidx);
 
@@ -81,7 +81,7 @@ void update_sched_item(const std::unique_ptr<PrioTable> &table_, uint32_t sidx,
 }
 
 void setup_work_classes(const std::unique_ptr<PrioTable> &table_) {
-    struct work_class *wc;
+    work_class *wc;
 
     wc = table_->work_class(kWcIdle);
     wc->id = kWcIdle;
