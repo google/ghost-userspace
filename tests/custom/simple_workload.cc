@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -12,29 +13,32 @@
 
 #include "lib/base.h"
 #include "lib/ghost.h"
+#include "shared/prio_table.h"
 
 using std::chrono::steady_clock;
 
-constexpr int NUM_SHORT_TASKS = 10;
-constexpr int NUM_LONG_TASKS = 1;
-steady_clock::time_point st_starts[NUM_SHORT_TASKS];
-steady_clock::time_point lt_starts[NUM_LONG_TASKS];
-steady_clock::time_point st_ends[NUM_SHORT_TASKS];
-steady_clock::time_point lt_ends[NUM_LONG_TASKS];
+using ghost::GhostThread;
 
-template <typename T>
-std::function<void()> make_work(steady_clock::time_point* tp, T duration) {
-    return [tp, duration] {
-        auto t1 = steady_clock::now();
-        while (steady_clock::now() < t1 + duration) {
-        }
-        *tp = steady_clock::now();
-    };
-}
+// Stopwatch answers queries "how much time has elapsed since the stopwatch
+// started?" The stopwatch begins upon construction.
+class Stopwatch {
+  public:
+    Stopwatch() : start(steady_clock::now()) {}
+
+    // Get elapsed time in seconds.
+    double elapsed() {
+        auto now = steady_clock::now();
+        std::chrono::duration<double> diff = now - start;
+        return diff.count();
+    }
+
+  private:
+    steady_clock::time_point start;
+};
 
 // return percentile of experimentTimes
-// assumes array is sorted
-double percentile(const std::vector<double>& v, double n) {
+double percentile(std::vector<double> &v, double n) {
+    sort(v.begin(), v.end());
     int sz = (int)v.size();
     double idx = n * (sz - 1);
     int a = static_cast<int>(idx);
@@ -48,68 +52,99 @@ double percentile(const std::vector<double>& v, double n) {
     return (1 - w) * v[a] + w * v[b];
 }
 
-int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        std::cout << "Usage: " << argv[0] << " ghost|cfs" << std::endl;
+struct TaskStats {
+    double task_runtime;   // time it takes to run the task
+    double actual_runtime; // time it actually took for the task to complete
+};
+
+std::vector<TaskStats>
+run_experiment(GhostThread::KernelScheduler ks_mode, int reqs_per_sec,
+               int runtime_secs,
+               std::function<double()> workload_distribution) {
+    int total_reqs = reqs_per_sec * runtime_secs;
+    std::vector<std::unique_ptr<Stopwatch>> req_timers(total_reqs);
+    std::vector<std::unique_ptr<GhostThread>> threads(total_reqs);
+    std::vector<TaskStats> stats(total_reqs);
+
+    Stopwatch exp_timer;
+
+    std::cout << "Spawning worker threads..." << std::endl;
+
+    for (int i = 0; i < total_reqs; ++i) {
+        double scheduled_for = (double)i / total_reqs * runtime_secs;
+        if (exp_timer.elapsed() >= scheduled_for) {
+            req_timers[i] = std::make_unique<Stopwatch>();
+            threads[i] = std::make_unique<GhostThread>(ks_mode, [&]() {
+                double runtime = workload_distribution();
+                while (req_timers[i]->elapsed() < runtime) {
+                }
+                stats[i] = {runtime, req_timers[i]->elapsed()};
+            });
+        }
+    }
+
+    for (const auto &t : threads) {
+        t->Join();
+    }
+
+    std::cout << "Finished running " << total_reqs << " worker threads."
+              << std::endl;
+    return stats;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc != 4) {
+        std::cout << "Usage: " << argv[0]
+                  << " ghost|cfs reqs_per_sec runtime_secs" << std::endl;
         return 0;
     }
-    ghost::GhostThread::KernelScheduler ks_mode;
-    if (argv[1][0] == 'g')
-        ks_mode = ghost::GhostThread::KernelScheduler::kGhost;
-    else if (argv[1][0] == 'c')
-        ks_mode = ghost::GhostThread::KernelScheduler::kCfs;
-    else {
+    GhostThread::KernelScheduler ks_mode;
+    if (argv[1][0] == 'g') {
+        ks_mode = GhostThread::KernelScheduler::kGhost;
+    } else if (argv[1][0] == 'c') {
+        ks_mode = GhostThread::KernelScheduler::kCfs;
+    } else {
         std::cout << "invalid scheduler option" << std::endl;
         return 0;
     }
+    int reqs_per_sec = std::atoi(argv[2]);
+    int runtime_secs = std::atoi(argv[3]);
 
-    std::mutex m;
-    std::vector<std::unique_ptr<ghost::GhostThread>> threads;
+    auto stats =
+        run_experiment(ks_mode, reqs_per_sec, runtime_secs, [] -> double {
+            if (rand() % 1000 < 25) {
+                return 0.001;
+            } else {
+                return 0.000001;
+            }
+        });
 
-    for (int i = 0; i < NUM_LONG_TASKS; ++i) {
-        lt_starts[i] = steady_clock::now();
-        threads.push_back(std::make_unique<ghost::GhostThread>(
-            ks_mode, make_work(&lt_ends[i], std::chrono::milliseconds(10))));
+    std::vector<double> short_runtimes;
+    std::vector<double> long_runtimes;
+
+    for (const auto &stat : stats) {
+        if (stat.task_runtime < 0.0001) {
+            short_runtimes.push_back(stat.actual_runtime);
+        } else {
+            long_runtimes.push_back(stat.actual_runtime);
+        }
     }
-    std::this_thread::sleep_for(std::chrono::nanoseconds(1));
-    for (int i = 0; i < NUM_SHORT_TASKS; ++i) {
-        st_starts[i] = steady_clock::now();
-        threads.push_back(std::make_unique<ghost::GhostThread>(
-            ks_mode, make_work(&st_ends[i], std::chrono::microseconds(5))));
-    }
-
-    for (const auto& t : threads) t->Join();
-
-    std::vector<double> st_runtimes(NUM_SHORT_TASKS);
-    std::vector<double> lt_runtimes(NUM_LONG_TASKS);
-
-    for (int i = 0; i < NUM_SHORT_TASKS; ++i) {
-        std::chrono::duration<double> diff = st_ends[i] - st_starts[i];
-        st_runtimes[i] = diff.count() * 1000000;  // measure in us
-    }
-    for (int i = 0; i < NUM_LONG_TASKS; ++i) {
-        std::chrono::duration<double> diff = lt_ends[i] - lt_starts[i];
-        lt_runtimes[i] = diff.count() * 1000000;  // measure in us
-    }
-
-    std::sort(st_runtimes.begin(), st_runtimes.end());
-    std::sort(lt_runtimes.begin(), lt_runtimes.end());
 
     printf("Finished running.\n");
     printf("== Short task stats ==\n");
-    printf("0th percentile: %.3f\n", percentile(st_runtimes, 0));
-    printf("25th percentile: %.3f\n", percentile(st_runtimes, 0.25));
-    printf("50th percentile: %.3f\n", percentile(st_runtimes, 0.5));
-    printf("75th percentile: %.3f\n", percentile(st_runtimes, 0.75));
-    printf("90th percentile: %.3f\n", percentile(st_runtimes, 0.9));
-    printf("99th percentile: %.3f\n", percentile(st_runtimes, 0.99));
-    printf("100th percentile: %.3f\n", percentile(st_runtimes, 1));
+    printf("0th percentile: %.3f\n", percentile(short_runtimes, 0));
+    printf("25th percentile: %.3f\n", percentile(short_runtimes, 0.25));
+    printf("50th percentile: %.3f\n", percentile(short_runtimes, 0.5));
+    printf("75th percentile: %.3f\n", percentile(short_runtimes, 0.75));
+    printf("90th percentile: %.3f\n", percentile(short_runtimes, 0.9));
+    printf("99th percentile: %.3f\n", percentile(short_runtimes, 0.99));
+    printf("100th percentile: %.3f\n", percentile(short_runtimes, 1));
     printf("== Long task stats ==\n");
-    printf("0th percentile: %.3f\n", percentile(lt_runtimes, 0));
-    printf("25th percentile: %.3f\n", percentile(lt_runtimes, 0.25));
-    printf("50th percentile: %.3f\n", percentile(lt_runtimes, 0.5));
-    printf("75th percentile: %.3f\n", percentile(lt_runtimes, 0.75));
-    printf("90th percentile: %.3f\n", percentile(lt_runtimes, 0.9));
-    printf("99th percentile: %.3f\n", percentile(lt_runtimes, 0.99));
-    printf("100th percentile: %.3f\n", percentile(lt_runtimes, 1));
+    printf("0th percentile: %.3f\n", percentile(long_runtimes, 0));
+    printf("25th percentile: %.3f\n", percentile(long_runtimes, 0.25));
+    printf("50th percentile: %.3f\n", percentile(long_runtimes, 0.5));
+    printf("75th percentile: %.3f\n", percentile(long_runtimes, 0.75));
+    printf("90th percentile: %.3f\n", percentile(long_runtimes, 0.9));
+    printf("99th percentile: %.3f\n", percentile(long_runtimes, 0.99));
+    printf("100th percentile: %.3f\n", percentile(long_runtimes, 1));
 }
