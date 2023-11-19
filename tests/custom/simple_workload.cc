@@ -83,10 +83,15 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
         worker_threads.emplace_back(std::make_unique<GhostThread>(
             ks_mode, [&isdead, &work_q, &work_q_m] {
                 while (!isdead) {
-                    work_q_m.lock();
-                    auto job = work_q.front();
-                    work_q.pop();
-                    work_q_m.unlock();
+                    Job *job;
+                    {
+                        std::lock_guard lg(work_q_m);
+                        if (work_q.empty()) {
+                            continue;
+                        }
+                        job = work_q.front();
+                        work_q.pop();
+                    }
 
                     auto start = steady_clock::now();
                     if (job->type == JobType::Short) {
