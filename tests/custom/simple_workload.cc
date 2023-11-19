@@ -118,7 +118,7 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
     // Shutdown workers
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        std::lock_guard(work_q_m);
+        std::lock_guard lg(work_q_m);
         if (work_q.empty()) {
             isdead = true;
             break;
