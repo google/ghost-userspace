@@ -154,6 +154,7 @@ std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
                     {
                         std::lock_guard lg(work_q_m);
                         if (work_q.empty()) {
+                            sched_yield();
                             continue;
                         }
                         job = work_q.front();
