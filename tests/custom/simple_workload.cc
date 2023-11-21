@@ -161,7 +161,6 @@ std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
                         work_q.pop();
                     }
 
-                    std::cout << i << std::endl;
                     auto start = steady_clock::now();
                     if (job->type == JobType::Short) {
                         while (std::chrono::duration<double>(
