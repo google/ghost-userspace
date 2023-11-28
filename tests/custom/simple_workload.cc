@@ -32,8 +32,6 @@ using ghost::work_class;
  * PrioTable code adapted from simple_edf.cc
  */
 
-enum { kWcIdle, kWcOneShot, kWcRepeatable, kWcNum };
-
 bool sched_item_runnable(const std::unique_ptr<PrioTable> &table_, int sidx) {
     sched_item *src = table_->sched_item(sidx);
     uint32_t begin, flags;
@@ -87,21 +85,10 @@ void update_sched_item(const std::unique_ptr<PrioTable> &table_, uint32_t sidx,
 void setup_work_classes(const std::unique_ptr<PrioTable> &table_) {
     work_class *wc;
 
-    wc = table_->work_class(kWcIdle);
-    wc->id = kWcIdle;
-    wc->flags = 0;
-    wc->exectime = 0;
-
-    wc = table_->work_class(kWcOneShot);
-    wc->id = kWcOneShot;
+    wc = table_->work_class(0);
+    wc->id = 0;
     wc->flags = WORK_CLASS_ONESHOT;
-    wc->exectime = absl::ToInt64Nanoseconds(absl::Milliseconds(10));
-
-    wc = table_->work_class(kWcRepeatable);
-    wc->id = kWcRepeatable;
-    wc->flags = WORK_CLASS_REPEATING;
-    wc->exectime = absl::ToInt64Nanoseconds(absl::Milliseconds(10));
-    wc->period = absl::ToInt64Nanoseconds(absl::Milliseconds(100));
+    wc->exectime = 100;
 }
 
 // return percentile of experimentTimes
@@ -154,7 +141,6 @@ std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
                     {
                         std::lock_guard lg(work_q_m);
                         if (work_q.empty()) {
-                            sched_yield();
                             continue;
                         }
                         job = work_q.front();
@@ -177,8 +163,8 @@ std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
                 }
             });
 
-        update_sched_item(prio_table, i, kWcOneShot, SCHED_ITEM_RUNNABLE,
-                          thread->gtid(), absl::Milliseconds(100));
+        update_sched_item(prio_table, i, 0, SCHED_ITEM_RUNNABLE, thread->gtid(),
+                          absl::Milliseconds(100));
         worker_threads.push_back(std::move(thread));
     }
 
@@ -273,6 +259,7 @@ int main(int argc, char *argv[]) {
     printf("75th percentile: %.3f\n", percentile(short_runtimes, 0.75));
     printf("90th percentile: %.3f\n", percentile(short_runtimes, 0.9));
     printf("99th percentile: %.3f\n", percentile(short_runtimes, 0.99));
+    printf("99.9th percentile: %.3f\n", percentile(short_runtimes, 0.999));
     printf("100th percentile: %.3f\n", percentile(short_runtimes, 1));
     printf("== Long task stats ==\n");
     printf("0th percentile: %.3f\n", percentile(long_runtimes, 0));
@@ -281,5 +268,6 @@ int main(int argc, char *argv[]) {
     printf("75th percentile: %.3f\n", percentile(long_runtimes, 0.75));
     printf("90th percentile: %.3f\n", percentile(long_runtimes, 0.9));
     printf("99th percentile: %.3f\n", percentile(long_runtimes, 0.99));
+    printf("99.9th percentile: %.3f\n", percentile(long_runtimes, 0.999));
     printf("100th percentile: %.3f\n", percentile(long_runtimes, 1));
 }
