@@ -1311,6 +1311,8 @@ cc_test(
     ],
 )
 
+# Orca agent.
+
 cc_binary(
     name = "orca_agent",
     srcs = [
@@ -1330,6 +1332,54 @@ cc_binary(
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+    ],
+)
+
+# Synthetic workload experiment.
+
+cc_binary(
+    name = "synthetic",
+    srcs = [
+        "experiments/synthetic/cfs_orchestrator.cc",
+        "experiments/synthetic/cfs_orchestrator.h",
+        "experiments/synthetic/ghost_orchestrator.cc",
+        "experiments/synthetic/ghost_orchestrator.h",
+        "experiments/synthetic/main.cc",
+    ],
+    copts = compiler_flags,
+    visibility = ["//experiments/scripts:__pkg__"],
+    deps = [
+        ":experiments_shared",
+        ":synthetic_lib",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+cc_library(
+    name = "synthetic_lib",
+    srcs = [
+        "experiments/synthetic/database.cc",
+        "experiments/synthetic/ingress.cc",
+        "experiments/synthetic/latency.cc",
+        "experiments/synthetic/orchestrator.cc",
+    ],
+    hdrs = [
+        "experiments/synthetic/clock.h",
+        "experiments/synthetic/database.h",
+        "experiments/synthetic/ingress.h",
+        "experiments/synthetic/latency.h",
+        "experiments/synthetic/orchestrator.h",
+        "experiments/synthetic/request.h",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":base",
+        ":experiments_shared",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:bit_gen_ref",
         "@com_google_absl//absl/time",
     ],
 )
