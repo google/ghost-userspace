@@ -1,10 +1,10 @@
 #include <signal.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include <cstring>
-#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <sstream>
@@ -80,6 +80,11 @@ void set_argbuf(char (&argbuf)[MaxStrSize][MaxNumArgs],
     }
 }
 
+bool file_exists(const char *filepath) {
+    struct stat buf;
+    return stat(filepath, &buf) == 0;
+}
+
 // Run a scheduling agent.
 // Returns the PID of the scheduler.
 pid_t run_scheduler(SchedulerConfig config) {
@@ -103,8 +108,8 @@ pid_t run_scheduler(SchedulerConfig config) {
     arglist.push_back("0-7");
 
     // Check if there is an enclave to attach to
-    if (std::filesystem::exists("/sys/fs/ghost/enclave_1")) {
-        if (std::filesystem::exists("/sys/fs/ghost/enclave_2")) {
+    if (file_exists("/sys/fs/ghost/enclave_1")) {
+        if (file_exists("/sys/fs/ghost/enclave_2")) {
             // We expect to make one enclave at most, and to keep reusing it for
             // each scheduler agent
             // If there is more than one enclave, something went wrong
@@ -125,7 +130,7 @@ pid_t run_scheduler(SchedulerConfig config) {
     set_argbuf(argbuf, arglist);
 
     static char *args[20];
-    memset(args, NULL, sizeof(args));
+    memset(args, 0, sizeof(args));
     for (size_t i = 0; i < arglist.size(); ++i) {
         args[i] = argbuf[i];
     }
