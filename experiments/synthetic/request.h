@@ -37,6 +37,14 @@ struct Request {
         return absl::Nanoseconds(handle_ns);
     }
 
+    // Returns true if this is a Get request. Returns false otherwise (i.e.,
+    // this is a Range query).
+    bool IsGet() const { return work.index() == 0; }
+
+    // Returns true if this is a Range query. Returns false otherwise (i.e.,
+    // this is a Get request).
+    bool IsRange() const { return work.index() == 1; }
+
     // Unique request identifier.
     uint64_t id;
 
