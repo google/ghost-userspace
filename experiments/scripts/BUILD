@@ -87,3 +87,16 @@ par_binary(
         requirement("absl-py"),
     ],
 )
+
+# Run synthetic workload experiment.
+par_binary(
+    name = "synthetic",
+    srcs = [
+        "synthetic.py",
+    ],
+    python_version = "PY3",
+    deps = [
+        ":experiments",
+        requirement("absl-py"),
+    ],
+)
