@@ -1361,14 +1361,12 @@ cc_binary(
 cc_library(
     name = "synthetic_lib",
     srcs = [
-        "experiments/synthetic/database.cc",
         "experiments/synthetic/ingress.cc",
         "experiments/synthetic/latency.cc",
         "experiments/synthetic/orchestrator.cc",
     ],
     hdrs = [
         "experiments/synthetic/clock.h",
-        "experiments/synthetic/database.h",
         "experiments/synthetic/ingress.h",
         "experiments/synthetic/latency.h",
         "experiments/synthetic/orchestrator.h",
