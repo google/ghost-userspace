@@ -227,7 +227,7 @@ int main(int argc, char *argv[]) {
 
     // Set up PrioTable
     auto prio_table = std::make_unique<PrioTable>(
-        51200, kWcNum, PrioTable::StreamCapacity::kStreamCapacity19);
+        51200, 1, PrioTable::StreamCapacity::kStreamCapacity19);
     setup_work_classes(prio_table);
 
     auto jobs = run_experiment(prio_table, ks_mode, reqs_per_sec, runtime_secs,
