@@ -76,7 +76,7 @@ void set_argbuf(char (&argbuf)[MaxNumArgs][MaxStrSize],
             perror("arg length too long");
             exit(1);
         }
-        strncpy(argbuf[i], s.c_str(), s.size());
+        strncpy(argbuf[i], s.c_str(), s.size() + 1);
     }
 }
 
