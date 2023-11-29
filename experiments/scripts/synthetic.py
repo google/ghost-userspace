@@ -52,13 +52,13 @@ def RunCfs(
 
 
 def RunGhost(
-    ratio: float = 0.005,
-    time_slice: str = "30us",
-    tput_start: int = 10000,
-    tput_end: int = 151000,
-    tput_step: int = 10000,
-    agent: str = "agent_shinjuku",
-    exp_duration: str = "30s",
+    ratio: float,  # = 0.005,
+    time_slice: str,  # = "30us",
+    tput_start: int,  # = 10000,
+    tput_end: int,  # = 151000,
+    tput_step: int,  # = 10000,
+    agent: str,  # = "agent_shinjuku",
+    exp_duration: str,  # = "30s",
 ):
     """Runs the ghOSt experiment."""
     e: Experiment = Experiment()
