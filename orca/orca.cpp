@@ -3,8 +3,13 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cstring>
+#include <filesystem>
 #include <functional>
 #include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 pid_t delegate_to_child(std::function<void()> work) {
     pid_t child_pid = fork();
@@ -29,8 +34,7 @@ pid_t delegate_to_child(std::function<void()> work) {
 }
 
 void terminate_child(pid_t child_pid) {
-    // send SIGINT to allow for graceful cleanup
-    if (kill(child_pid, SIGINT) == -1) {
+    if (kill(child_pid, SIGTERM) == -1) {
         perror("kill");
         exit(1);
     }
@@ -49,23 +53,113 @@ void terminate_child(pid_t child_pid) {
     }
 }
 
-int main(int argc, char* argv[]) {
-    // Create child process to run scheduler
-    pid_t child_pid = delegate_to_child([] {
-        // run FIFO scheduler
-        char* args[] = {"/usr/bin/sudo", "bazel-bin/fifo_per_cpu_agent",
-                        "--ghost_cpus", "0-1", NULL};
+struct SchedulerConfig {
+    enum class SchedulerType { dFCFS, cFCFS };
+
+    SchedulerType type;
+    int preemption_interval_us = -1; // ignored for dFCFS
+};
+
+// Set args to the arguments pointed to by arglist.
+// This function provides a more friendly C++ wrapper for setting dynamic execv
+// arguments.
+template <size_t MaxStrSize, size_t MaxNumArgs>
+void set_argbuf(char (&argbuf)[MaxStrSize][MaxNumArgs],
+                const std::vector<std::string> &arglist) {
+    if (arglist.size() > MaxNumArgs - 1) {
+        perror("too many args in arglist");
+        exit(1);
+    }
+    for (size_t i = 0; i < arglist.size(); ++i) {
+        const auto &s = arglist[i];
+        if (s.size() > MaxStrSize - 1) {
+            perror("arg length too long");
+            exit(1);
+        }
+        strncpy(argbuf[i], s.c_str(), s.size());
+    }
+}
+
+// Run a scheduling agent.
+// Returns the PID of the scheduler.
+pid_t run_scheduler(SchedulerConfig config) {
+    // statically allocate memory for execv args
+    // this is kinda sketchy but it should work, since only one scheduling
+    // agent runs at a time
+    static char argbuf[100][20];
+
+    std::vector<std::string> arglist = {"/usr/bin/sudo"};
+
+    if (config.type == SchedulerConfig::SchedulerType::dFCFS) {
+        arglist.push_back("bazel-bin/fifo_per_cpu_agent");
+    } else if (config.type == SchedulerConfig::SchedulerType::cFCFS) {
+        arglist.push_back("bazel-bin/fifo_centralized_agent");
+    } else {
+        perror("unrecognized scheduler type");
+        exit(1);
+    }
+
+    arglist.push_back("--ghost_cpus");
+    arglist.push_back("0-7");
+
+    // Check if there is an enclave to attach to
+    if (std::filesystem::exists("/sys/fs/ghost/enclave_1")) {
+        if (std::filesystem::exists("/sys/fs/ghost/enclave_2")) {
+            // We expect to make one enclave at most, and to keep reusing it for
+            // each scheduler agent
+            // If there is more than one enclave, something went wrong
+            perror("more enclaves than expected");
+            exit(1);
+        }
+        arglist.push_back("--enclave");
+        arglist.push_back("/sys/fs/ghost/enclave_1");
+    }
+
+    if (config.preemption_interval_us >= 0) {
+        arglist.push_back("--preemption_time_slice");
+        std::ostringstream ss;
+        ss << config.preemption_interval_us << "us";
+        arglist.push_back(ss.str());
+    }
+
+    set_argbuf(argbuf, arglist);
+
+    static char *args[20];
+    memset(args, NULL, sizeof(args));
+    for (size_t i = 0; i < arglist.size(); ++i) {
+        args[i] = argbuf[i];
+    }
+
+    return delegate_to_child([] {
         execv(args[0], args);
         perror("execv");
         exit(1);
     });
+}
 
-    printf("Child pid: %d\n", child_pid);
+int main(int argc, char *argv[]) {
+    // temp experiment: switch between dFCFS and cFCFS every second
 
-    sleep(5);
+    SchedulerConfig config;
+    config.type = SchedulerConfig::SchedulerType::dFCFS;
+    config.preemption_interval_us = 750;
 
-    printf("Killing scheduler\n");
-    terminate_child(child_pid);
+    while (true) {
+        if (config.type == SchedulerConfig::SchedulerType::dFCFS) {
+            config.type = SchedulerConfig::SchedulerType::cFCFS;
+        } else {
+            config.type = SchedulerConfig::SchedulerType::dFCFS;
+        }
+
+        pid_t child_pid = run_scheduler(config);
+        printf("Child pid: %d\n", child_pid);
+
+        sleep(1);
+
+        printf("Killing scheduler\n");
+        terminate_child(child_pid);
+    }
+
     /**
      * Pseudocode:
      *
