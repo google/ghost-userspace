@@ -132,12 +132,11 @@ def CopyBinaries(paths: Paths):
     CopyBinary(tmp.name + "/com_google_ghost/antagonist", paths.antagonist)
     CopyBinary(tmp.name + "/com_google_ghost/agent_shinjuku", paths.ghost)
     CopyBinary(
-        tmp.name + "/com_google_ghost/fifo_per_cpu_agent",
-        os.path.join(TMPFS_MOUNT, "fifo_per_cpu_agent"),
+        tmp.name + "/com_google_ghost/fifo_per_cpu_agent", paths.fifo_per_cpu_agent
     )
     CopyBinary(
         tmp.name + "/com_google_ghost/fifo_centralized_agent",
-        os.path.join(TMPFS_MOUNT, "fifo_centralized_agent"),
+        paths.fifo_centralized_agent,
     )
     tmp.cleanup()
 

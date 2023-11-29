@@ -106,6 +106,8 @@ class Paths:
   rocksdb: str = os.path.join(TMPFS_MOUNT, "rocksdb")
   antagonist: str = os.path.join(TMPFS_MOUNT, "antagonist")
   ghost: str = os.path.join(TMPFS_MOUNT, "agent_shinjuku")
+  fifo_per_cpu_agent: str = os.path.join(TMPFS_MOUNT, "fifo_per_cpu_agent")
+  fifo_centralized_agent: str = os.path.join(TMPFS_MOUNT, "fifo_centralized_agent")
 
 
 def GetDefaultRocksDBWorkerCpus():
