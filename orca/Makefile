@@ -1,9 +1,9 @@
 GCC = g++
 CFLAGS = -Wall -Wextra
 
-SRC = orc.cpp
+SRC = orca.cpp
 OBJ = $(SRC:.cpp=.o)
-TARGET = orc 
+TARGET = orca
 
 all: $(TARGET)
 
