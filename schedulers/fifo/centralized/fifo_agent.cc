@@ -24,6 +24,7 @@ ABSL_FLAG(int32_t, globalcpu, -1,
 ABSL_FLAG(absl::Duration, preemption_time_slice, absl::InfiniteDuration(),
           "A task is preempted after running for this time slice (default = "
           "infinite time slice)");
+ABSL_FLAG(std::string, enclave, "", "Connect to preexisting enclave directory");
 
 namespace ghost {
 
@@ -47,6 +48,13 @@ void ParseFifoConfig(FifoConfig* config) {
   config->cpus_ = ghost_cpus;
   config->global_cpu_ = topology->cpu(globalcpu);
   config->preemption_time_slice_ = absl::GetFlag(FLAGS_preemption_time_slice);
+
+  std::string enclave = absl::GetFlag(FLAGS_enclave);
+  if (!enclave.empty()) {
+    int fd = open(enclave.c_str(), O_PATH);
+    CHECK_GE(fd, 0);
+    config->enclave_fd_ = fd;
+  }
 }
 
 }  // namespace ghost
