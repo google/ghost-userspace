@@ -120,7 +120,8 @@ pid_t run_scheduler(SchedulerConfig config) {
         arglist.push_back("/sys/fs/ghost/enclave_1");
     }
 
-    if (config.preemption_interval_us >= 0) {
+    if (config.type != SchedulerConfig::SchedulerType::dFCFS &&
+        config.preemption_interval_us >= 0) {
         arglist.push_back("--preemption_time_slice");
         std::ostringstream ss;
         ss << config.preemption_interval_us << "us";
