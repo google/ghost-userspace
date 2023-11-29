@@ -96,11 +96,6 @@ def main(argv: Sequence[str]):
             "Example: synthetic.py ghost 0.01 30us 10000 300000 10000 agent_shinjuku 30s"
         )
 
-    # First check that all of the command line arguments are valid.
-    if not CheckSchedulers([argv[1]]):
-        print(argv[1])
-        raise ValueError("Invalid scheduler specified.")
-
     if argv[1][0] == "c":
         scheduler = Scheduler.CFS
     elif argv[1][0] == "g":
