@@ -90,15 +90,16 @@ def main(argv: Sequence[str]):
     #   raise app.UsageError(
     #       'No experiment specified. Pass `cfs` and/or `ghost` as arguments.')
 
+    if len(argv) != 9:
+        raise app.UsageError(
+            "Usage: synthetic.py scheduler ratio time_slice tput_start tput_end tput_step agent exp_duration\n"
+            "Example: synthetic.py ghost 0.01 30us 10000 300000 10000 agent_shinjuku 30s"
+        )
+
     # First check that all of the command line arguments are valid.
     if not CheckSchedulers([argv[1]]):
         print(argv[1])
         raise ValueError("Invalid scheduler specified.")
-
-    # Run the experiments.
-    # for i in range(1, len(argv)):
-    agent: str = "agent_shinjuku"
-    exp_duration: str = "30s"
 
     scheduler = Scheduler(argv[1])
     ratio = float(argv[2])
@@ -106,10 +107,9 @@ def main(argv: Sequence[str]):
     tput_start = int(argv[4])
     tput_end = int(argv[5])
     tput_step = int(argv[6])
-    if len(argv) > 7:
-        agent = str(argv[7])
-    if len(argv) > 8:
-        exp_duration = str(argv[8])
+    agent = str(argv[7])
+    exp_duration = str(argv[8])
+
     if scheduler == Scheduler.CFS:
         RunCfs(
             ratio,
@@ -118,9 +118,7 @@ def main(argv: Sequence[str]):
             tput_step=tput_step,
             exp_duration=exp_duration,
         )
-    else:
-        if scheduler != Scheduler.GHOST:
-            raise ValueError(f"Unknown scheduler {scheduler}.")
+    elif scheduler != Scheduler.GHOST:
         print("Agent", agent, "exp_duration", exp_duration)
         RunGhost(
             ratio,
@@ -131,6 +129,8 @@ def main(argv: Sequence[str]):
             exp_duration=exp_duration,
             agent=agent,
         )
+    else:
+        raise ValueError(f"Unknown scheduler {scheduler}.")
 
 
 if __name__ == "__main__":
