@@ -101,7 +101,13 @@ def main(argv: Sequence[str]):
         print(argv[1])
         raise ValueError("Invalid scheduler specified.")
 
-    scheduler = Scheduler(argv[1])
+    if argv[1][0] == "c":
+        scheduler = Scheduler.CFS
+    elif argv[1][0] == "g":
+        scheduler = Scheduler.GHOST
+    else:
+        raise ValueError(f"Unknown scheduler {argv[1]}.")
+
     ratio = float(argv[2])
     time_slice = str(argv[3])
     tput_start = int(argv[4])
@@ -118,7 +124,7 @@ def main(argv: Sequence[str]):
             tput_step=tput_step,
             exp_duration=exp_duration,
         )
-    elif scheduler != Scheduler.GHOST:
+    else:
         print("Agent", agent, "exp_duration", exp_duration)
         RunGhost(
             ratio,
@@ -129,8 +135,6 @@ def main(argv: Sequence[str]):
             exp_duration=exp_duration,
             agent=agent,
         )
-    else:
-        raise ValueError(f"Unknown scheduler {scheduler}.")
 
 
 if __name__ == "__main__":
