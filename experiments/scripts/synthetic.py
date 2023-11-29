@@ -16,7 +16,7 @@ requests are run to completion.
 import os
 from typing import Sequence
 from absl import app
-from experiments.scripts.options import TMPFS_MOUNT, CheckSchedulers, GetBinaryPaths
+from experiments.scripts.options import TMPFS_MOUNT, GetBinaryPaths
 from experiments.scripts.options import GetGhostOptions
 from experiments.scripts.options import GetRocksDBOptions
 from experiments.scripts.options import Scheduler
