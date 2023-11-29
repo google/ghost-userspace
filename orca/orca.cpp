@@ -63,8 +63,8 @@ struct SchedulerConfig {
 // Set args to the arguments pointed to by arglist.
 // This function provides a more friendly C++ wrapper for setting dynamic execv
 // arguments.
-template <size_t MaxStrSize, size_t MaxNumArgs>
-void set_argbuf(char (&argbuf)[MaxStrSize][MaxNumArgs],
+template <size_t MaxNumArgs, size_t MaxStrSize>
+void set_argbuf(char (&argbuf)[MaxNumArgs][MaxStrSize],
                 const std::vector<std::string> &arglist) {
     if (arglist.size() > MaxNumArgs - 1) {
         perror("too many args in arglist");
@@ -91,7 +91,7 @@ pid_t run_scheduler(SchedulerConfig config) {
     // statically allocate memory for execv args
     // this is kinda sketchy but it should work, since only one scheduling
     // agent runs at a time
-    static char argbuf[100][20];
+    static char argbuf[20][100];
 
     std::vector<std::string> arglist = {"/usr/bin/sudo"};
 
