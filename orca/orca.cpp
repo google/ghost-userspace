@@ -228,28 +228,6 @@ int main(int argc, char *argv[]) {
         close(connfd);
     }
 
-    // temp experiment: switch between dFCFS and cFCFS every second
-
-    orca::SchedulerConfig config;
-    config.type = orca::SchedulerConfig::SchedulerType::dFCFS;
-    config.preemption_interval_us = 750;
-
-    while (true) {
-        if (config.type == orca::SchedulerConfig::SchedulerType::dFCFS) {
-            config.type = orca::SchedulerConfig::SchedulerType::cFCFS;
-        } else {
-            config.type = orca::SchedulerConfig::SchedulerType::dFCFS;
-        }
-
-        pid_t child_pid = run_scheduler(config);
-        printf("Child pid: %d\n", child_pid);
-
-        sleep(1);
-
-        printf("Killing scheduler\n");
-        terminate_child(child_pid);
-    }
-
     /**
      * Pseudocode:
      *
