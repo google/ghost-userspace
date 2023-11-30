@@ -2,5 +2,5 @@
 
 ARGS=("$@")
 make clean -C orca
-make -C orca_client
+make -C orca
 sudo ./orca/orca_client ${ARGS[@]}
