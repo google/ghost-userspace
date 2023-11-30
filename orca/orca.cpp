@@ -164,17 +164,23 @@ int main(int argc, char *argv[]) {
     }
     int port = atoi(argv[1]);
 
+    printf("1\n");
+
     // start TCP server for IPC messages
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
         panic("socket");
     }
 
+    printf("1\n");
+
     int yesval = 1;
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yesval, sizeof(yesval)) ==
         -1) {
         panic("setsockopt");
     }
+
+    printf("1\n");
 
     struct sockaddr_in saddr;
     memset(&saddr, 0, sizeof(saddr));
@@ -185,6 +191,8 @@ int main(int argc, char *argv[]) {
     if (bind(sockfd, (struct sockaddr *)&saddr, sizeof(saddr)) == -1) {
         panic("bind");
     }
+
+    printf("1\n");
 
     if (listen(sockfd, 10) == -1) {
         panic("listen");
