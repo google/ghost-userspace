@@ -3,14 +3,14 @@ CFLAGS = -Wall -Wextra
 
 all: orca orca_client
 
-orca: $@.o
-	$(GCC) $(CFLAGS) $^ -o $@
+orca: orca.o
+	$(GCC) $(CFLAGS) orca.o -o orca
 
-orca_client: $@.o
-	$(GCC) $(CFLAGS) $^ -o $@
+orca_client: orca_client.o
+	$(GCC) $(CFLAGS) orca_client.o -o orca_client
 
 %.o: %.c
 	$(GCC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJ) $(TARGET)
+	rm -f *.o orca orca_client
