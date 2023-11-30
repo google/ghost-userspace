@@ -91,6 +91,13 @@ int main(int argc, char *argv[]) {
             if (preemption_interval_us != 0) {
                 config.preemption_interval_us = preemption_interval_us;
             }
+
+            orca::OrcaSetScheduler msg;
+            msg.config = config;
+
+            char buf[orca::MAX_MESSAGE_SIZE];
+            memcpy(buf, &msg, sizeof(msg));
+            send_message(port, buf, sizeof(msg));
         } else {
             print_usage();
         }
