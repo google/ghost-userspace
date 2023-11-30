@@ -1,7 +1,7 @@
 #!/bin/bash
 
-ORCA_ARGS=("$@")
+ARGS=("$@")
 make clean -C orca
 make -C orca
 echo "Running orca"
-sudo ./orca/orca ${ORC_ARGS[@]}
+sudo ./orca/orca ${ARGS[@]}

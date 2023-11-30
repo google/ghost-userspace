@@ -16,9 +16,11 @@
 #include <string>
 #include <vector>
 
+#include "protocol.h"
+
 void panic(const char *s) {
     perror(s);
-    exit(1);
+    exit(EXIT_FAILURE);
 }
 
 pid_t delegate_to_child(std::function<void()> work) {
@@ -60,13 +62,6 @@ void terminate_child(pid_t child_pid) {
     }
 }
 
-struct SchedulerConfig {
-    enum SchedulerType { dFCFS, cFCFS };
-
-    SchedulerType type;
-    int preemption_interval_us = -1; // ignored for dFCFS
-};
-
 // Set args to the arguments pointed to by arglist.
 // This function provides a more friendly C++ wrapper for setting dynamic execv
 // arguments.
@@ -92,7 +87,7 @@ bool file_exists(const char *filepath) {
 
 // Run a scheduling agent.
 // Returns the PID of the scheduler.
-pid_t run_scheduler(SchedulerConfig config) {
+pid_t run_scheduler(orca::SchedulerConfig config) {
     // statically allocate memory for execv args
     // this is kinda sketchy but it should work, since only one scheduling
     // agent runs at a time
@@ -100,9 +95,9 @@ pid_t run_scheduler(SchedulerConfig config) {
 
     std::vector<std::string> arglist = {"/usr/bin/sudo"};
 
-    if (config.type == SchedulerConfig::dFCFS) {
+    if (config.type == orca::SchedulerConfig::SchedulerType::dFCFS) {
         arglist.push_back("bazel-bin/fifo_per_cpu_agent");
-    } else if (config.type == SchedulerConfig::cFCFS) {
+    } else if (config.type == orca::SchedulerConfig::SchedulerType::cFCFS) {
         arglist.push_back("bazel-bin/fifo_centralized_agent");
     } else {
         panic("unrecognized scheduler type");
@@ -123,7 +118,7 @@ pid_t run_scheduler(SchedulerConfig config) {
         arglist.push_back("/sys/fs/ghost/enclave_1");
     }
 
-    if (config.type != SchedulerConfig::SchedulerType::dFCFS &&
+    if (config.type != orca::SchedulerConfig::SchedulerType::dFCFS &&
         config.preemption_interval_us >= 0) {
         arglist.push_back("--preemption_time_slice");
         std::ostringstream ss;
@@ -143,6 +138,7 @@ pid_t run_scheduler(SchedulerConfig config) {
     for (size_t i = 0; args[i]; ++i) {
         printf("%s ", args[i]);
     }
+    printf("\n");
 
     return delegate_to_child([] {
         execv(args[0], args);
@@ -150,18 +146,99 @@ pid_t run_scheduler(SchedulerConfig config) {
     });
 }
 
+// Helper which runs a new scheduler and kills the old one (if it exists).
+void replace_scheduler(orca::SchedulerConfig config) {
+    static pid_t curr_sched_pid = 0;
+
+    if (curr_sched_pid != 0) {
+        terminate_child(curr_sched_pid);
+    }
+
+    curr_sched_pid = run_scheduler(config);
+}
+
 int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        printf("Usage: %s <port>\n", argv[0]);
+        return 0;
+    }
+    int port = atoi(argv[1]);
+
+    // start TCP server for IPC messages
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        panic("socket");
+    }
+
+    int yesval = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yesval, sizeof(yesval)) ==
+        -1) {
+        panic("setsockopt");
+    }
+
+    struct sockaddr_in saddr;
+    memset(&saddr, 0, sizeof(saddr));
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    saddr.sin_port = htons(port);
+
+    if (bind(sockfd, (struct sockaddr *)&saddr, sizeof(saddr)) == -1) {
+        panic("bind");
+    }
+
+    if (listen(sockfd, 10) == -1) {
+        panic("listen");
+    }
+
+    printf("Orca listening on port %d...", port);
+    while (true) {
+        int connfd = accept(sockfd, NULL, NULL);
+        if (connfd == -1) {
+            printf("accept returned -1\n");
+            continue;
+        }
+
+        char buf[orca::MAX_MESSAGE_SIZE];
+        memset(buf, 0, sizeof(buf));
+
+        ssize_t recvd = 0;
+        ssize_t rval;
+        do {
+            rval = recv(connfd, buf + recvd, orca::MAX_MESSAGE_SIZE - recvd, 0);
+            if (rval == -1) {
+                panic("recv");
+            }
+            recvd += rval;
+        } while (rval > 0);
+
+        auto *header = (orca::OrcaHeader *)buf;
+        switch (header->type) {
+        case orca::MessageType::SetScheduler: {
+            auto *msg = (orca::OrcaSetScheduler *)buf;
+            printf(
+                "Received SetScheduler. type=%d, preemption_interval_us=%d\n",
+                msg->config.type, msg->config.preemption_interval_us);
+            replace_scheduler(msg->config);
+            break;
+        }
+        default:
+            panic("unimplemented message type");
+        }
+
+        close(connfd);
+    }
+
     // temp experiment: switch between dFCFS and cFCFS every second
 
-    SchedulerConfig config;
-    config.type = SchedulerConfig::SchedulerType::dFCFS;
+    orca::SchedulerConfig config;
+    config.type = orca::SchedulerConfig::SchedulerType::dFCFS;
     config.preemption_interval_us = 750;
 
     while (true) {
-        if (config.type == SchedulerConfig::SchedulerType::dFCFS) {
-            config.type = SchedulerConfig::SchedulerType::cFCFS;
+        if (config.type == orca::SchedulerConfig::SchedulerType::dFCFS) {
+            config.type = orca::SchedulerConfig::SchedulerType::cFCFS;
         } else {
-            config.type = SchedulerConfig::SchedulerType::dFCFS;
+            config.type = orca::SchedulerConfig::SchedulerType::dFCFS;
         }
 
         pid_t child_pid = run_scheduler(config);
