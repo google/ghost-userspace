@@ -28,6 +28,9 @@ using ghost::PrioTable;
 using ghost::sched_item;
 using ghost::work_class;
 
+static constexpr int MINIMUM_SECONDS = 5;
+static constexpr std::chrono::duration<double> MAXIMUM_TIME = 5;
+
 /*
  * PrioTable code adapted from simple_edf.cc
  */
@@ -121,10 +124,10 @@ struct Job {
 std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
                                 GhostThread::KernelScheduler ks_mode,
                                 int reqs_per_sec, int runtime_secs,
-                                int num_workers, double proportion_long_jobs) {
+                                int num_workers) {
     std::cout << "Spawning worker threads..." << std::endl;
 
-    int num_jobs = reqs_per_sec * runtime_secs;
+    int num_jobs = reqs_per_sec * MAXIMUM_TIME;
     std::vector<Job> jobs(num_jobs);
     std::atomic<bool> isdead(false);
     std::queue<Job *> work_q;
@@ -168,22 +171,29 @@ std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
         worker_threads.push_back(std::move(thread));
     }
 
-    // Send requests into work queue
-    steady_clock::time_point t1 = steady_clock::now();
-    for (int i = 0; i < num_jobs; ++i) {
-        if (rand() % 10000 < (int)(proportion_long_jobs * 10000)) {
-            jobs[i].type = JobType::Long;
-        } else {
-            jobs[i].type = JobType::Short;
+    //Calculate the number of iterations that you need to do
+    //(i.e. -> 17 seconds/5 seconds -> 4 iterations)
+    int iterations = ceil((runtime_secs)/(MINIMUM_SECONDS))
+    for (int i = 0; i < iterations; i += 1) {
+
+        // (1) Ranadomly select the the proportional_long_jobs time
+        double proportional_long_jobs = (rand()%2) ? .01 : .5;
+
+        steady_clock::time_point t1 = steady_clock::now();
+        //Loop through number of jobs -> should be 5 * req/sec
+        for (int i = 0; i < num_jobs; ++i) {
+            jobs[i].type = (rand() % 10000 < (int)(proportion_long_jobs * 10000)) ? JobType::Long : JobType::Short;
+
+            work_q_m.lock();
+            jobs[i].submitted = steady_clock::now();
+            work_q.push(&jobs[i]);
+            work_q_m.unlock();
+            //(2) Sleep until you need to create the next job
+            double next_scheduled_for = (double)(i + 1) / num_jobs * MINIMUM_SECONDS;
+            std::this_thread::sleep_until(t1 + std::chrono::duration<double>(next_scheduled_for));
         }
 
-        work_q_m.lock();
-        jobs[i].submitted = steady_clock::now();
-        work_q.push(&jobs[i]);
-        work_q_m.unlock();
-        double next_scheduled_for = (double)(i + 1) / num_jobs * runtime_secs;
-        std::this_thread::sleep_until(
-            t1 + std::chrono::duration<double>(next_scheduled_for));
+
     }
 
     // Shutdown workers
@@ -207,7 +217,6 @@ int main(int argc, char *argv[]) {
     if (argc != 6) {
         std::cout << "Usage: " << argv[0]
                   << " ghost|cfs reqs_per_sec runtime_secs num_workers "
-                     "proportion_long_jobs"
                   << std::endl;
         return 0;
     }
@@ -222,8 +231,12 @@ int main(int argc, char *argv[]) {
     }
     int reqs_per_sec = std::atoi(argv[2]);
     int runtime_secs = std::atoi(argv[3]);
+
+    if (runtime_secs < MINIMUM_SECONDS) {
+        std::cout << "invalid timing option" <<  std::endl;
+    }
+
     int num_workers = std::atoi(argv[4]);
-    double proportion_long_jobs = std::atof(argv[5]);
 
     // Set up PrioTable
     auto prio_table = std::make_unique<PrioTable>(
@@ -231,7 +244,7 @@ int main(int argc, char *argv[]) {
     setup_work_classes(prio_table);
 
     auto jobs = run_experiment(prio_table, ks_mode, reqs_per_sec, runtime_secs,
-                               num_workers, proportion_long_jobs);
+                               num_workers);
 
     std::vector<double> short_runtimes;
     std::vector<double> long_runtimes;
