@@ -66,7 +66,9 @@ void handle_input(int port, const std::string &input) {
         std::string sched_type;
         int preemption_interval_us = 0;
         iss >> sched_type;
-        iss >> preemption_interval_us;
+        if (!(iss >> preemption_interval_us)) {
+            preemption_interval_us = 0;
+        }
 
         orca::SchedulerConfig config;
 
