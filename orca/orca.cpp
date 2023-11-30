@@ -44,7 +44,7 @@ pid_t delegate_to_child(std::function<void()> work) {
 }
 
 void terminate_child(pid_t child_pid) {
-    if (kill(child_pid, SIGTERM) == -1) {
+    if (kill(child_pid, SIGINT) == -1) {
         panic("kill");
     }
 
@@ -107,6 +107,7 @@ pid_t run_scheduler(orca::SchedulerConfig config) {
     arglist.push_back("0-7");
 
     // Check if there is an enclave to attach to
+    /*
     if (file_exists("/sys/fs/ghost/enclave_1")) {
         if (file_exists("/sys/fs/ghost/enclave_2")) {
             // We expect to make one enclave at most, and to keep reusing it for
@@ -117,6 +118,7 @@ pid_t run_scheduler(orca::SchedulerConfig config) {
         arglist.push_back("--enclave");
         arglist.push_back("/sys/fs/ghost/enclave_1");
     }
+    */
 
     if (config.type != orca::SchedulerConfig::SchedulerType::dFCFS &&
         config.preemption_interval_us >= 0) {
