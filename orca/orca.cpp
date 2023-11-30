@@ -1,29 +1,37 @@
+#include <arpa/inet.h>
+#include <netinet/tcp.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include <cstring>
 #include <functional>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+void panic(const char *s) {
+    perror(s);
+    exit(1);
+}
+
 pid_t delegate_to_child(std::function<void()> work) {
     pid_t child_pid = fork();
     if (child_pid == -1) {
-        perror("fork");
-        exit(1);
+        panic("fork");
     }
 
     if (child_pid == 0) {
         // set our process group id (pgid) to our own pid
         // this allows our parent to kill us
         if (setpgid(0, 0) == -1) {
-            perror("setpgid");
-            exit(1);
+            panic("setpgid");
         }
 
         work();
@@ -35,8 +43,7 @@ pid_t delegate_to_child(std::function<void()> work) {
 
 void terminate_child(pid_t child_pid) {
     if (kill(child_pid, SIGTERM) == -1) {
-        perror("kill");
-        exit(1);
+        panic("kill");
     }
 
     printf("killing child process (pid=%d) ...\n", child_pid);
@@ -54,7 +61,7 @@ void terminate_child(pid_t child_pid) {
 }
 
 struct SchedulerConfig {
-    enum class SchedulerType { dFCFS, cFCFS };
+    enum SchedulerType { dFCFS, cFCFS };
 
     SchedulerType type;
     int preemption_interval_us = -1; // ignored for dFCFS
@@ -67,14 +74,12 @@ template <size_t MaxNumArgs, size_t MaxStrSize>
 void set_argbuf(char (&argbuf)[MaxNumArgs][MaxStrSize],
                 const std::vector<std::string> &arglist) {
     if (arglist.size() > MaxNumArgs - 1) {
-        perror("too many args in arglist");
-        exit(1);
+        panic("too many args in arglist");
     }
     for (size_t i = 0; i < arglist.size(); ++i) {
         const auto &s = arglist[i];
         if (s.size() > MaxStrSize - 1) {
-            perror("arg length too long");
-            exit(1);
+            panic("arg length too long");
         }
         strncpy(argbuf[i], s.c_str(), s.size() + 1);
     }
@@ -95,13 +100,12 @@ pid_t run_scheduler(SchedulerConfig config) {
 
     std::vector<std::string> arglist = {"/usr/bin/sudo"};
 
-    if (config.type == SchedulerConfig::SchedulerType::dFCFS) {
+    if (config.type == SchedulerConfig::dFCFS) {
         arglist.push_back("bazel-bin/fifo_per_cpu_agent");
-    } else if (config.type == SchedulerConfig::SchedulerType::cFCFS) {
+    } else if (config.type == SchedulerConfig::cFCFS) {
         arglist.push_back("bazel-bin/fifo_centralized_agent");
     } else {
-        perror("unrecognized scheduler type");
-        exit(1);
+        panic("unrecognized scheduler type");
     }
 
     arglist.push_back("--ghost_cpus");
@@ -113,8 +117,7 @@ pid_t run_scheduler(SchedulerConfig config) {
             // We expect to make one enclave at most, and to keep reusing it for
             // each scheduler agent
             // If there is more than one enclave, something went wrong
-            perror("more enclaves than expected");
-            exit(1);
+            panic("more enclaves than expected");
         }
         arglist.push_back("--enclave");
         arglist.push_back("/sys/fs/ghost/enclave_1");
@@ -136,10 +139,14 @@ pid_t run_scheduler(SchedulerConfig config) {
         args[i] = argbuf[i];
     }
 
+    // print args to scheduler
+    for (size_t i = 0; args[i]; ++i) {
+        printf("%s ", args[i]);
+    }
+
     return delegate_to_child([] {
         execv(args[0], args);
-        perror("execv");
-        exit(1);
+        panic("execv");
     });
 }
 
