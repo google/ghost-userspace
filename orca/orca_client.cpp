@@ -56,50 +56,63 @@ void print_usage() {
     std::cout << std::flush;
 }
 
+void handle_input(int port, const std::string &input) {
+    std::istringstream iss(input);
+
+    std::string cmd;
+    iss >> cmd;
+
+    if (cmd == "setsched") {
+        std::string sched_type;
+        int preemption_interval_us = 0;
+        iss >> sched_type;
+        iss >> preemption_interval_us;
+
+        orca::SchedulerConfig config;
+
+        if (sched_type[0] == 'd') {
+            config.type = orca::SchedulerConfig::SchedulerType::dFCFS;
+        } else if (sched_type[0] == 'c') {
+            config.type = orca::SchedulerConfig::SchedulerType::cFCFS;
+        } else {
+            panic("unrecognized scheduler type");
+        }
+
+        if (preemption_interval_us != 0) {
+            config.preemption_interval_us = preemption_interval_us;
+        }
+
+        orca::OrcaSetScheduler msg;
+        msg.config = config;
+
+        char buf[orca::MAX_MESSAGE_SIZE];
+        memcpy(buf, &msg, sizeof(msg));
+        send_message(port, buf, sizeof(msg));
+    } else {
+        print_usage();
+    }
+}
+
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
+    if (argc < 2) {
         printf("Usage: %s <port>\n", argv[0]);
         return 0;
     }
     int port = atoi(argv[1]);
 
+    if (argc > 2) {
+        std::ostringstream oss;
+        for (int i = 2; i < argc; ++i) {
+            oss << argv[i];
+        }
+        handle_input(port, oss.str());
+        return 0;
+    }
+
     print_usage();
 
     std::string input;
     while (std::getline(std::cin, input)) {
-        std::istringstream iss(input);
-
-        std::string cmd;
-        iss >> cmd;
-
-        if (cmd == "setsched") {
-            std::string sched_type;
-            int preemption_interval_us = 0;
-            iss >> sched_type;
-            iss >> preemption_interval_us;
-
-            orca::SchedulerConfig config;
-
-            if (sched_type[0] == 'd') {
-                config.type = orca::SchedulerConfig::SchedulerType::dFCFS;
-            } else if (sched_type[0] == 'c') {
-                config.type = orca::SchedulerConfig::SchedulerType::cFCFS;
-            } else {
-                panic("unrecognized scheduler type");
-            }
-
-            if (preemption_interval_us != 0) {
-                config.preemption_interval_us = preemption_interval_us;
-            }
-
-            orca::OrcaSetScheduler msg;
-            msg.config = config;
-
-            char buf[orca::MAX_MESSAGE_SIZE];
-            memcpy(buf, &msg, sizeof(msg));
-            send_message(port, buf, sizeof(msg));
-        } else {
-            print_usage();
-        }
+        handle_input(port, input);
     }
 }
