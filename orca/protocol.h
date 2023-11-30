@@ -21,6 +21,8 @@ struct OrcaHeader {
 // Message which results in the scheduler being restarted.
 struct OrcaSetScheduler : OrcaHeader {
     SchedulerConfig config;
+
+    OrcaSetScheduler() { type = MessageType::SetScheduler; }
 };
 
 } // namespace orca
