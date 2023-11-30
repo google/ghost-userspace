@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
     if (argc > 2) {
         std::ostringstream oss;
         for (int i = 2; i < argc; ++i) {
-            oss << argv[i];
+            oss << argv[i] << " ";
         }
         handle_input(port, oss.str());
         return 0;
