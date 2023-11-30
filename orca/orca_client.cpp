@@ -89,6 +89,7 @@ void handle_input(int port, const std::string &input) {
         memcpy(buf, &msg, sizeof(msg));
         send_message(port, buf, sizeof(msg));
     } else {
+        printf("Invalid command: %s\n", input.c_str());
         print_usage();
     }
 }
