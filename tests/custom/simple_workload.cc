@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
                                         long_runtimes, stod(p) / 100.0))});
     }
 
-    printf("csv format (");
+    printf("csv section\n");
     bool first = true;
     for (const auto &[key, _] : stats) {
         if (!first) {
@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
         first = false;
         printf("%s", key.c_str());
     }
-    printf(")\n");
+    printf("\n");
 
     first = true;
     for (const auto &[_, value] : stats) {
