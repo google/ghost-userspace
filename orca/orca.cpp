@@ -15,12 +15,8 @@
 #include <vector>
 
 #include "orca.h"
+#include "panic.h"
 #include "protocol.h"
-
-void panic(const char *s) {
-    perror(s);
-    exit(EXIT_FAILURE);
-}
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {

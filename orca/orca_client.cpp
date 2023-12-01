@@ -10,12 +10,8 @@
 #include <sstream>
 #include <string>
 
+#include "panic.h"
 #include "protocol.h"
-
-void panic(const char *s) {
-    perror(s);
-    exit(EXIT_FAILURE);
-}
 
 void send_message(int port, const char *buf, size_t len) {
     const char *hostname = "localhost";

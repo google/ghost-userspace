@@ -13,10 +13,7 @@
 #include <string>
 #include <vector>
 
-void panic(const char *s) {
-    perror(s);
-    exit(EXIT_FAILURE);
-}
+#include "panic.h"
 
 namespace orca {
 
