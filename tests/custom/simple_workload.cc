@@ -22,8 +22,6 @@ using std::chrono::steady_clock;
 
 using ghost::GhostThread;
 using ghost::Gtid;
-using ghost::sched_item;
-using ghost::work_class;
 
 // return percentile of experimentTimes
 double percentile(std::vector<double> &v, double n) {
