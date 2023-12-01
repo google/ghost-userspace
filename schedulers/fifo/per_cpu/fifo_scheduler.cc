@@ -414,10 +414,10 @@ void FifoAgent::AgentThread() {
       }
     }
   }
-  printf("Size of metrics %d\n", scheduler_->metrics.size());
-  for(auto &m : scheduler_->metrics){
-    m.printResult(stdout);
-  }
+  // printf("Size of metrics %d\n", scheduler_->metrics.size());
+  // for(auto &m : scheduler_->metrics){
+  //   m.printResult(stdout);
+  // }
 }
 
 std::ostream& operator<<(std::ostream& os, const FifoTaskState& state) {

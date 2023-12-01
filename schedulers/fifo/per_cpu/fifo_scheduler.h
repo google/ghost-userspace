@@ -129,11 +129,13 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   }
 
   void CollectMetric(){
-    absl::MutexLock lock(&mu_);
-    auto &tmp = metrics;
+    // absl::MutexLock lock(&mu_);
+    // auto &tmp = metrics;
+    printf("Collect Metric\n");
+    std::vector<Metric> metrics; 
     // Threadsafe by allocator's guarantee
-    allocator()->ForEachTask([&tmp](Gtid gtid, const FifoTask* task) {
-      tmp.push_back(task->m);
+    allocator()->ForEachTask([&metrics](Gtid gtid, const FifoTask* task) {
+      metrics.push_back(task->m);
       // metrics.back().printResult(stdout);
       return true;
     });
@@ -142,8 +144,8 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   static constexpr int kDebugRunqueue = 1;
   static constexpr int kCountAllTasks = 2;
 
-  absl::Mutex mu_;
-  std::vector<Metric> metrics; 
+  // absl::Mutex mu_;
+  // std::vector<Metric> metrics; 
 
  protected:
   void TaskNew(FifoTask* task, const Message& msg) final;
