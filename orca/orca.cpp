@@ -90,6 +90,8 @@ int main(int argc, char *argv[]) {
             continue;
         } else {
             if (FD_ISSET(sockfd, &readfds)) {
+                printf("handling Socket message\n");
+
                 int connfd = accept(sockfd, NULL, NULL);
                 if (connfd == -1) {
                     printf("accept returned -1\n");
@@ -128,8 +130,12 @@ int main(int argc, char *argv[]) {
                 }
 
                 close(connfd);
+
+                printf("done handling Socket message\n");
             }
             if (schedfd != -1 && FD_ISSET(schedfd, &readfds)) {
+                printf("handling Scheduler message\n");
+
                 // read data until none left to read=
                 char buf[1024];
                 std::string output{};
@@ -149,6 +155,8 @@ int main(int argc, char *argv[]) {
                 }
 
                 std::cout << "SCHEDULER: " << output << std::endl;
+
+                printf("done handling Scheduler message\n");
             }
         }
     }
