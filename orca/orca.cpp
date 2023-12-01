@@ -137,9 +137,9 @@ int main(int argc, char *argv[]) {
                 ssize_t rval;
                 while (true) {
                     memset(buf, 0, sizeof(buf));
-                    rval = recv(schedfd, buf, sizeof(buf) - 1, 0);
+                    rval = read(schedfd, buf, sizeof(buf) - 1);
                     if (rval == -1) {
-                        panic("recv");
+                        panic("read");
                     }
                     if (rval == 0) {
                         // done receiving bytes
