@@ -142,6 +142,9 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   static constexpr int kDebugRunqueue = 1;
   static constexpr int kCountAllTasks = 2;
 
+  // absl::Mutex mu_;
+  std::vector<Metric> metrics; 
+
  protected:
   void TaskNew(FifoTask* task, const Message& msg) final;
   void TaskRunnable(FifoTask* task, const Message& msg) final;
@@ -177,9 +180,6 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
 
   CpuState cpu_states_[MAX_CPUS];
   Channel* default_channel_ = nullptr;
-
-  // absl::Mutex mu_;
-  std::vector<Metric> metrics; 
 };
 
 std::unique_ptr<FifoScheduler> MultiThreadedFifoScheduler(Enclave* enclave,
