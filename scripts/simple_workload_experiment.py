@@ -48,7 +48,6 @@ def run_experiment(
             str(num_workers),
             str(proportion_long_jobs),
         ],
-        shell=True,
         check=True,
     )
 
