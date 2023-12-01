@@ -10,7 +10,7 @@
 #include <sstream>
 #include <string>
 
-#include "panic.h"
+#include "helpers.h"
 #include "protocol.h"
 
 void send_message(int port, const char *buf, size_t len) {
@@ -33,14 +33,17 @@ void send_message(int port, const char *buf, size_t len) {
         panic("connect");
     }
 
-    ssize_t sent = 0;
-    do {
-        const ssize_t n = send(sockfd, buf + sent, len - sent, 0);
-        if (n == -1) {
-            panic("send");
-        }
-        sent += n;
-    } while (sent < len);
+    // send message
+    send_full(sockfd, buf, len);
+
+    // wait for ack
+    printf("awaiting ack...\n");
+    orca::OrcaHeader header;
+    recv_full(sockfd, (char *)&header, sizeof(header));
+    if (header.type != orca::MessageType::Ack) {
+        panic("expected ack");
+    }
+    printf("got ack\n");
 
     close(sockfd);
 }
@@ -85,9 +88,7 @@ void handle_input(int port, const std::string &input) {
         orca::OrcaSetScheduler msg;
         msg.config = config;
 
-        char buf[orca::MAX_MESSAGE_SIZE];
-        memcpy(buf, &msg, sizeof(msg));
-        send_message(port, buf, sizeof(msg));
+        send_message(port, (const char *)&msg, sizeof(msg));
     } else {
         printf("Invalid command: %s\n", input.c_str());
         print_usage();

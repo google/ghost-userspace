@@ -15,8 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "helpers.h"
 #include "orca.h"
-#include "panic.h"
 #include "protocol.h"
 
 int main(int argc, char *argv[]) {
@@ -74,24 +74,27 @@ int main(int argc, char *argv[]) {
         char buf[orca::MAX_MESSAGE_SIZE];
         memset(buf, 0, sizeof(buf));
 
-        ssize_t recvd = 0;
-        ssize_t rval;
-        do {
-            rval = recv(connfd, buf + recvd, orca::MAX_MESSAGE_SIZE - recvd, 0);
-            if (rval == -1) {
-                panic("recv");
-            }
-            recvd += rval;
-        } while (rval > 0);
-
+        recv_full(sockfd, buf, sizeof(orca::OrcaHeader));
         auto *header = (orca::OrcaHeader *)buf;
+
         switch (header->type) {
         case orca::MessageType::SetScheduler: {
+            recv_full(sockfd, buf + sizeof(orca::OrcaHeader),
+                      sizeof(orca::OrcaSetScheduler) -
+                          sizeof(orca::OrcaHeader));
+
             auto *msg = (orca::OrcaSetScheduler *)buf;
             printf(
                 "Received SetScheduler. type=%d, preemption_interval_us=%d\n",
                 (int)msg->config.type, msg->config.preemption_interval_us);
+
             orca_agent->set_scheduler(msg->config);
+
+            // send ack
+            orca::OrcaHeader ack;
+            ack.type = orca::MessageType::Ack;
+            send_full(sockfd, (const char *)&ack, sizeof(ack));
+
             break;
         }
         default:
