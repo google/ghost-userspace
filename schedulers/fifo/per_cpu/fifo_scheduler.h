@@ -12,6 +12,7 @@
 
 #include "lib/agent.h"
 #include "lib/scheduler.h"
+#include "schedulers/fifo/Metric.h"
 
 namespace ghost {
 
@@ -29,12 +30,25 @@ std::ostream& operator<<(std::ostream& os, const FifoTaskState& state);
 
 struct FifoTask : public Task<> {
   explicit FifoTask(Gtid fifo_task_gtid, ghost_sw_info sw_info)
-      : Task<>(fifo_task_gtid, sw_info) {}
+      : Task<>(fifo_task_gtid, sw_info), m(fifo_task_gtid) {}
   ~FifoTask() override {}
 
   inline bool blocked() const { return run_state == FifoTaskState::kBlocked; }
   inline bool queued() const { return run_state == FifoTaskState::kQueued; }
   inline bool oncpu() const { return run_state == FifoTaskState::kOnCpu; }
+
+  static std::string_view RunStateToString(const FifoTaskState run_state) {
+    switch (run_state) {
+      case FifoTaskState::kBlocked:
+        return "Blocked";
+      case FifoTaskState::kQueued:
+        return "Queued";
+      case FifoTaskState::kRunnable:
+        return "Runnable";
+      case FifoTaskState::kOnCpu:
+        return "OnCpu";
+    }
+  }
 
   // N.B. _runnable() is a transitory state typically used during runqueue
   // manipulation. It is not expected to be used from task msg callbacks.
@@ -47,6 +61,8 @@ struct FifoTask : public Task<> {
 
   FifoTaskState run_state = FifoTaskState::kBlocked;
   int cpu = -1;
+
+  Metric m;
 
   // Whether the last execution was preempted or not.
   bool preempted = false;
@@ -112,6 +128,18 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
     return num_tasks;
   }
 
+  void CollectMetric(){
+    // absl::MutexLock lock(&mu_);
+    std::vector<Metric> metrics; 
+
+    // Threadsafe by allocator's guarantee
+    allocator()->ForEachTask([&metrics](Gtid gtid, const FifoTask* task) {
+      metrics.push_back(task->m);
+      metrics.back().printResult(stdout);
+      return true;
+    });
+  }
+
   static constexpr int kDebugRunqueue = 1;
   static constexpr int kCountAllTasks = 2;
 
@@ -150,6 +178,9 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
 
   CpuState cpu_states_[MAX_CPUS];
   Channel* default_channel_ = nullptr;
+
+  // absl::Mutex mu_;
+  // std::vector<Metric> metrics; 
 };
 
 std::unique_ptr<FifoScheduler> MultiThreadedFifoScheduler(Enclave* enclave,
