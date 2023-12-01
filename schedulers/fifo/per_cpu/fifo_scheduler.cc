@@ -403,7 +403,9 @@ void FifoAgent::AgentThread() {
 
   while (!Finished() || !scheduler_->Empty(cpu())) {
     scheduler_->Schedule(cpu(), status_word());
-    scheduler_->CollectMetric();
+    
+    if(debug_out.Edge())
+      scheduler_->CollectMetric();
     if (verbose() && debug_out.Edge()) {
       static const int flags = verbose() > 1 ? Scheduler::kDumpStateEmptyRQ : 0;
       if (scheduler_->debug_runqueue_) {
