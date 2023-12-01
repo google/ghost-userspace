@@ -53,7 +53,7 @@ void print_usage() {
 }
 
 void handle_input(int port, const std::string &input) {
-    printf("Received command: %s\n", input.c_str());
+    printf("Running command: %s\n", input.c_str());
 
     std::istringstream iss(input);
 
