@@ -65,43 +65,92 @@ int main(int argc, char *argv[]) {
 
     printf("Orca listening on port %d...\n", port);
     while (true) {
-        int connfd = accept(sockfd, NULL, NULL);
-        if (connfd == -1) {
-            printf("accept returned -1\n");
+        // get stdout of scheduler
+        int schedfd = orca_agent->get_sched_stdout_fd();
+
+        // set up fd set for select()
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(sockfd, &readfds);
+        if (schedfd != -1) {
+            FD_SET(schedfd, &readfds);
+        }
+
+        // set timeout of 1ms
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 1000;
+
+        int ready = select(FD_SETSIZE, &readfds, NULL, NULL, &timeout);
+
+        if (ready == -1) {
+            panic("select");
+        } else if (ready == 0) {
+            // timeout occurred, continue loop
             continue;
+        } else {
+            if (FD_ISSET(sockfd, &readfds)) {
+                int connfd = accept(sockfd, NULL, NULL);
+                if (connfd == -1) {
+                    printf("accept returned -1\n");
+                    continue;
+                }
+
+                char buf[orca::MAX_MESSAGE_SIZE];
+                memset(buf, 0, sizeof(buf));
+
+                recv_full(connfd, buf, sizeof(orca::OrcaHeader));
+                auto *header = (orca::OrcaHeader *)buf;
+
+                switch (header->type) {
+                case orca::MessageType::SetScheduler: {
+                    recv_full(connfd, buf + sizeof(orca::OrcaHeader),
+                              sizeof(orca::OrcaSetScheduler) -
+                                  sizeof(orca::OrcaHeader));
+
+                    auto *msg = (orca::OrcaSetScheduler *)buf;
+                    printf("Received SetScheduler. type=%d, "
+                           "preemption_interval_us=%d\n",
+                           (int)msg->config.type,
+                           msg->config.preemption_interval_us);
+
+                    orca_agent->set_scheduler(msg->config);
+
+                    // send ack
+                    orca::OrcaHeader ack;
+                    ack.type = orca::MessageType::Ack;
+                    send_full(connfd, (const char *)&ack, sizeof(ack));
+
+                    break;
+                }
+                default:
+                    panic("unimplemented message type");
+                }
+
+                close(connfd);
+            }
+            if (schedfd != -1 && FD_ISSET(schedfd, &readfds)) {
+                // read data until none left to read=
+                char buf[1024];
+                std::string output{};
+
+                ssize_t rval;
+                while (true) {
+                    memset(buf, 0, sizeof(buf));
+                    rval = recv(schedfd, buf, sizeof(buf) - 1, 0);
+                    if (rval == -1) {
+                        panic("recv");
+                    }
+                    if (rval == 0) {
+                        // done receiving bytes
+                        break;
+                    }
+                    output.append(buf);
+                }
+
+                std::cout << "SCHEDULER: " << output << std::endl;
+            }
         }
-
-        char buf[orca::MAX_MESSAGE_SIZE];
-        memset(buf, 0, sizeof(buf));
-
-        recv_full(connfd, buf, sizeof(orca::OrcaHeader));
-        auto *header = (orca::OrcaHeader *)buf;
-
-        switch (header->type) {
-        case orca::MessageType::SetScheduler: {
-            recv_full(connfd, buf + sizeof(orca::OrcaHeader),
-                      sizeof(orca::OrcaSetScheduler) -
-                          sizeof(orca::OrcaHeader));
-
-            auto *msg = (orca::OrcaSetScheduler *)buf;
-            printf(
-                "Received SetScheduler. type=%d, preemption_interval_us=%d\n",
-                (int)msg->config.type, msg->config.preemption_interval_us);
-
-            orca_agent->set_scheduler(msg->config);
-
-            // send ack
-            orca::OrcaHeader ack;
-            ack.type = orca::MessageType::Ack;
-            send_full(connfd, (const char *)&ack, sizeof(ack));
-
-            break;
-        }
-        default:
-            panic("unimplemented message type");
-        }
-
-        close(connfd);
     }
 
     /**

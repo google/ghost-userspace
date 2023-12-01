@@ -26,7 +26,11 @@ struct SchedulerConfig {
 
 class Orca {
 public:
-    Orca() = default;
+    Orca() {
+        // set pipe fd's to dummy values
+        pipe_fd[0] = -1;
+        pipe_fd[1] = -1;
+    }
 
     ~Orca() {
         printf("Exiting Orca...\n");
@@ -42,28 +46,58 @@ public:
             terminate_child(curr_sched_pid);
         }
 
-        curr_sched_pid = run_scheduler(config);
+        curr_sched_pid = run_scheduler(config, pipe_fd);
+    }
+
+    // Returns file descriptor which contains stdout of scheduler process
+    int get_sched_stdout_fd() {
+        int stdoutfd = pipe_fd[0];
+        if (stdoutfd == -1) {
+            panic("invalid stdout fd");
+        }
+        return stdoutfd;
     }
 
 private:
+    int pipe_fd[2];
     pid_t curr_sched_pid = 0;
 
-    static pid_t delegate_to_child(std::function<void()> work) {
+    static pid_t delegate_to_child(std::function<void()> work, int *pipe_fd) {
+        if (pipe(pipe_fd) == -1) {
+            panic("pipe");
+        }
+
         pid_t child_pid = fork();
         if (child_pid == -1) {
             panic("fork");
         }
 
         if (child_pid == 0) {
+            // we are the child
+
             // set our process group id (pgid) to our own pid
             // this allows our parent to kill us
             if (setpgid(0, 0) == -1) {
                 panic("setpgid");
             }
 
+            // close read end of pipe
+            close(pipe_fd[0]);
+
+            // redirect stdout to write end of pipe
+            // we do this by closing stdout, then calling dup on write end
+            // OS allocates lowest available fd (in this case, fd=1)
+            close(STDOUT_FILENO);
+            dup(pipe_fd[1]);
+
             work();
             exit(0);
         } else {
+            // we are the parent
+
+            // close write end of pipe
+            close(pipe_fd[1]);
+
             return child_pid;
         }
     }
@@ -112,7 +146,7 @@ private:
 
     // Run a scheduling agent.
     // Returns the PID of the scheduler.
-    static pid_t run_scheduler(orca::SchedulerConfig config) {
+    static pid_t run_scheduler(orca::SchedulerConfig config, int *pipe_fd) {
         // statically allocate memory for execv args
         // this is kinda sketchy but it should work, since only one scheduling
         // agent runs at a time
@@ -168,10 +202,12 @@ private:
         }
         printf("\n");
 
-        return delegate_to_child([] {
-            execv(args[0], args);
-            panic("execv");
-        });
+        return delegate_to_child(
+            [] {
+                execv(args[0], args);
+                panic("execv");
+            },
+            pipe_fd);
     }
 };
 
