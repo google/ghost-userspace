@@ -3,6 +3,7 @@
 import argparse
 from decimal import Decimal
 import subprocess
+from typing import Optional
 
 
 parser = argparse.ArgumentParser()
@@ -18,7 +19,7 @@ def run_experiment(
     runtime: int,
     num_workers: int,
     proportion_long_jobs: Decimal,
-    preemption_interval_us: int | None = None,
+    preemption_interval_us: Optional[int] = None,
 ) -> dict[str, str]:
     "Run the experiment and return the CSV portion of the results."
 
