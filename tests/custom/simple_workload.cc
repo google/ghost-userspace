@@ -135,6 +135,10 @@ int main(int argc, char *argv[]) {
     srand(time(NULL));
 
     if (argc != 6) {
+        std::cout << "argc=" << argc << std::endl;
+        for (int i = 0; i < argc; ++i) {
+            std::cout << argv[i] << std::endl;
+        }
         std::cout << "Usage: " << argv[0]
                   << " ghost|cfs reqs_per_sec runtime_secs num_workers "
                      "proportion_long_jobs"
