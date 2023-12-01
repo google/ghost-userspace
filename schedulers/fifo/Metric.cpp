@@ -42,21 +42,21 @@ namespace ghost
     Metric::TaskState Metric::getStateFromString(std::string_view state)
     {
         if (state == "Blocked")
-            return Profiler::TaskState::kBlocked;
+            return TaskState::kBlocked;
         else if (state == "Runnable")
-            return Profiler::TaskState::kRunnable;
+            return TaskState::kRunnable;
         else if (state == "Queued")
-            return Profiler::TaskState::kQueued;
+            return TaskState::kQueued;
         else if (state == "OnCpu")
-            return Profiler::TaskState::kOnCpu;
+            return TaskState::kOnCpu;
         else if (state == "yielding")
-            return Profiler::TaskState::kYielding;
+            return TaskState::kYielding;
         else if (state == "Died")
-            return Profiler::TaskState::kDied;
+            return TaskState::kDied;
         else
         {
             fprintf(stderr, "Task state is unknown(%s)\n", state.data());
-            return Profiler::TaskState::unknown;
+            return TaskState::unknown;
         }
     }
 }

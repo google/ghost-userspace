@@ -25,6 +25,8 @@ namespace ghost
             unknown
         };
 
+        Gtid gtid;
+
         absl::Time createdAt;        // created time
         absl::Duration blockTime;    // Blocked state
         absl::Duration runnableTime; // runnable state
@@ -35,12 +37,11 @@ namespace ghost
         int64_t preemptCount; // if it's preempted
 
         TaskState currentState;
-        Gtid gtid;
         absl::Time stateStarted;
 
         Metric() {}
         Metric(Gtid _gtid) : gtid(_gtid), createdAt(absl::Now()), currentState(TaskState::kCreated), stateStarted(createdAt) {}
-        void updateState(const Profiler::TaskState newState);
+        void updateState(const TaskState newState);
         void printResult(FILE *to);
 
     private:
