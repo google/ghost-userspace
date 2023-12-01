@@ -17,79 +17,13 @@
 #include "absl/flags/parse.h"
 #include "lib/base.h"
 #include "lib/ghost.h"
-#include "shared/prio_table.h"
 
 using std::chrono::steady_clock;
 
 using ghost::GhostThread;
 using ghost::Gtid;
-using ghost::MonotonicNow;
-using ghost::PrioTable;
 using ghost::sched_item;
 using ghost::work_class;
-
-/*
- * PrioTable code adapted from simple_edf.cc
- */
-
-bool sched_item_runnable(const std::unique_ptr<PrioTable> &table_, int sidx) {
-    sched_item *src = table_->sched_item(sidx);
-    uint32_t begin, flags;
-    bool success;
-
-    do {
-        begin = src->seqcount.read_begin();
-        flags = src->flags;
-        success = src->seqcount.read_end(begin);
-    } while (!success);
-
-    return flags & SCHED_ITEM_RUNNABLE;
-}
-
-void mark_sched_item_idle(const std::unique_ptr<PrioTable> &table_, int sidx) {
-    sched_item *si = table_->sched_item(sidx);
-
-    uint32_t seq = si->seqcount.write_begin();
-    si->flags &= ~SCHED_ITEM_RUNNABLE;
-    si->seqcount.write_end(seq);
-    table_->MarkUpdatedIndex(sidx, /* num_retries = */ 3);
-}
-
-void mark_sched_item_runnable(const std::unique_ptr<PrioTable> &table_,
-                              int sidx) {
-    sched_item *si = table_->sched_item(sidx);
-
-    uint32_t seq = si->seqcount.write_begin();
-    si->flags |= SCHED_ITEM_RUNNABLE;
-    si->seqcount.write_end(seq);
-    table_->MarkUpdatedIndex(sidx, /* num_retries = */ 3);
-}
-
-void update_sched_item(const std::unique_ptr<PrioTable> &table_, uint32_t sidx,
-                       uint32_t wcid, uint32_t flags, const Gtid &gtid,
-                       absl::Duration d) {
-    sched_item *si;
-
-    si = table_->sched_item(sidx);
-
-    uint32_t seq = si->seqcount.write_begin();
-    si->sid = sidx;
-    si->wcid = wcid;
-    si->flags = flags;
-    si->gpid = gtid.id();
-    si->deadline = absl::ToUnixNanos(MonotonicNow() + d);
-    si->seqcount.write_end(seq);
-    table_->MarkUpdatedIndex(sidx, /* num_retries = */ 3);
-}
-
-void setup_work_classes(const std::unique_ptr<PrioTable> &table_) {
-    work_class *wc;
-
-    wc = table_->work_class(0);
-    wc->id = 0;
-    wc->flags = WORK_CLASS_ONESHOT;
-    wc->exectime = 100;
-}
 
 // return percentile of experimentTimes
 double percentile(std::vector<double> &v, double n) {
@@ -118,8 +52,7 @@ struct Job {
     steady_clock::time_point finished;
 };
 
-std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
-                                GhostThread::KernelScheduler ks_mode,
+std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
                                 int reqs_per_sec, int runtime_secs,
                                 int num_workers, double proportion_long_jobs) {
     std::cout << "Spawning worker threads..." << std::endl;
@@ -134,37 +67,34 @@ std::vector<Job> run_experiment(const std::unique_ptr<PrioTable> &prio_table,
     std::vector<std::unique_ptr<GhostThread>> worker_threads;
     worker_threads.reserve(num_workers);
     for (int i = 0; i < num_workers; ++i) {
-        auto thread = std::make_unique<GhostThread>(
-            ks_mode, [i, &prio_table, &isdead, &work_q, &work_q_m] {
-                while (!isdead) {
-                    Job *job;
-                    {
-                        std::lock_guard lg(work_q_m);
-                        if (work_q.empty()) {
-                            continue;
-                        }
-                        job = work_q.front();
-                        work_q.pop();
+        auto thread = std::make_unique<GhostThread>(ks_mode, [&] {
+            while (!isdead) {
+                Job *job;
+                {
+                    std::lock_guard lg(work_q_m);
+                    if (work_q.empty()) {
+                        continue;
                     }
-
-                    auto start = steady_clock::now();
-                    if (job->type == JobType::Short) {
-                        while (std::chrono::duration<double>(
-                                   steady_clock::now() - start)
-                                   .count() < 1e-6) {
-                        }
-                    } else if (job->type == JobType::Long) {
-                        while (std::chrono::duration<double>(
-                                   steady_clock::now() - start)
-                                   .count() < 1e-3) {
-                        }
-                    }
-                    job->finished = steady_clock::now();
+                    job = work_q.front();
+                    work_q.pop();
                 }
-            });
 
-        update_sched_item(prio_table, i, 0, SCHED_ITEM_RUNNABLE, thread->gtid(),
-                          absl::Milliseconds(100));
+                auto start = steady_clock::now();
+                if (job->type == JobType::Short) {
+                    while (std::chrono::duration<double>(steady_clock::now() -
+                                                         start)
+                               .count() < 1e-6) {
+                    }
+                } else if (job->type == JobType::Long) {
+                    while (std::chrono::duration<double>(steady_clock::now() -
+                                                         start)
+                               .count() < 1e-3) {
+                    }
+                }
+                job->finished = steady_clock::now();
+            }
+        });
+
         worker_threads.push_back(std::move(thread));
     }
 
@@ -225,13 +155,8 @@ int main(int argc, char *argv[]) {
     int num_workers = std::atoi(argv[4]);
     double proportion_long_jobs = std::atof(argv[5]);
 
-    // Set up PrioTable
-    auto prio_table = std::make_unique<PrioTable>(
-        51200, 1, PrioTable::StreamCapacity::kStreamCapacity19);
-    setup_work_classes(prio_table);
-
-    auto jobs = run_experiment(prio_table, ks_mode, reqs_per_sec, runtime_secs,
-                               num_workers, proportion_long_jobs);
+    auto jobs = run_experiment(ks_mode, reqs_per_sec, runtime_secs, num_workers,
+                               proportion_long_jobs);
 
     std::vector<double> short_runtimes;
     std::vector<double> long_runtimes;
