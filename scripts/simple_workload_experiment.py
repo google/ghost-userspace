@@ -25,16 +25,22 @@ def run_experiment(
 
     # Set current ghOSt scheduler
     if sched_type != "cfs":
-        cmd = f"scripts/orca_client.sh {orca_port} setsched {sched_type}"
+        cmdargs = ["scripts/orca_client.sh", str(orca_port), "setsched", sched_type]
         if preemption_interval_us is not None:
-            cmd += f" {preemption_interval_us}"
-        subprocess.run(cmd, check=True)
+            cmdargs.append(str(preemption_interval_us))
+        subprocess.run(cmdargs, check=True)
 
     # Run simple workload
     proc = subprocess.run(
-        "scripts/run.sh tests/custom/simple_workload.cc "
-        f"{'cfs' if sched_type == 'cfs' else 'g'} "
-        f"{throughput} {runtime} {num_workers} {proportion_long_jobs}",
+        [
+            "scripts/run.sh",
+            "tests/custom/simple_workload.cc",
+            "cfs" if sched_type == "cfs" else "g",
+            str(throughput),
+            str(runtime),
+            str(num_workers),
+            str(proportion_long_jobs),
+        ],
         capture_output=True,
         check=True,
     )
