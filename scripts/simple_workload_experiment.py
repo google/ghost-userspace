@@ -82,38 +82,35 @@ def main() -> None:
 
         for throughput in range(5000, 20000 + 1, 5000):
             for proportion_long_jobs in [Decimal("0.01"), Decimal("0.5")]:
-                for trial in range(5):
-                    stats = run_experiment(
-                        sched_type=sched_type,
-                        throughput=throughput,
-                        runtime=5,
-                        num_workers=10,
-                        proportion_long_jobs=proportion_long_jobs,
-                    )
-                    if len(csvrows) == 0:
-                        csvrows.append(
-                            [
-                                "trial",
-                                "sched_type",
-                                "preemption_interval_us",
-                                "throughput",
-                                "proportion_long_jobs",
-                            ]
-                            + [t[0] for t in stats]
-                        )
-                    print(
-                        f"Finished experiment for sched_type={sched_type} throughput={throughput} proportion_long_jobs={proportion_long_jobs} trial={trial}"
-                    )
+                stats = run_experiment(
+                    sched_type=sched_type,
+                    throughput=throughput,
+                    runtime=5,
+                    num_workers=10,
+                    proportion_long_jobs=proportion_long_jobs,
+                )
+                if len(csvrows) == 0:
                     csvrows.append(
                         [
-                            trial,
-                            sched_type,
-                            preemption_interval_us,
-                            throughput,
-                            proportion_long_jobs,
+                            "sched_type",
+                            "preemption_interval_us",
+                            "throughput",
+                            "proportion_long_jobs",
                         ]
-                        + [t[1] for t in stats]
+                        + [t[0] for t in stats]
                     )
+                print(
+                    f"Finished experiment for sched_type={sched_type} throughput={throughput} proportion_long_jobs={proportion_long_jobs}"
+                )
+                csvrows.append(
+                    [
+                        sched_type,
+                        preemption_interval_us,
+                        throughput,
+                        proportion_long_jobs,
+                    ]
+                    + [t[1] for t in stats]
+                )
 
     with open(out_file, mode="w") as file:
         writer = csv.writer(file)
