@@ -400,12 +400,19 @@ void FifoAgent::AgentThread() {
   WaitForEnclaveReady();
 
   PeriodicEdge debug_out(absl::Seconds(1));
+  PeriodicEdge profile_peroid(absl::Milliseconds(1));
 
   while (!Finished() || !scheduler_->Empty(cpu())) {
     scheduler_->Schedule(cpu(), status_word());
-    
-    if(debug_out.Edge())
+
+    if(profile_peroid.Edge())
       scheduler_->CollectMetric();
+    if(debug_out.Edge())
+    {
+      for(auto &m : scheduler_->metrics){
+        m.printResult(stdout);
+      }
+    }
     if (verbose() && debug_out.Edge()) {
       static const int flags = verbose() > 1 ? Scheduler::kDumpStateEmptyRQ : 0;
       if (scheduler_->debug_runqueue_) {

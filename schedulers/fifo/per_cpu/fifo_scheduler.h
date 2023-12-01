@@ -130,7 +130,6 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
 
   void CollectMetric(){
     // absl::MutexLock lock(&mu_);
-    printf("Collect Metric %d\n", metrics.size());
     auto &tmp = metrics;
     // std::vector<Metric> metrics; 
     // Threadsafe by allocator's guarantee
