@@ -410,7 +410,7 @@ void FifoAgent::AgentThread() {
     if(debug_out.Edge())
     {
       for(auto &m : scheduler_->metrics){
-        m.printResult(stdout);
+        m.printResult(stderr);
       }
     }
     if (verbose() && debug_out.Edge()) {

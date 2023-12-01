@@ -5,9 +5,11 @@
 #include "absl/time/time.h"
 #include "lib/base.h"
 #include "lib/ghost.h"
+#include "absl/strings/str_format.h"
 
 #include <inttypes.h>
 #include <stdio.h>
+
 namespace ghost
 {
     class Metric // Record how long it stayed in that state

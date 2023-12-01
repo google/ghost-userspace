@@ -33,12 +33,12 @@ namespace ghost
 
     void Metric::printResult(FILE *to)
     {
-        fprintf(to, "=============== Result: tid(%" PRId64 ") ==================\n", gtid.id());
-        fprintf(to, "BlockTime: %" PRId64 "\nRunnableTime: %" PRId64 "\nQueuedTime: %" PRId64 "\nonCpuTime: %" PRId64 "\nyieldingTime: %" PRId64 "\n",
+        absl::FPrintF(to, "=============== Result: tid(%" PRId64 ") ==================\n", gtid.id());
+        absl::FPrintF(to, "BlockTime: %" PRId64 "\nRunnableTime: %" PRId64 "\nQueuedTime: %" PRId64 "\nonCpuTime: %" PRId64 "\nyieldingTime: %" PRId64 "\n",
                 absl::ToInt64Nanoseconds(blockTime), absl::ToInt64Nanoseconds(runnableTime), absl::ToInt64Nanoseconds(queuedTime),
                 absl::ToInt64Nanoseconds(onCpuTime), absl::ToInt64Nanoseconds(yieldingTime));
-        fprintf(to, "CreatedAt: %" PRId64 ", DiedAt: %" PRId64 "\n", absl::ToUnixSeconds(createdAt), absl::ToUnixSeconds(diedAt));
-        fprintf(to, "---------------------------------\n");
+        absl::FPrintF(to, "CreatedAt: %" PRId64 ", DiedAt: %" PRId64 "\n", absl::ToUnixSeconds(createdAt), absl::ToUnixSeconds(diedAt));
+        absl::FPrintF(to, "---------------------------------\n");
     }
 
     Metric::TaskState Metric::getStateFromString(std::string_view state)
