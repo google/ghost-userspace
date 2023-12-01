@@ -74,12 +74,12 @@ int main(int argc, char *argv[]) {
         char buf[orca::MAX_MESSAGE_SIZE];
         memset(buf, 0, sizeof(buf));
 
-        recv_full(sockfd, buf, sizeof(orca::OrcaHeader));
+        recv_full(connfd, buf, sizeof(orca::OrcaHeader));
         auto *header = (orca::OrcaHeader *)buf;
 
         switch (header->type) {
         case orca::MessageType::SetScheduler: {
-            recv_full(sockfd, buf + sizeof(orca::OrcaHeader),
+            recv_full(connfd, buf + sizeof(orca::OrcaHeader),
                       sizeof(orca::OrcaSetScheduler) -
                           sizeof(orca::OrcaHeader));
 
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
             // send ack
             orca::OrcaHeader ack;
             ack.type = orca::MessageType::Ack;
-            send_full(sockfd, (const char *)&ack, sizeof(ack));
+            send_full(connfd, (const char *)&ack, sizeof(ack));
 
             break;
         }
