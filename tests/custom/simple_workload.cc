@@ -5,13 +5,13 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "absl/flags/parse.h"
@@ -175,24 +175,56 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    std::vector<std::string> pcts = {"0",  "25", "50",   "75",
+                                     "90", "99", "99.9", "100"};
+
     printf("Finished running. %d short tasks, %d long tasks ran.\n",
            (int)short_runtimes.size(), (int)long_runtimes.size());
     printf("== Short task stats ==\n");
-    printf("0th percentile: %.3f\n", percentile(short_runtimes, 0));
-    printf("25th percentile: %.3f\n", percentile(short_runtimes, 0.25));
-    printf("50th percentile: %.3f\n", percentile(short_runtimes, 0.5));
-    printf("75th percentile: %.3f\n", percentile(short_runtimes, 0.75));
-    printf("90th percentile: %.3f\n", percentile(short_runtimes, 0.9));
-    printf("99th percentile: %.3f\n", percentile(short_runtimes, 0.99));
-    printf("99.9th percentile: %.3f\n", percentile(short_runtimes, 0.999));
-    printf("100th percentile: %.3f\n", percentile(short_runtimes, 1));
+    for (const auto &p : pcts) {
+        printf("%s percentile: %.3f\n", p.c_str(),
+               percentile(short_runtimes, strtod(p) / 100.0));
+    }
     printf("== Long task stats ==\n");
-    printf("0th percentile: %.3f\n", percentile(long_runtimes, 0));
-    printf("25th percentile: %.3f\n", percentile(long_runtimes, 0.25));
-    printf("50th percentile: %.3f\n", percentile(long_runtimes, 0.5));
-    printf("75th percentile: %.3f\n", percentile(long_runtimes, 0.75));
-    printf("90th percentile: %.3f\n", percentile(long_runtimes, 0.9));
-    printf("99th percentile: %.3f\n", percentile(long_runtimes, 0.99));
-    printf("99.9th percentile: %.3f\n", percentile(long_runtimes, 0.999));
-    printf("100th percentile: %.3f\n", percentile(long_runtimes, 1));
+    for (const auto &p : pcts) {
+        printf("%s percentile: %.3f\n", p.c_str(),
+               percentile(long_runtimes, strtod(p) / 100.0));
+    }
+
+    std::vector<std::pair<std::string, std::string>> stats;
+    stats.push_back({"num_short", std::to_string(short_runtimes.size())});
+    stats.push_back({"num_long", std::to_string(long_runtimes.size())});
+    for (const auto &p : pcts) {
+        std::ostringstream oss;
+        oss << "short_" << p << "_pct";
+        stats.push_back({oss.str(), std::to_string(percentile(
+                                        short_runtimes, strtod(p) / 100.0))});
+    }
+    for (const auto &p : pcts) {
+        std::ostringstream oss;
+        oss << "long_" << p << "_pct";
+        stats.push_back({oss.str(), std::to_string(percentile(
+                                        long_runtimes, strtod(p) / 100.0))});
+    }
+
+    printf("csv format (");
+    bool first = true;
+    for (const auto &[key, _] : stats) {
+        if (!first) {
+            printf(", ");
+        }
+        first = false;
+        printf("%s", key.c_str());
+    }
+    printf(")\n");
+
+    first = true;
+    for (const auto &[_, value] : stats) {
+        if (!first) {
+            printf(", ");
+        }
+        first = false;
+        printf("%s", key.c_str());
+    }
+    printf("\n");
 }
