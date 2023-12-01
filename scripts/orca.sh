@@ -1,6 +1,9 @@
 #!/bin/bash
 
-ARGS=("$@")
-make clean -C orca
-make -C orca
-sudo ./orca/orca ${ARGS[@]}
+if [ "$1" == "build" ]; then
+    make clean -C orca
+    make -C orca
+else
+    ARGS=("$@")
+    sudo ./orca/orca ${ARGS[@]}
+fi

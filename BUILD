@@ -1311,6 +1311,22 @@ cc_test(
     ],
 )
 
+# Simple workload.
+
+cc_binary(
+    name = "simple_workload",
+    srcs = [
+        "tests/custom/simple_workload.cc",
+    ],
+    copts = compiler_flags,
+    deps = [
+        ":base",
+        ":ghost",
+        ":shared",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
 # Orca agent.
 
 cc_binary(
