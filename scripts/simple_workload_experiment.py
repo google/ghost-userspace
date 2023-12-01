@@ -46,7 +46,7 @@ def run_experiment(
             str(num_workers),
             str(proportion_long_jobs),
         ],
-        capture_output=True,
+        stdout=subprocess.PIPE,
         check=True,
     )
 
