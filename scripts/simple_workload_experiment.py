@@ -47,8 +47,7 @@ def run_experiment(
 
     # Parse CSV portion of output and return it
     lines = [line.decode("utf-8").strip() for line in proc.stdout.splitlines()]
-    csvlines = lines[lines.index("<csv>") : lines.index("</csv>")]
-    print(csvlines)
+    csvlines = lines[(lines.index("<csv>") + 1) : lines.index("</csv>")]
     assert len(csvlines) == 2
     keys = [key for key in csvlines[0].split(", ")]
     values = [value for value in csvlines[1].split(", ")]
