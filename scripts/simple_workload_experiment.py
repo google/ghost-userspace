@@ -1,14 +1,18 @@
 #!/usr/bin/python3
 
 import argparse
+import csv
 from decimal import Decimal
 import subprocess
-from typing import Dict, Optional
+from typing import Any, List, Optional, Tuple
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--orca_port", type=int, required=True, help="the port of the running Orca server"
+)
+parser.add_argument(
+    "--out_file", type=str, required=True, help="output file for experiment results"
 )
 
 
@@ -20,7 +24,7 @@ def run_experiment(
     num_workers: int,
     proportion_long_jobs: Decimal,
     preemption_interval_us: Optional[int] = None,
-) -> Dict[str, str]:
+) -> List[Tuple[str, str]]:
     "Run the experiment and return the CSV portion of the results."
 
     # Set current ghOSt scheduler
@@ -31,6 +35,7 @@ def run_experiment(
         subprocess.run(cmdargs, check=True)
 
     # Run simple workload
+    print("Running simple_workload")
     proc = subprocess.run(
         [
             "scripts/run.sh",
@@ -51,22 +56,53 @@ def run_experiment(
     assert len(csvlines) == 2
     keys = [key for key in csvlines[0].split(", ")]
     values = [value for value in csvlines[1].split(", ")]
-    print(keys, values)
-    return dict(zip(keys, values))
+    return list(zip(keys, values))
 
 
 def main() -> None:
     args = parser.parse_args()
-    print(
-        run_experiment(
-            orca_port=args.orca_port,
-            sched_type="dFCFS",
-            throughput=10000,
-            runtime=5,
-            num_workers=10,
-            proportion_long_jobs=Decimal("0.01"),
-        )
-    )
+    orca_port: int = args.orca_port
+    out_file: str = args.out_file
+
+    csvrows: List[List[Any]] = []
+
+    for sched_type in ["dFCFS", "cFCFS", "cfs"]:
+        for throughput in range(1000, 21000, 1000):
+            for proportion_long_jobs in [Decimal("0.01"), Decimal("0.5")]:
+                for trial in range(10):
+                    stats = run_experiment(
+                        orca_port=orca_port,
+                        sched_type=sched_type,
+                        throughput=throughput,
+                        runtime=5,
+                        num_workers=10,
+                        proportion_long_jobs=proportion_long_jobs,
+                    )
+                    if len(csvrows) == 0:
+                        csvrows.append(
+                            [
+                                "trial",
+                                "sched_type",
+                                "throughput",
+                                "proportion_long_jobs",
+                            ]
+                            + [t[0] for t in stats]
+                        )
+                    print(
+                        f"Finished experiment for sched_type={sched_type} throughput={throughput} proportion_long_jobs={proportion_long_jobs} trial={trial}"
+                    )
+                    csvrows.append(
+                        [trial, sched_type, throughput, proportion_long_jobs]
+                        + [t[1] for t in stats]
+                    )
+
+    with open(out_file, mode="w") as file:
+        writer = csv.writer(file)
+
+        for row in csvrows:
+            writer.writerow(row)
+
+    print("Finished!")
 
 
 if __name__ == "__main__":
