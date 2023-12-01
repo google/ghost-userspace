@@ -29,6 +29,7 @@ public:
     Orca() = default;
 
     ~Orca() {
+        printf("calling destructor\n");
         if (curr_sched_pid != 0) {
             terminate_child(curr_sched_pid);
         }
