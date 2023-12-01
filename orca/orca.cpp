@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -51,7 +52,16 @@ int main(int argc, char *argv[]) {
         panic("listen");
     }
 
-    orca::Orca orca_agent;
+    // put orca_agent ptr in static memory (so SIGINT handler can clean it up)
+    static std::unique_ptr<orca::Orca> orca_agent;
+    orca_agent = std::make_unique<orca::Orca>();
+
+    signal(SIGINT, [](int signum) {
+        // call Orca destructor
+        orca_agent = nullptr;
+
+        exit(signum);
+    });
 
     printf("Orca listening on port %d...\n", port);
     while (true) {
@@ -81,7 +91,7 @@ int main(int argc, char *argv[]) {
             printf(
                 "Received SetScheduler. type=%d, preemption_interval_us=%d\n",
                 (int)msg->config.type, msg->config.preemption_interval_us);
-            orca_agent.set_scheduler(msg->config);
+            orca_agent->set_scheduler(msg->config);
             break;
         }
         default:
