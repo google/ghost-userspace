@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
             auto *msg = (orca::OrcaSetScheduler *)buf;
             printf(
                 "Received SetScheduler. type=%d, preemption_interval_us=%d\n",
-                msg->config.type, msg->config.preemption_interval_us);
+                (int)msg->config.type, msg->config.preemption_interval_us);
             orca_agent.set_scheduler(msg->config);
             break;
         }
