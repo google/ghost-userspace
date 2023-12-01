@@ -132,7 +132,7 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
 }
 
 int main(int argc, char *argv[]) {
-    srand(time());
+    srand(time(NULL));
 
     if (argc != 6) {
         std::cout << "Usage: " << argv[0]
