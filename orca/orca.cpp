@@ -136,25 +136,14 @@ int main(int argc, char *argv[]) {
             if (schedfd != -1 && FD_ISSET(schedfd, &readfds)) {
                 printf("handling Scheduler message\n");
 
-                // read data until none left to read=
                 char buf[1024];
-                std::string output{};
+                memset(buf, 0, sizeof(buf));
 
-                ssize_t rval;
-                while (true) {
-                    memset(buf, 0, sizeof(buf));
-                    rval = read(schedfd, buf, sizeof(buf) - 1);
-                    if (rval == -1) {
-                        panic("read");
-                    }
-                    if (rval == 0) {
-                        // done receiving bytes
-                        break;
-                    }
-                    output.append(buf);
+                if (read(schedfd, buf, sizeof(buf) - 1) == -1) {
+                    panic("read");
                 }
 
-                std::cout << "SCHEDULER: " << output << std::endl;
+                std::cout << "SCHEDULER: " << buf << std::endl;
 
                 printf("done handling Scheduler message\n");
             }
