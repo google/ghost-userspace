@@ -206,6 +206,7 @@ int main(int argc, char *argv[]) {
     }
 
     printf("csv section\n");
+
     bool first = true;
     for (const auto &[key, _] : stats) {
         if (!first) {
@@ -214,7 +215,7 @@ int main(int argc, char *argv[]) {
         first = false;
         printf("%s", key.c_str());
     }
-    printf("/csv section\n");
+    printf("\n");
 
     first = true;
     for (const auto &[_, value] : stats) {
@@ -225,4 +226,6 @@ int main(int argc, char *argv[]) {
         printf("%s", value.c_str());
     }
     printf("\n");
+
+    printf("/csv section\n");
 }
