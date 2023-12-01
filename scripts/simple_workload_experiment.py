@@ -3,7 +3,7 @@
 import argparse
 from decimal import Decimal
 import subprocess
-from typing import Optional
+from typing import Dict, Optional
 
 
 parser = argparse.ArgumentParser()
@@ -20,7 +20,7 @@ def run_experiment(
     num_workers: int,
     proportion_long_jobs: Decimal,
     preemption_interval_us: Optional[int] = None,
-) -> dict[str, str]:
+) -> Dict[str, str]:
     "Run the experiment and return the CSV portion of the results."
 
     # Set current ghOSt scheduler
