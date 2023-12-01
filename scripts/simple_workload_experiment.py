@@ -4,6 +4,7 @@ import argparse
 import csv
 from decimal import Decimal
 import subprocess
+import time
 from typing import Any, List, Tuple
 
 
@@ -75,6 +76,9 @@ def main() -> None:
             sched_type=sched_type,
             preemption_interval_us=preemption_interval_us,
         )
+
+        # hack: wait a bit to let scheduler start up
+        time.sleep(0.1)
 
         for throughput in range(5000, 20000 + 1, 5000):
             for proportion_long_jobs in [Decimal("0.01"), Decimal("0.5")]:
