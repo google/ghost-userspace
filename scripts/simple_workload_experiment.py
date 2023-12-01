@@ -16,23 +16,26 @@ parser.add_argument(
 )
 
 
-def run_experiment(
-    orca_port: int,
-    sched_type: str,
-    throughput: int,
-    runtime: int,
-    num_workers: int,
-    proportion_long_jobs: Decimal,
-    preemption_interval_us: int = 0,
-) -> List[Tuple[str, str]]:
-    "Run the experiment and return the CSV portion of the results."
+def set_scheduler(
+    orca_port: int, sched_type: str, preemption_interval_us: int = 0
+) -> None:
+    "Set the scheduler via orca_client."
 
-    # Set current ghOSt scheduler
     if sched_type != "cfs":
         cmdargs = ["scripts/orca_client.sh", str(orca_port), "setsched", sched_type]
         if preemption_interval_us > 0:
             cmdargs.append(str(preemption_interval_us))
         subprocess.run(cmdargs, check=True)
+
+
+def run_experiment(
+    sched_type: str,
+    throughput: int,
+    runtime: int,
+    num_workers: int,
+    proportion_long_jobs: Decimal,
+) -> List[Tuple[str, str]]:
+    "Run the experiment and return the CSV portion of the results."
 
     # Run simple workload
     print("Running simple_workload")
@@ -66,18 +69,22 @@ def main() -> None:
     csvrows: List[List[Any]] = []
 
     for sched_type in ["dFCFS", "cFCFS", "cfs"]:
+        preemption_interval_us = 500 if sched_type == "cFCFS" else 0
+        set_scheduler(
+            orca_port=orca_port,
+            sched_type=sched_type,
+            preemption_interval_us=preemption_interval_us,
+        )
+
         for throughput in range(5000, 20000 + 1, 5000):
             for proportion_long_jobs in [Decimal("0.01"), Decimal("0.5")]:
                 for trial in range(5):
-                    preemption_interval_us = 500 if sched_type == "cFCFS" else 0
                     stats = run_experiment(
-                        orca_port=orca_port,
                         sched_type=sched_type,
                         throughput=throughput,
                         runtime=5,
                         num_workers=10,
                         proportion_long_jobs=proportion_long_jobs,
-                        preemption_interval_us=preemption_interval_us,
                     )
                     if len(csvrows) == 0:
                         csvrows.append(
