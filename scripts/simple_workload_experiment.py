@@ -67,7 +67,7 @@ def main() -> None:
     csvrows: List[List[Any]] = []
 
     for sched_type in ["dFCFS", "cFCFS", "cfs"]:
-        for throughput in [10000]:
+        for throughput in range(5000, 20000 + 1, 5000):
             for proportion_long_jobs in [Decimal("0.01"), Decimal("0.5")]:
                 for trial in range(5):
                     stats = run_experiment(
@@ -77,6 +77,7 @@ def main() -> None:
                         runtime=5,
                         num_workers=10,
                         proportion_long_jobs=proportion_long_jobs,
+                        preemption_interval_us=500 if sched_type == "cFCFS" else None,
                     )
                     if len(csvrows) == 0:
                         csvrows.append(

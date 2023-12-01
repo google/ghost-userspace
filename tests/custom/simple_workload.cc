@@ -132,6 +132,8 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
 }
 
 int main(int argc, char *argv[]) {
+    srand(time());
+
     if (argc != 6) {
         std::cout << "Usage: " << argv[0]
                   << " ghost|cfs reqs_per_sec runtime_secs num_workers "
