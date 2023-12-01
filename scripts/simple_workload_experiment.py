@@ -41,7 +41,7 @@ def run_experiment(
     print("Running simple_workload")
     proc = subprocess.run(
         [
-            "bazel-bin/simple_workload",
+            "scripts/run_sw.sh",
             "cfs" if sched_type == "cfs" else "ghost",
             str(throughput),
             str(runtime),
