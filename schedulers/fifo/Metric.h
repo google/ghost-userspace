@@ -45,7 +45,7 @@ namespace ghost
         void printResult(FILE *to);
 
     private:
-        static Metric::TaskState getStateFromString(std::string_view state)
+        static Metric::TaskState getStateFromString(std::string_view state);
     };
 }
 #endif
