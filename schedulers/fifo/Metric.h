@@ -41,7 +41,7 @@ namespace ghost
 
         Metric() {}
         Metric(Gtid _gtid) : gtid(_gtid), createdAt(absl::Now()), currentState(TaskState::kCreated), stateStarted(createdAt) {}
-        void updateState(const TaskState newState);
+        void updateState(std::string_view newState);
         void printResult(FILE *to);
 
     private:

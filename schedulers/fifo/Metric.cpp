@@ -2,8 +2,10 @@
 
 namespace ghost
 {
-    void Metric::updateState(const Metric::TaskState newState)
+    void Metric::updateState(std::string_view _newState)
     {
+        TaskState newState = getStateFromString(_newState);
+
         absl::Time currentTime = absl::Now();
         absl::Duration d = currentTime - stateStarted;
         switch (currentState)
