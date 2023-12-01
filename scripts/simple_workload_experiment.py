@@ -67,9 +67,9 @@ def main() -> None:
     csvrows: List[List[Any]] = []
 
     for sched_type in ["dFCFS", "cFCFS", "cfs"]:
-        for throughput in range(1000, 21000, 1000):
+        for throughput in [10000]:
             for proportion_long_jobs in [Decimal("0.01"), Decimal("0.5")]:
-                for trial in range(10):
+                for trial in range(5):
                     stats = run_experiment(
                         orca_port=orca_port,
                         sched_type=sched_type,
