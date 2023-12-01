@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
                                         long_runtimes, stod(p) / 100.0))});
     }
 
-    printf("csv section\n");
+    printf("<csv>\n");
 
     bool first = true;
     for (const auto &[key, _] : stats) {
@@ -227,5 +227,5 @@ int main(int argc, char *argv[]) {
     }
     printf("\n");
 
-    printf("/csv section\n");
+    printf("</csv>\n");
 }
