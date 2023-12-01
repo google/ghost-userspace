@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
         first = false;
         printf("%s", key.c_str());
     }
-    printf("\n");
+    printf("/csv section\n");
 
     first = true;
     for (const auto &[_, value] : stats) {
