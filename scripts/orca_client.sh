@@ -5,5 +5,5 @@ if [ "$1" == "build" ]; then
     make -C orca
 else
     ARGS=("$@")
-    sudo ./orca/orca_client ${ARGS[@]}
+    ./orca/orca_client ${ARGS[@]}
 fi
