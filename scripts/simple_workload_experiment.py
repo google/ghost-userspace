@@ -42,13 +42,14 @@ def run_experiment(
     proc = subprocess.run(
         [
             "bazel-bin/simple_workload",
-            "cfs" if sched_type == "cfs" else "g",
+            "cfs" if sched_type == "cfs" else "ghost",
             str(throughput),
             str(runtime),
             str(num_workers),
             str(proportion_long_jobs),
         ],
         stdout=subprocess.PIPE,
+        shell=True,
         check=True,
     )
 
