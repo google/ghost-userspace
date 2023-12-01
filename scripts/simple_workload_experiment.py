@@ -4,7 +4,7 @@ import argparse
 import csv
 from decimal import Decimal
 import subprocess
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Tuple
 
 
 parser = argparse.ArgumentParser()
@@ -23,14 +23,14 @@ def run_experiment(
     runtime: int,
     num_workers: int,
     proportion_long_jobs: Decimal,
-    preemption_interval_us: Optional[int] = None,
+    preemption_interval_us: int = 0,
 ) -> List[Tuple[str, str]]:
     "Run the experiment and return the CSV portion of the results."
 
     # Set current ghOSt scheduler
     if sched_type != "cfs":
         cmdargs = ["scripts/orca_client.sh", str(orca_port), "setsched", sched_type]
-        if preemption_interval_us is not None:
+        if preemption_interval_us > 0:
             cmdargs.append(str(preemption_interval_us))
         subprocess.run(cmdargs, check=True)
 
@@ -70,6 +70,7 @@ def main() -> None:
         for throughput in range(5000, 20000 + 1, 5000):
             for proportion_long_jobs in [Decimal("0.01"), Decimal("0.5")]:
                 for trial in range(5):
+                    preemption_interval_us = 500 if sched_type == "cFCFS" else 0
                     stats = run_experiment(
                         orca_port=orca_port,
                         sched_type=sched_type,
@@ -77,13 +78,14 @@ def main() -> None:
                         runtime=5,
                         num_workers=10,
                         proportion_long_jobs=proportion_long_jobs,
-                        preemption_interval_us=500 if sched_type == "cFCFS" else None,
+                        preemption_interval_us=preemption_interval_us,
                     )
                     if len(csvrows) == 0:
                         csvrows.append(
                             [
                                 "trial",
                                 "sched_type",
+                                "preemption_interval_us",
                                 "throughput",
                                 "proportion_long_jobs",
                             ]
@@ -93,7 +95,13 @@ def main() -> None:
                         f"Finished experiment for sched_type={sched_type} throughput={throughput} proportion_long_jobs={proportion_long_jobs} trial={trial}"
                     )
                     csvrows.append(
-                        [trial, sched_type, throughput, proportion_long_jobs]
+                        [
+                            trial,
+                            sched_type,
+                            preemption_interval_us,
+                            throughput,
+                            proportion_long_jobs,
+                        ]
                         + [t[1] for t in stats]
                     )
 
