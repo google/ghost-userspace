@@ -90,8 +90,6 @@ int main(int argc, char *argv[]) {
             continue;
         } else {
             if (FD_ISSET(sockfd, &readfds)) {
-                printf("handling Socket message\n");
-
                 int connfd = accept(sockfd, NULL, NULL);
                 if (connfd == -1) {
                     printf("accept returned -1\n");
@@ -130,22 +128,17 @@ int main(int argc, char *argv[]) {
                 }
 
                 close(connfd);
-
-                printf("done handling Socket message\n");
             }
             if (schedfd != -1 && FD_ISSET(schedfd, &readfds)) {
-                printf("handling Scheduler message\n");
-
-                char buf[1024];
+                char buf[8192];
                 memset(buf, 0, sizeof(buf));
 
                 if (read(schedfd, buf, sizeof(buf) - 1) == -1) {
                     panic("read");
                 }
 
-                std::cout << "SCHEDULER: " << buf << std::endl;
-
-                printf("done handling Scheduler message\n");
+                // forward scheduler's output to our stdout
+                std::cout << buf << std::flush;
             }
         }
     }
