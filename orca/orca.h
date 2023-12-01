@@ -50,13 +50,7 @@ public:
     }
 
     // Returns file descriptor which contains stdout of scheduler process
-    int get_sched_stdout_fd() {
-        int stdoutfd = pipe_fd[0];
-        if (stdoutfd == -1) {
-            panic("invalid stdout fd");
-        }
-        return stdoutfd;
-    }
+    int get_sched_stdout_fd() { return pipe_fd[0]; }
 
 private:
     int pipe_fd[2];
