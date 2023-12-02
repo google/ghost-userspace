@@ -29,6 +29,8 @@ namespace ghost
             break;
         }
         currentState = newState;
+        if(newState == TaskState::kDied)
+            diedAt = currentTime;
     }
 
     void Metric::printResult(FILE *to)
