@@ -21,8 +21,8 @@ public:
     void unsub(handle_t handle) {
         auto it = listeners.find(handle);
         if (it == listeners.end()) {
-            for (auto &it : listeners) {
-                printf("%d\n", it->first);
+            for (auto &p : listeners) {
+                printf("%d\n", p.first);
             }
             panic("handle not found in listeners");
         }
