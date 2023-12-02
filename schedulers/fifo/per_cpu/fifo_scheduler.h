@@ -141,6 +141,8 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
 
   static constexpr int kDebugRunqueue = 1;
   static constexpr int kCountAllTasks = 2;
+  absl::Mutex deadTasksMu_;
+  std::vector<Metric> deadTasks; 
 
  protected:
   void TaskNew(FifoTask* task, const Message& msg) final;

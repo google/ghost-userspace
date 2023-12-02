@@ -161,12 +161,17 @@ void FifoScheduler::TaskDeparted(FifoTask* task, const Message& msg) {
     Cpu cpu = topology()->cpu(payload->cpu);
     enclave()->GetAgent(cpu)->Ping();
   }
-
+  task->m.updateState("Died");
+  absl::MutexLock lock(&deadTasksMu_);
+  deadTasks.push_back(task);
   allocator()->FreeTask(task);
 }
 
 void FifoScheduler::TaskDead(FifoTask* task, const Message& msg) {
   CHECK(task->blocked());
+  task->m.updateState("Died");
+  absl::MutexLock lock(&deadTasksMu_);
+  deadTasks.push_back(task);
   allocator()->FreeTask(task);
 }
 
@@ -409,9 +414,14 @@ void FifoAgent::AgentThread() {
       auto res = scheduler_->CollectMetric();
       if(debug_out.Edge())
       {
+        absl::MutexLock lock(&deadTasksMu_);
         for(auto &m : res){
           m.printResult(stderr);
         }
+        for(auto &m : scheduler_->deadTasks){
+          m.printResult(stderr);
+        }
+        scheduler_->deadTasks.clear();
       }
     }
     
