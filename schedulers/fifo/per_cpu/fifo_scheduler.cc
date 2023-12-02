@@ -5,7 +5,6 @@
 // https://developers.google.com/open-source/licenses/bsd
 
 #include "schedulers/fifo/per_cpu/fifo_scheduler.h"
-#include <diptest/dip.hpp>
 
 #include <memory>
 
