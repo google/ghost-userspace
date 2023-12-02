@@ -124,6 +124,7 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
         // Mark tail latency of remaining jobs as very large value
         if (std::chrono::duration<double>(steady_clock::now() - shutdown_at)
                 .count() > 10.0) {
+            printf("Test timed out.\n");
             while (!work_q.empty()) {
                 // mark tail latency as 30 seconds (arbitrary large value)
                 work_q.front()->finished =

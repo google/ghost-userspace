@@ -4,7 +4,7 @@ import argparse
 import csv
 from decimal import Decimal
 import subprocess
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 
 parser = argparse.ArgumentParser()
@@ -34,10 +34,14 @@ def run_experiment(
     runtime: int,
     num_workers: int,
     proportion_long_jobs: Decimal,
-) -> List[Tuple[str, str]]:
-    "Run the experiment and return the CSV portion of the results."
+) -> Tuple[List[List[str]], bool]:
+    """Run an experiment.
 
-    # Run simple workload
+    Returns the CSV portion of the results,
+    as well as whether the experiment timed out.
+
+    """
+
     print("Running simple_workload")
     proc = subprocess.run(
         [
@@ -54,11 +58,10 @@ def run_experiment(
 
     # Parse CSV portion of output and return it
     lines = [line.decode("utf-8").strip() for line in proc.stdout.splitlines()]
+    timed_out = any([line.strip() == "Test timed out." for line in lines])
     csvlines = lines[(lines.index("<csv>") + 1) : lines.index("</csv>")]
     assert len(csvlines) == 2
-    keys = [key for key in csvlines[0].split(", ")]
-    values = [value for value in csvlines[1].split(", ")]
-    return list(zip(keys, values))
+    return ([csvline.split(", ") for csvline in csvlines], timed_out)
 
 
 def run_sched_exp(orca_port: int, sched_type: str) -> List[List[str]]:
@@ -73,44 +76,46 @@ def run_sched_exp(orca_port: int, sched_type: str) -> List[List[str]]:
         preemption_interval_us=preemption_interval_us,
     )
 
-    for throughput in range(20000, 200000 + 1, 20000):
-        for proportion_long_jobs in [
-            Decimal("0"),
-            Decimal("0.01"),
-            Decimal("0.1"),
-            Decimal("0.5"),
-        ]:
+    for proportion_long_jobs in [
+        Decimal("0"),
+        Decimal("0.01"),
+        Decimal("0.1"),
+        Decimal("0.5"),
+    ]:
+        for throughput in range(20000, 200000 + 1, 20000):
             print(
                 f"Starting experiment for sched_type={sched_type} "
                 f"throughput={throughput} "
                 f"proportion_long_jobs={proportion_long_jobs}"
             )
-            stats = run_experiment(
+            (stats, timed_out) = run_experiment(
                 sched_type=sched_type,
                 throughput=throughput,
                 runtime=5,
                 num_workers=10,
                 proportion_long_jobs=proportion_long_jobs,
             )
+
+            header = [
+                "sched_type",
+                "preemption_interval_us",
+                "throughput",
+                "proportion_long_jobs",
+            ] + stats[0]
+
+            row = [
+                sched_type,
+                str(preemption_interval_us),
+                str(throughput),
+                str(proportion_long_jobs),
+            ] + stats[1]
+
             if len(rows) == 0:
-                rows.append(
-                    [
-                        "sched_type",
-                        "preemption_interval_us",
-                        "throughput",
-                        "proportion_long_jobs",
-                    ]
-                    + [t[0] for t in stats]
-                )
-            rows.append(
-                [
-                    sched_type,
-                    str(preemption_interval_us),
-                    str(throughput),
-                    str(proportion_long_jobs),
-                ]
-                + [t[1] for t in stats]
-            )
+                rows.append(header)
+            rows.append(row)
+
+            if timed_out:
+                break
 
     return rows
 
