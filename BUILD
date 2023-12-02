@@ -689,7 +689,6 @@ cc_library(
     copts = compiler_flags,
     deps = [
         ":agent",
-        "@diptest//:diptest"
     ],
 )
 
@@ -725,7 +724,6 @@ cc_library(
         ":agent",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
-        "@diptest//:diptest"
     ],
 )
 
