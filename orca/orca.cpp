@@ -126,6 +126,8 @@ int main(int argc, char *argv[]) {
                             ack.type = orca::MessageType::Ack;
                             send_full(connfd, (const char *)&ack, sizeof(ack));
                             sched_ready.unsub(handle);
+
+                            close(connfd);
                         });
 
                     break;
@@ -133,8 +135,6 @@ int main(int argc, char *argv[]) {
                 default:
                     panic("unimplemented message type");
                 }
-
-                close(connfd);
             }
             if (schedfd != -1 && FD_ISSET(schedfd, &readfds)) {
                 char buf[8192];
