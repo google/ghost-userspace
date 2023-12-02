@@ -7,7 +7,7 @@ PW=pass
 restart_orca() {
     echo $PW | sudo -S pkill -KILL orca/orca
     echo $PW | sudo -S scripts/cleanup.sh
-    echo $PW | sudo -S orca/orca 8000
+    echo $PW | sudo -S orca/orca 8000 &
     sleep 1
 }
 
