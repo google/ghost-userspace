@@ -322,7 +322,7 @@ void FifoScheduler::GlobalSchedule(const StatusWord& agent_sw,
 
     if (cs->current) {
       cs->current->run_state = FifoTask::RunState::kRunnable;
-      task->m.updateState(FifoTask::RunStateToString(task->run_state));
+      cs->current->m.updateState(FifoTask::RunStateToString(cs->current->run_state));
       Enqueue(cs->current);
     }
     cs->current = next;
@@ -371,7 +371,7 @@ void FifoScheduler::GlobalSchedule(const StatusWord& agent_sw,
     for (FifoTask* t : yielding_tasks_) {
       CHECK_EQ(t->run_state, FifoTask::RunState::kYielding);
       t->run_state = FifoTask::RunState::kRunnable;
-      task->m.updateState(FifoTask::RunStateToString(task->run_state));
+      t->m.updateState(FifoTask::RunStateToString(t->run_state));
       Enqueue(t);
     }
     yielding_tasks_.clear();
