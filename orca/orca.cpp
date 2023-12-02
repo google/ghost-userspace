@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "event_signal.h"
 #include "helpers.h"
 #include "orca.h"
 #include "protocol.h"
@@ -62,6 +63,8 @@ int main(int argc, char *argv[]) {
 
         exit(signum);
     });
+
+    EventSignal<int> sched_ready;
 
     printf("Orca listening on port %d...\n", port);
     while (true) {
@@ -116,10 +119,14 @@ int main(int argc, char *argv[]) {
 
                     orca_agent->set_scheduler(msg->config);
 
-                    // send ack
-                    orca::OrcaHeader ack;
-                    ack.type = orca::MessageType::Ack;
-                    send_full(connfd, (const char *)&ack, sizeof(ack));
+                    EventSignal<int>::handle_t handle =
+                        sched_ready.sub([&](int) {
+                            // send ack
+                            orca::OrcaHeader ack;
+                            ack.type = orca::MessageType::Ack;
+                            send_full(connfd, (const char *)&ack, sizeof(ack));
+                            sched_ready.unsub(handle);
+                        });
 
                     break;
                 }
@@ -139,6 +146,10 @@ int main(int argc, char *argv[]) {
 
                 // forward scheduler's output to our stdout
                 std::cout << buf << std::flush;
+
+                if (strstr(buf, "Initialization complete, ghOSt active.")) {
+                    sched_ready.fire(0);
+                }
 
                 /**
                  *  If we find a substring indicating crash:

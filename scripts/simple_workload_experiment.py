@@ -77,10 +77,7 @@ def main() -> None:
             preemption_interval_us=preemption_interval_us,
         )
 
-        # hack: wait a bit to let scheduler start up
-        time.sleep(0.1)
-
-        for throughput in range(5000, 20000 + 1, 5000):
+        for throughput in range(5000, 50000 + 1, 5000):
             for proportion_long_jobs in [Decimal("0.01"), Decimal("0.5")]:
                 stats = run_experiment(
                     sched_type=sched_type,
