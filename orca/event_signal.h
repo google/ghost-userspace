@@ -14,15 +14,17 @@ public:
     handle_t sub(std::function<void(T)> &&callback) {
         handle_t handle = next_handle++;
         listeners[handle] = std::move(callback);
+        printf("Registering handle %d\n", handle);
         return handle;
     }
 
     // Unsubscribe from the event.
     void unsub(handle_t handle) {
+        printf("Unregistering handle %d\n", handle);
         auto it = listeners.find(handle);
         if (it == listeners.end()) {
             for (auto &p : listeners) {
-                printf("%d\n", p.first);
+                printf("debug %d\n", p.first);
             }
             panic("handle not found in listeners");
         }
