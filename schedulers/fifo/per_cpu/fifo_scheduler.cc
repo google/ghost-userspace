@@ -414,7 +414,7 @@ void FifoAgent::AgentThread() {
       auto res = scheduler_->CollectMetric();
       if(debug_out.Edge())
       {
-        absl::MutexLock lock(&deadTasksMu_);
+        absl::MutexLock lock(&(scheduler_->deadTasksMu_));
         for(auto &m : res){
           m.printResult(stderr);
         }
