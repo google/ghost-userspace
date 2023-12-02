@@ -14,6 +14,7 @@
 #include "absl/time/time.h"
 #include "lib/agent.h"
 #include "lib/scheduler.h"
+#include "schedulers/fifo/Metric.h"
 
 namespace ghost {
 
@@ -63,6 +64,8 @@ struct FifoTask : public Task<> {
   // Whether the last execution was preempted or not.
   bool preempted = false;
   bool prio_boost = false;
+
+  Metric m;
 };
 
 class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
@@ -119,6 +122,19 @@ class FifoScheduler : public BasicDispatchScheduler<FifoTask> {
   std::atomic<bool> debug_runqueue_ = false;
 
   static const int kDebugRunqueue = 1;
+
+  std::vector<Metric> CollectMetric(){
+    std::vector<Metric> tmp; 
+    // Threadsafe by allocator's guarantee
+    allocator()->ForEachTask([&tmp](Gtid gtid, const FifoTask* task) {
+      tmp.push_back(task->m);
+      // metrics.back().printResult(stdout);
+      return true;
+    });
+    return tmp; 
+  }
+
+  std::vector<Metric> deadTasks; 
 
  private:
   struct CpuState {

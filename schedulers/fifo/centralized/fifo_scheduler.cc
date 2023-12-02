@@ -97,10 +97,12 @@ void FifoScheduler::TaskNew(FifoTask* task, const Message& msg) {
 
   task->seqnum = msg.seqnum();
   task->run_state = FifoTask::RunState::kBlocked;
+  task->m.updateState(FifoTask::RunStateToString(task->run_state));
 
   const Gtid gtid(payload->gtid);
   if (payload->runnable) {
     task->run_state = FifoTask::RunState::kRunnable;
+    task->m.updateState(FifoTask::RunStateToString(task->run_state));
     Enqueue(task);
   }
 
@@ -114,6 +116,7 @@ void FifoScheduler::TaskRunnable(FifoTask* task, const Message& msg) {
   CHECK(task->blocked());
 
   task->run_state = FifoTask::RunState::kRunnable;
+  task->m.updateState(FifoTask::RunStateToString(task->run_state));
   task->prio_boost = !payload->deferrable;
   Enqueue(task);
 }
@@ -133,12 +136,15 @@ void FifoScheduler::TaskDeparted(FifoTask* task, const Message& msg) {
     CHECK(task->blocked());
   }
 
+  deadTasks.push_back(task->m);
   allocator()->FreeTask(task);
   num_tasks_--;
 }
 
 void FifoScheduler::TaskDead(FifoTask* task, const Message& msg) {
   CHECK_EQ(task->run_state, FifoTask::RunState::kBlocked);
+
+  deadTasks.push_back(task->m);
   allocator()->FreeTask(task);
   num_tasks_--;
 }
@@ -154,6 +160,7 @@ void FifoScheduler::TaskBlocked(FifoTask* task, const Message& msg) {
   }
 
   task->run_state = FifoTask::RunState::kBlocked;
+  task->m.updateState(FifoTask::RunStateToString(task->run_state));
 }
 
 void FifoScheduler::TaskPreempted(FifoTask* task, const Message& msg) {
@@ -164,6 +171,7 @@ void FifoScheduler::TaskPreempted(FifoTask* task, const Message& msg) {
     CHECK_EQ(cs->current, task);
     cs->current = nullptr;
     task->run_state = FifoTask::RunState::kRunnable;
+    task->m.updateState(FifoTask::RunStateToString(task->run_state));
     Enqueue(task);
   } else {
     CHECK(task->queued());
@@ -187,6 +195,7 @@ void FifoScheduler::Yield(FifoTask* task) {
   // picked in the current scheduling round (see GlobalSchedule()).
   CHECK(task->oncpu() || task->runnable());
   task->run_state = FifoTask::RunState::kYielding;
+  task->m.updateState(FifoTask::RunStateToString(task->run_state));
   yielding_tasks_.emplace_back(task);
 }
 
@@ -198,12 +207,14 @@ void FifoScheduler::Unyield(FifoTask* task) {
   yielding_tasks_.erase(it);
 
   task->run_state = FifoTask::RunState::kRunnable;
+  task->m.updateState(FifoTask::RunStateToString(task->run_state));
   Enqueue(task);
 }
 
 void FifoScheduler::Enqueue(FifoTask* task) {
   CHECK_EQ(task->run_state, FifoTask::RunState::kRunnable);
   task->run_state = FifoTask::RunState::kQueued;
+  task->m.updateState(FifoTask::RunStateToString(task->run_state));
   if (task->prio_boost || task->preempted) {
     run_queue_.push_front(task);
   } else {
@@ -219,6 +230,7 @@ FifoTask* FifoScheduler::Dequeue() {
   FifoTask* task = run_queue_.front();
   CHECK_EQ(task->run_state, FifoTask::RunState::kQueued);
   task->run_state = FifoTask::RunState::kRunnable;
+  task->m.updateState(FifoTask::RunStateToString(task->run_state));
   run_queue_.pop_front();
 
   return task;
@@ -233,6 +245,7 @@ void FifoScheduler::RemoveFromRunqueue(FifoTask* task) {
       // Caller is responsible for updating 'run_state' if task is
       // no longer runnable.
       task->run_state = FifoTask::RunState::kRunnable;
+      task->m.updateState(FifoTask::RunStateToString(task->run_state));
       run_queue_.erase(run_queue_.cbegin() + pos);
       return;
     }
@@ -249,6 +262,7 @@ void FifoScheduler::TaskOnCpu(FifoTask* task, const Cpu& cpu) {
   GHOST_DPRINT(3, stderr, "Task %s oncpu %d", task->gtid.describe(), cpu.id());
 
   task->run_state = FifoTask::RunState::kOnCpu;
+  task->m.updateState(FifoTask::RunStateToString(task->run_state));
   task->cpu = cpu;
   task->preempted = false;
   task->prio_boost = false;
@@ -308,6 +322,7 @@ void FifoScheduler::GlobalSchedule(const StatusWord& agent_sw,
 
     if (cs->current) {
       cs->current->run_state = FifoTask::RunState::kRunnable;
+      task->m.updateState(FifoTask::RunStateToString(task->run_state));
       Enqueue(cs->current);
     }
     cs->current = next;
@@ -356,6 +371,7 @@ void FifoScheduler::GlobalSchedule(const StatusWord& agent_sw,
     for (FifoTask* t : yielding_tasks_) {
       CHECK_EQ(t->run_state, FifoTask::RunState::kYielding);
       t->run_state = FifoTask::RunState::kRunnable;
+      task->m.updateState(FifoTask::RunStateToString(task->run_state));
       Enqueue(t);
     }
     yielding_tasks_.clear();
@@ -457,6 +473,7 @@ void FifoAgent::AgentThread() {
   WaitForEnclaveReady();
 
   PeriodicEdge debug_out(absl::Seconds(1));
+  PeriodicEdge profile_peroid(absl::Milliseconds(1));
 
   while (!Finished() || !global_scheduler_->Empty()) {
     BarrierToken agent_barrier = status_word().barrier();
@@ -482,6 +499,20 @@ void FifoAgent::AgentThread() {
 
       global_scheduler_->GlobalSchedule(status_word(), agent_barrier);
 
+      if(profile_peroid.Edge()){
+        auto res = global_scheduler_->CollectMetric();
+        if(debug_out.Edge())
+        {
+          for(auto &m : res){
+            m.printResult(stderr);
+          }
+          for(auto &m : scheduler_->deadTasks){
+            m.printResult(stderr);
+          }
+          global_scheduler_->deadTasks.clear();
+        }
+      }
+    
       if (verbose() && debug_out.Edge()) {
         static const int flags =
             verbose() > 1 ? Scheduler::kDumpStateEmptyRQ : 0;
