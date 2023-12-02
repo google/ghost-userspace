@@ -139,6 +139,11 @@ int main(int argc, char *argv[]) {
 
                 // forward scheduler's output to our stdout
                 std::cout << buf << std::flush;
+
+                /**
+                 *  If we find a substring indicating crash:
+                 *      Call orca_agent->set_scheduler()
+                 */
             }
         }
     }
