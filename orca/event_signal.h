@@ -11,7 +11,7 @@ public:
     using handle_t = int;
 
     // Subscribe to the event.
-    handle_t sub(std::function<void(T)> &&callback) {
+    handle_t sub(std::function<void(T)> callback) {
         handle_t handle = next_handle++;
         listeners[handle] = std::move(callback);
         printf("Registering handle %d\n", handle);
