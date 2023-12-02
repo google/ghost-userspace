@@ -16,7 +16,7 @@ restart_orca
 for i in {1..10}; do
     scripts/simple_workload_experiment.py \
         --orca_port 8000 \
-        --out_file results${i}.txt \
+        --out_file results${i}.txt |
         tee "stdout.txt" \
         &
     exp_pid=$!
