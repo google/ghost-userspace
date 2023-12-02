@@ -1,6 +1,8 @@
 import csv
 from dataclasses import dataclass
 from decimal import Decimal
+import os
+from typing import Any
 import matplotlib.pyplot as plt
 
 
@@ -43,37 +45,67 @@ def read_csv(filename: str) -> list[ExpResult]:
 
 def main() -> None:
     results: list[ExpResult] = []
-    for i in range(1, 5 + 1):
-        results += read_csv(f"run2/results{i}.txt")
+    resultsdir = "run3"
+    for fname in os.listdir(resultsdir):
+        fpath = os.path.join(resultsdir, fname)
+        if os.path.isfile(fpath):
+            results += read_csv(fpath)
 
     # Want to plot  : throughput vs. short_99_9_pct (tail latency).
     # Multiple lines: sched_type.
     # Fixed vars    : preemption_interval_us, proportion_long_jobs.
 
-    results = [row for row in results if row.proportion_long_jobs == Decimal("0.01")]
+    def plot(ax: Any, rows: list[ExpResult], title: str) -> None:
+        # Ind vars: sched_type, throughput.
+        # Dep vars: short_99_9_pct.
 
-    # Ind vars: sched_type, throughput.
-    # Dep vars: short_99_9_pct.
+        # Filter for lowest tail latency per group.
+        m: dict[tuple[str, int], list[float]] = {}
+        for row in rows:
+            k = (row.sched_type, row.throughput)
+            v = row.short_99_9_pct
+            if k not in m:
+                m[k] = []
+            m[k].append(v)
 
-    # Filter for lowest tail latency per group.
-    m: dict[tuple[str, int], list[float]] = {}
-    for row in results:
-        k = (row.sched_type, row.throughput)
-        v = row.short_99_9_pct
-        if k not in m:
-            m[k] = []
-        m[k].append(v)
+        vals: list[tuple[str, int, float]] = [
+            (k[0], k[1], min(v)) for k, v in m.items()
+        ]
+        for sched_type in ["dFCFS", "cFCFS", "cfs"]:
+            svals = [(v[1], v[2]) for v in vals if v[0] == sched_type]
+            xs = [v[0] for v in svals]
+            ys = [v[1] for v in svals]
+            ax.plot(xs, ys, label=sched_type)
 
-    vals: list[tuple[str, int, float]] = [(k[0], k[1], min(v)) for k, v in m.items()]
-    for sched_type in ["dFCFS", "cFCFS", "cfs"]:
-        svals = [(v[1], v[2]) for v in vals if v[0] == sched_type]
-        xs = [v[0] for v in svals]
-        ys = [v[1] for v in svals]
-        plt.plot(xs, ys, label=sched_type)
+        ax.set_xlabel("Throughput (reqs/sec)")
+        ax.set_ylabel("99.9%% latency")
+        ax.legend()
+        ax.set_title(title)
 
-    plt.xlabel("Throughput (reqs/sec)")
-    plt.ylabel("99.9%% latency")
-    plt.legend()
+    results = [row for row in results if row.throughput <= 300000]
+
+    fig, axs = plt.subplots(2, 2)
+    plot(
+        axs[0][0],
+        [row for row in results if row.proportion_long_jobs == Decimal("0")],
+        "Scheduler Tail Latency (0-100 workload)",
+    )
+    plot(
+        axs[0][1],
+        [row for row in results if row.proportion_long_jobs == Decimal("0.01")],
+        "Scheduler Tail Latency (1-99 workload)",
+    )
+    plot(
+        axs[1][0],
+        [row for row in results if row.proportion_long_jobs == Decimal("0.1")],
+        "Scheduler Tail Latency (10-90 workload)",
+    )
+    plot(
+        axs[1][1],
+        [row for row in results if row.proportion_long_jobs == Decimal("0.5")],
+        "Scheduler Tail Latency (50-50 workload)",
+    )
+
     plt.show()
 
 
