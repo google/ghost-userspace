@@ -4,6 +4,16 @@
 load("@rules_license//rules:license.bzl", "license")
 load("//:bpf/bpf.bzl", "bpf_skeleton")
 
+# For Dip Test
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "diptest",
+    urls = ["https://github.com/sje30/diptest/archive/1.0.0.tar.gz"],
+    strip_prefix = "diptest-1.0.0",
+)
+##
+
 package(
     default_applicable_licenses = ["//:license"],
     default_visibility = ["//:__pkg__"],
@@ -689,6 +699,7 @@ cc_library(
     copts = compiler_flags,
     deps = [
         ":agent",
+        "@diptest//:diptest"
     ],
 )
 
@@ -724,6 +735,7 @@ cc_library(
         ":agent",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
+        "@diptest//:diptest"
     ],
 )
 
