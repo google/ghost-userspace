@@ -57,6 +57,7 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
     std::cerr << "Spawning worker threads..." << std::endl;
 
     int num_jobs = reqs_per_sec * runtime_secs;
+    int num_jobs_done = 0;
     std::vector<Job> jobs(num_jobs);
     std::atomic<bool> isdead(false);
     std::queue<Job *> work_q;
@@ -76,6 +77,11 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
                     }
                     job = work_q.front();
                     work_q.pop();
+
+                    ++num_jobs_done;
+                    if (num_jobs_done % 5000 == 0) {
+                        std::cerr << num_jobs_done << std::endl;
+                    }
                 }
 
                 auto start = steady_clock::now();
