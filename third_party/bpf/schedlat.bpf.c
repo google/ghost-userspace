@@ -11,22 +11,22 @@
 
 // vmlinux.h must be included before bpf_helpers.h
 // clang-format off
-#include "kernel/vmlinux_ghost_5_11.h"
+#include <linux/bpf.h>
 #include "libbpf/bpf_core_read.h"
 #include "libbpf/bpf_helpers.h"
 #include "libbpf/bpf_tracing.h"
-// clang-format on
 
-#include "third_party/iovisor_bcc/bits.bpf.h"
+// common.bpf.h comes before bits.bpf.h for u32/s32/u64/s64 in OSS.
 #include "third_party/bpf/common.bpf.h"
+#include "third_party/iovisor_bcc/bits.bpf.h"
 #include "third_party/bpf/schedlat.h"
+// clang-format on
 
 /*
  * vmlinux.h does not include #defines.  We can't include the kernel headers,
  * even if we have easy access to them, since we'll conflict with the structs
  * and enums that vmlinux.h *does* include.
  */
-#define SCHED_GHOST 18
 #define TASK_RUNNING 0
 
 struct {

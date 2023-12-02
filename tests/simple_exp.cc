@@ -72,7 +72,7 @@ void SpinFor(absl::Duration d) {
     absl::Duration t = b - a;
 
     // Don't count preempted time
-    if (t < absl::Microseconds(100)) {
+    if (t < absl::Microseconds(200)) {
       d -= t;
     }
   }

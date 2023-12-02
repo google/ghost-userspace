@@ -3,10 +3,11 @@
 
 load("@rules_license//rules:license.bzl", "license")
 load("//:bpf/bpf.bzl", "bpf_skeleton")
+load("//:abi.bzl", "bpf_skel_ghost", "cc_library_ghost", "define_ghost_uapi")
 
 package(
     default_applicable_licenses = ["//:license"],
-    default_visibility = ["//:__pkg__"],
+    default_visibility = ["//:__subpackages__"],
 )
 
 license(
@@ -41,44 +42,46 @@ bpf_linkopts = [
     "-lz",
 ]
 
-cc_library(
-    name = "agent",
-    srcs = [
-        "bpf/user/agent.c",
-        "lib/agent.cc",
-        "lib/channel.cc",
-        "lib/enclave.cc",
-    ],
-    hdrs = [
-        "bpf/user/agent.h",
-        "bpf/user/schedghostidle_bpf.skel.h",
-        "lib/agent.h",
-        "lib/channel.h",
-        "lib/enclave.h",
-        "lib/scheduler.h",
-        "//third_party:iovisor_bcc/trace_helpers.h",
-    ],
-    copts = compiler_flags,
-    linkopts = bpf_linkopts + ["-lnuma"],
-    deps = [
-        ":base",
-        ":ghost",
-        ":shared",
-        ":topology",
-        ":trivial_status",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
-        "@linux//:libbpf",
-    ],
-)
+agent_lib_srcs = [
+    "bpf/user/agent.c",
+    "lib/agent.cc",
+    "lib/channel.cc",
+    "lib/enclave.cc",
+]
+
+agent_lib_hdrs = [
+    "//third_party:iovisor_bcc/trace_helpers.h",
+    "bpf/user/agent.h",
+    "bpf/user/bpf_schedghostidle.skel.h",
+    "lib/agent.h",
+    "lib/channel.h",
+    "lib/enclave.h",
+    "lib/flux.h",
+    "lib/scheduler.h",
+]
+
+agent_lib_visibility = [
+    "//prodkernel/ghost:__subpackages__",
+]
+
+agent_lib_deps = [
+    ":base",
+    ":ghost",
+    ":ghost_uapi",
+    ":shared",
+    ":topology",
+    ":trivial_status",
+    "@com_google_absl//absl/base:core_headers",
+    "@com_google_absl//absl/container:flat_hash_map",
+    "@com_google_absl//absl/container:flat_hash_set",
+    "@com_google_absl//absl/flags:flag",
+    "@com_google_absl//absl/status",
+    "@com_google_absl//absl/status:statusor",
+    "@com_google_absl//absl/strings",
+    "@com_google_absl//absl/strings:str_format",
+    "@com_google_absl//absl/synchronization",
+    "@linux//:libbpf",
+]
 
 cc_library(
     name = "trivial_status",
@@ -330,10 +333,19 @@ cc_test(
 )
 
 exports_files(glob([
-    "kernel/vmlinux_ghost_*.h",
+    "abi/*/kernel/ghost.h",
 ]) + [
-    "lib/queue.bpf.h",
+    "lib/ghost_uapi.h",
 ])
+
+filegroup(
+    name = "arr_structs",
+    srcs = [
+        "lib/arr_structs.bpf.h",
+        "lib/avl.bpf.h",
+        "lib/queue.bpf.h",
+    ],
+)
 
 cc_library(
     name = "topology",
@@ -349,6 +361,7 @@ cc_library(
         ":base",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
     ],
 )
@@ -359,7 +372,6 @@ cc_library(
         "lib/base.cc",
     ],
     hdrs = [
-        "kernel/ghost_uapi.h",
         "lib/base.h",
         "lib/logging.h",
         "//third_party:util/util.h",
@@ -441,11 +453,24 @@ cc_library(
 )
 
 cc_test(
+    name = "bpf_avl_test",
+    size = "small",
+    srcs = [
+        "tests/bpf_avl_test.cc",
+        ":arr_structs",
+    ],
+    copts = compiler_flags,
+    deps = [
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_test(
     name = "bpf_queue_test",
     size = "small",
     srcs = [
-        "lib/queue.bpf.h",
         "tests/bpf_queue_test.cc",
+        ":arr_structs",
     ],
     copts = compiler_flags,
     deps = [
@@ -493,9 +518,9 @@ cc_library(
         "schedulers/cfs_bpf/cfs_scheduler.cc",
     ],
     hdrs = [
-        "lib/queue.bpf.h",
         "schedulers/cfs_bpf/cfs_bpf.skel.h",
         "schedulers/cfs_bpf/cfs_scheduler.h",
+        ":arr_structs",
         "//third_party/bpf:cfs_bpf.h",
     ],
     copts = compiler_flags,
@@ -754,9 +779,9 @@ cc_library(
         "schedulers/flux/flux_scheduler.cc",
     ],
     hdrs = [
-        "lib/queue.bpf.h",
         "schedulers/flux/flux_bpf.skel.h",
         "schedulers/flux/flux_scheduler.h",
+        ":arr_structs",
         "//third_party/bpf:flux_bpf.h",
         "//third_party/bpf:flux_infra",
         "//third_party/bpf:flux_scheds",
@@ -784,27 +809,108 @@ cc_test(
     ],
 )
 
-cc_library(
+ghost_lib_srcs = [
+    "lib/ghost.cc",
+]
+
+ghost_lib_hdrs = [
+    "lib/ghost.h",
+]
+
+ghost_lib_visibility = [
+    "//prodkernel/api/base:__subpackages__",
+    "//prodkernel/ghost:__subpackages__",
+]
+
+ghost_lib_deps = [
+    ":base",
+    ":ghost_uapi",
+    ":topology",
+    "@com_google_absl//absl/container:flat_hash_map",
+    "@com_google_absl//absl/container:flat_hash_set",
+    "@com_google_absl//absl/flags:flag",
+    "@com_google_absl//absl/log",
+    "@com_google_absl//absl/strings",
+    "@com_google_absl//absl/strings:str_format",
+]
+
+define_ghost_uapi(
+    name = "ghost_uapi",
+    abi = "latest",
+)
+
+cc_library_ghost(
     name = "ghost",
-    srcs = [
-        "lib/ghost.cc",
-    ],
-    hdrs = [
-        "kernel/ghost_uapi.h",
-        "lib/ghost.h",
-    ],
+    srcs = ghost_lib_srcs,
+    hdrs = ghost_lib_hdrs,
+    abi = "latest",
     copts = compiler_flags,
     linkopts = ["-lnuma"],
-    deps = [
-        ":base",
-        ":topology",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-    ],
+    deps = ghost_lib_deps,
+)
+
+cc_library_ghost(
+    name = "agent",
+    srcs = agent_lib_srcs,
+    hdrs = agent_lib_hdrs,
+    abi = "latest",
+    copts = compiler_flags,
+    linkopts = bpf_linkopts + ["-lnuma"],
+    deps = agent_lib_deps,
+)
+
+# buildifier: disable=duplicated-name
+define_ghost_uapi(
+    name = "ghost_uapi",
+    abi = 84,
+)
+
+# buildifier: disable=duplicated-name
+cc_library_ghost(
+    name = "ghost",
+    srcs = ghost_lib_srcs,
+    hdrs = ghost_lib_hdrs,
+    abi = 84,
+    copts = compiler_flags,
+    deps = ghost_lib_deps,
+)
+
+# buildifier: disable=duplicated-name
+cc_library_ghost(
+    name = "agent",
+    srcs = agent_lib_srcs,
+    hdrs = agent_lib_hdrs,
+    abi = 84,
+    copts = compiler_flags,
+    linkopts = bpf_linkopts,
+    deps = agent_lib_deps,
+)
+
+# buildifier: disable=duplicated-name
+define_ghost_uapi(
+    name = "ghost_uapi",
+    abi = 90,
+)
+
+# buildifier: disable=duplicated-name
+cc_library_ghost(
+    name = "ghost",
+    srcs = ghost_lib_srcs,
+    hdrs = ghost_lib_hdrs,
+    abi = 90,
+    copts = compiler_flags,
+    deps = ghost_lib_deps,
+)
+
+# buildifier: disable=duplicated-name
+cc_library_ghost(
+    name = "agent",
+    srcs = agent_lib_srcs,
+    hdrs = agent_lib_hdrs,
+    abi = 90,
+    copts = compiler_flags,
+    linkopts = bpf_linkopts,
+    deps = agent_lib_deps,
 )
 
 cc_test(
@@ -928,17 +1034,43 @@ cc_binary(
     ],
 )
 
-bpf_skeleton(
-    name = "schedghostidle_bpf_skel",
-    bpf_object = "//third_party/bpf:schedghostidle_bpf",
-    skel_hdr = "bpf/user/schedghostidle_bpf.skel.h",
+schedghostidle_src = "//third_party/bpf:schedghostidle.bpf.c"
+
+schedghostidle_hdrs = [
+    "//third_party/bpf:common.bpf.h",
+    "//third_party:iovisor_bcc/bits.bpf.h",
+]
+
+bpf_skel_ghost(
+    name = "schedghostidle",
+    src = schedghostidle_src,
+    hdrs = schedghostidle_hdrs,
+    objdir = "bpf/user",
+)
+
+# buildifier: disable=duplicated-name
+bpf_skel_ghost(
+    name = "schedghostidle",
+    src = schedghostidle_src,
+    hdrs = schedghostidle_hdrs,
+    abi = 84,
+    objdir = "bpf/user",
+)
+
+# buildifier: disable=duplicated-name
+bpf_skel_ghost(
+    name = "schedghostidle",
+    src = schedghostidle_src,
+    hdrs = schedghostidle_hdrs,
+    abi = 90,
+    objdir = "bpf/user",
 )
 
 cc_binary(
     name = "schedghostidle",
     srcs = [
+        "bpf/user/bpf_schedghostidle.skel.h",
         "bpf/user/schedghostidle.c",
-        "bpf/user/schedghostidle_bpf.skel.h",
         "//third_party:iovisor_bcc/trace_helpers.h",
     ],
     copts = compiler_flags,

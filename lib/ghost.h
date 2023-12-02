@@ -20,8 +20,8 @@
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/strings/str_split.h"
-#include "kernel/ghost_uapi.h"
 #include "lib/base.h"
+#include "lib/ghost_uapi.h"
 #include "lib/logging.h"
 #include "lib/topology.h"
 

@@ -29,6 +29,7 @@ const volatile __u32 nr_siblings_per_core;
 const volatile __u32 nr_ccx;
 const volatile __u32 nr_numa;
 const volatile __u32 highest_node_idx;
+const volatile bool consecutive_smt_numbering;
 
 /*
  * These can be derived from nr_{cpus,siblings,numa}, but userspace precomputes
@@ -42,20 +43,35 @@ static inline __u32 sibling_of(__u32 cpu)
 	/* TODO doesn't handle nr_siblings_per_core > 2 . */
 	if (nr_siblings_per_core == 1)
 		return cpu;
-	if (cpu >= nr_cores)
-		return cpu - nr_cores;
-	else
-		return cpu + nr_cores;
+
+	if (consecutive_smt_numbering) {
+		if (cpu % 2 == 0)
+			return cpu + 1;
+		else
+			return cpu - 1;
+	} else {
+		if (cpu >= nr_cores)
+			return cpu - nr_cores;
+		else
+			return cpu + nr_cores;
+	}
 }
 
 static inline __u32 core_of(__u32 cpu)
 {
 	/* Optimizing to avoid division for the common case. */
 	if (nr_siblings_per_core == 2) {
-		if (cpu >= nr_cores)
-			return cpu - nr_cores;
-		else
-			return cpu;
+		if (consecutive_smt_numbering) {
+			if (cpu % 2 == 0)
+				return cpu;
+			else
+				return cpu - 1;
+		} else {
+			if (cpu >= nr_cores)
+				return cpu - nr_cores;
+			else
+				return cpu;
+		}
 	} else {
 		return cpu % nr_cores;
 	}
@@ -88,7 +104,7 @@ static inline __u32 numa_node_of(__u32 cpu)
  * Pass this macro your bpf_obj->rodata (which is a pointer).
  */
 #define __set_bpf_topology_vars(rodata, __nr_cpus, __smt_per_core, __nr_ccx,   \
-			      __nr_numa, __highest_node_idx) ({                            \
+			      __nr_numa, __highest_node_idx, __consecutive_smt_numbering) ({ \
 	(rodata)->nr_cpus = (__nr_cpus);                                       \
 	(rodata)->nr_siblings_per_core = (__smt_per_core);                     \
 	(rodata)->nr_ccx = (__nr_ccx);                                         \
@@ -96,6 +112,7 @@ static inline __u32 numa_node_of(__u32 cpu)
 	(rodata)->highest_node_idx = (__highest_node_idx);                     \
 	(rodata)->nr_cores = (rodata)->nr_cpus /(rodata)->nr_siblings_per_core;\
 	(rodata)->nr_cores_per_numa = (rodata)->nr_cores / (rodata)->nr_numa;  \
+	(rodata)->consecutive_smt_numbering = (__consecutive_smt_numbering); \
 })
 
 /* Convenience wrapper for a Ghost Topology */
@@ -105,7 +122,8 @@ static inline __u32 numa_node_of(__u32 cpu)
 				(topo)->smt_count(),                           \
 				(topo)->num_ccxs(),                            \
 				(topo)->num_numa_nodes(),                      \
-				(topo)->highest_node_idx());
+				(topo)->highest_node_idx(),									   \
+				(topo)->consecutive_smt_numbering());
 
 #endif  // __BPF__
 

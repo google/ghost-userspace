@@ -12,6 +12,8 @@
 #include "libbpf/bpf.h"
 #include "libbpf/libbpf.h"
 
+#include "lib/ghost_uapi.h"   // for GHOST_VERSION.
+
 // See e.g. smp_store_release().  We can't check when we compile the BPF
 // programs, which are built with clang -target bpf, but all agents that load
 // bpf programs include this header.
@@ -33,11 +35,21 @@ extern "C" {
 enum {
   BPF_PROG_TYPE_GHOST_SCHED = 1000,
   BPF_PROG_TYPE_GHOST_MSG,
+#if GHOST_VERSION >= 83
   BPF_PROG_TYPE_GHOST_SELECT_RQ,
+#endif
+#if GHOST_VERSION >= 84
+  BPF_PROG_TYPE_GHOST_HALT_POLL,
+#endif
 
   BPF_GHOST_SCHED_PNT = 2000,
   BPF_GHOST_MSG_SEND,
+#if GHOST_VERSION >= 83
   BPF_GHOST_SELECT_RQ,
+#endif
+#if GHOST_VERSION >= 84
+  BPF_GHOST_HALT_POLL,
+#endif
   __MAX_BPF_GHOST_ATTACH_TYPE
 };
 

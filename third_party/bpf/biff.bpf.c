@@ -84,14 +84,17 @@
  *   from dying-task to old-agent-task in between.
  */
 
+#include <stdbool.h>
 
-// vmlinux.h must be included before bpf_helpers.h
+#include <linux/types.h>
+
 // clang-format off
-#include "kernel/vmlinux_ghost_5_11.h"
+#include <linux/bpf.h>
 #include "libbpf/bpf_helpers.h"
 #include "libbpf/bpf_tracing.h"
 // clang-format on
 
+#include "lib/ghost_uapi.h"
 #include "third_party/bpf/biff_bpf.h"
 #include "third_party/bpf/common.bpf.h"
 #include "third_party/bpf/topology.bpf.h"
@@ -171,10 +174,7 @@ static struct biff_bpf_cpu_data *cpu_to_pcpu(u32 cpu)
 	__ca = bpf_map_lookup_elem(&cpu_data, &zero);
 	if (!__ca)
 		return NULL;
-	BPF_MUST_CHECK(cpu);
-	if (cpu >= BIFF_MAX_CPUS)
-		return NULL;
-	return &__ca->e[cpu];
+	return BOUNDED_ARRAY_IDX(__ca->e, BIFF_MAX_CPUS, cpu);
 }
 
 /* Helper, from gtid to per-task sw_data blob */
@@ -183,18 +183,14 @@ static struct biff_bpf_sw_data *gtid_to_swd(u64 gtid)
 	struct task_sw_info *swi;
 	struct __sw_arr *__swa;
 	u32 zero = 0;
-	u32 idx;
 
 	swi = bpf_map_lookup_elem(&sw_lookup, &gtid);
 	if (!swi)
 		return NULL;
-	idx = swi->index;
-	if (idx >= BIFF_MAX_GTIDS)
-		return NULL;
 	__swa = bpf_map_lookup_elem(&sw_data, &zero);
 	if (!__swa)
 		return NULL;
-	return &__swa->e[idx];
+	return BOUNDED_ARRAY_IDX(__swa->e, BIFF_MAX_GTIDS, swi->index);
 }
 
 static void task_started(u64 gtid, int cpu, u64 cpu_seqnum)

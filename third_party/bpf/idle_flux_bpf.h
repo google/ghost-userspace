@@ -14,10 +14,16 @@
 #ifndef GHOST_LIB_BPF_BPF_IDLE_FLUX_BPF_H_
 #define GHOST_LIB_BPF_BPF_IDLE_FLUX_BPF_H_
 
+#ifndef __BPF__
+#include <stdint.h>
+#endif
+
 struct idle_flux_sched {
+	uint8_t thanks_cplusplus;	/* no zero-length structs... */
 };
 
 struct idle_flux_cpu {
+	uint8_t thanks_cplusplus;	/* no zero-length structs... */
 };
 
 #endif // GHOST_LIB_BPF_BPF_IDLE_FLUX_BPF_H_

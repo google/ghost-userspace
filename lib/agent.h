@@ -65,6 +65,9 @@ class Agent {
   // Agents should test Finished() before each call to Run()
   bool Finished() const { return finished_.HasBeenNotified(); }
 
+  // Waits for finished_ to be notified.
+  void WaitForFinished() { finished_.WaitForNotification(); }
+
   Cpu cpu() const { return cpu_; }
 
   // Schedule the Agent to run on its CPU.  Can fail only if the CPU is
@@ -140,7 +143,10 @@ class LocalAgent : public Agent {
 // Otherwise, it is not guaranteed that two arbitrary processes will be able
 // to serialize/deserialize the data in a consistent manner (for instance, due
 // to differences in struct padding, endianness, etc.).
-template <size_t BufferBytes = 16384 /* 16 KiB */>
+//
+// NOTE: The buffer may overflow the stack (especially on fibers); this should
+// typically be heap allocated (e.g. unique_ptr).
+template <size_t BufferBytes = 32768 /* 32 KiB */>
 struct AgentRpcBuffer {
   // Converts the input to raw bytes and stores them in the internal data array.
   // Note that T shouldn't contain any pointers, since these pointers will not
@@ -325,7 +331,8 @@ struct AgentRpcBuffer {
           "Calling deserialize without a successful serialize");
     }
 
-    return std::string(reinterpret_cast<const char*>(&data[0]), string_length);
+    return std::string(reinterpret_cast<const char*>(&data[0]),
+                       string_length);
   }
 
   absl::StatusOr<TrivialStatus> DeserializeStatus() const {
@@ -352,6 +359,11 @@ struct AgentRpcBuffer {
     return deserialize_status.value().ToStatusOr();
   }
 
+  // If the buffer is filled in directly with serialized data (e.g., serialized
+  // data that arrives via the network), then we want to manually set
+  // `is_serialized` to true so that the buffer can be deserialized.
+  void ForceMarkSerialized() { is_serialized = true; }
+
   // This is a region where arbitrary bytes of data can be written (ie. when the
   // RPC mechanism needs to return more than just a response code). Intended to
   // be used with the Serialize/Deserialize methods. We use a byte array instead
@@ -371,6 +383,9 @@ struct AgentRpcBuffer {
 // Since this data is copied to the shared memory region to be consumed by a
 // process with a separate address space, only raw data is useful here (ie. no
 // pointers).
+//
+// NOTE: AgentRpcBuffer may overflow the stack (especially on fibers); this
+// should typically be heap allocated (e.g. unique_ptr).
 struct AgentRpcArgs {
   int64_t arg0 = 0;
   int64_t arg1 = 0;
@@ -394,6 +409,9 @@ struct AgentRpcArgs {
 };
 
 // Encapsulates the response for an RPC.
+//
+// NOTE: AgentRpcBuffer may overflow the stack (especially on fibers); this
+// should typically be heap allocated (e.g. unique_ptr).
 struct AgentRpcResponse {
   // Most RPC functions will only need to return a value via this response_code.
   int64_t response_code = -1;
@@ -649,12 +667,12 @@ class AgentProcess {
   // DISCLAIMER: This RPC mechanism is naturally only meant to be used for the
   // shared memory region on a single machine. See AgentRpcBuffer for more
   // details.
-  virtual AgentRpcResponse RpcWithResponse(
+  virtual std::unique_ptr<AgentRpcResponse> RpcWithResponse(
       uint64_t req, const AgentRpcArgs& args = AgentRpcArgs()) {
     absl::MutexLock lock(&rpc_mutex_);
 
     PerformRpc(req, args);
-    return sb_->rpc_res_;
+    return std::make_unique<AgentRpcResponse>(sb_->rpc_res_);
   }
 
   void AddExitHandler(std::function<bool(pid_t, int)> handler) {

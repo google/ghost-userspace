@@ -11,13 +11,15 @@
  * GNU General Public License for more details.
  */
 
-// vmlinux.h must be included before bpf_helpers.h
+#include <linux/types.h>
+
 // clang-format off
-#include "kernel/vmlinux_ghost_5_11.h"
+#include <linux/bpf.h>
 #include "libbpf/bpf_helpers.h"
 #include "libbpf/bpf_tracing.h"
 // clang-format on
 
+#include "lib/ghost_uapi.h"
 #include "third_party/bpf/common.bpf.h"
 #include "third_party/bpf/flux_bpf.h"
 
@@ -113,21 +115,6 @@ static int top_tier_sched_id(void)
 #include "third_party/bpf/flux_dispatch.bpf.c"
 
 /********************* SCHED OPS *********************/
-
-/*
- * Roci wants a couple helpers, so that it knows the IDs of its "one child" /
- * primary scheduler (biff) and idle.
- */
-
-static int __roci_primary_sched_id(void)
-{
-	return FLUX_SCHED_BIFF;
-}
-
-static int __roci_idle_sched_id(void)
-{
-	return FLUX_SCHED_IDLE;
-}
 
 #include "third_party/bpf/roci_flux.bpf.c"
 #include "third_party/bpf/biff_flux.bpf.c"

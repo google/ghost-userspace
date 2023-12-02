@@ -198,7 +198,7 @@ static inline u64 pnt_push_task_to_ring(int which_ring, u64 gtid,
 
 #else  // ! __BPF__ (userspace functions)
 
-#include "kernel/ghost_uapi.h"
+#include "lib/ghost_uapi.h"
 
 /*
  * Schedules gtid onto the ring, returns the slot pointer or NULL on failure.

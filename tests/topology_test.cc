@@ -248,6 +248,33 @@ TEST(TopologyTest, CheckSmtIdx) {
   }
 }
 
+TEST(TopologyTest, TestConsecutiveSmtNumbering) {
+  UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true,
+                     /*use_consecutive_smt_numbering=*/true);
+
+  EXPECT_EQ(TestTopology()->smt_count(), 2);
+
+  EXPECT_TRUE(TestTopology()->consecutive_smt_numbering());
+
+  for (int i = 0; i < TestTopology()->num_cpus(); i++) {
+    const Cpu& cpu = TestTopology()->cpu(i);
+    const CpuList& siblings = cpu.siblings();
+    bool found = false;
+    for (int j = 0; j < siblings.Size(); j++) {
+      const Cpu& sibling = siblings.GetNthCpu(j);
+      ASSERT_THAT(sibling.valid(), IsTrue());
+
+      if (cpu == sibling) {
+        continue;
+      }
+
+      found = true;
+      EXPECT_EQ(abs(cpu.id() - sibling.id()), 1);
+    }
+    EXPECT_TRUE(found);
+  }
+}
+
 // Tests the basic `Set`, `IsSet`, and `Clear` functionality of `CpuList`.
 TEST(TopologyTest, BitmapSet) {
   UpdateTestTopology(absl::GetFlag(FLAGS_test_tmpdir), /*has_l3_cache=*/true);
@@ -533,7 +560,12 @@ TEST(TopologyTest, CpuSetToCpuList) {
 }
 
 // Returns the ID for the core that CPU `cpu` is on.
-int GetRawCore(int cpu) { return cpu % (Topology::kNumTestCpus / 2); }
+int GetRawCore(int cpu, bool use_consecutive_smt_numbering) {
+  if (use_consecutive_smt_numbering) {
+    return cpu / 2;
+  }
+  return cpu % (Topology::kNumTestCpus / 2);
+}
 
 // Returns the NUMA node that CPU `cpu` is on.
 int GetRawNumaNode(int cpu) {
@@ -555,27 +587,38 @@ int GetRawNumaNode(int cpu) {
 //
 // Repeated from the comments for `UpdateTestTopology()` in lib/topology.h:
 // This topology has 112 CPUs, 2 hardware threads per physical core (so there
-// are 56 physical cores in total), and 2 NUMA nodes. CPU 0 is co-located with
-// CPU 56 on the same physical core, CPU 1 is co-located with CPU 57, ..., and
-// CPU 55 is co-located with CPU 111. This is how Linux configures CPUs. Lastly,
-// CPUs 0-27 and 56-83 are on NUMA node 0 and CPUs 28-55 and 84-111 are on NUMA
-// node 1.
+// are 56 physical cores in total), and 2 NUMA nodes. If
+// `use_consecutive_smt_numbering` is false, CPU 0 is co-located with CPU 56 on
+// the same physical core, CPU 1 is co-located with CPU 57, ..., and CPU 55 is
+// co-located with CPU 111. Otherwise, CPU 0 is co-located with CPU 1, CPU 2 is
+// co-located with CPU 3, etc. Lastly, CPUs 0-27 and 56-83 are on NUMA node 0
+// and CPUs 28-55 and 84-111 are on NUMA node 1 when we have
+// !use_consecutive_smt_numbering. Otherwise, NUMA 0 has CPUs 0-55 and NUMA 1
+// has CPUs 56-111.
 //
 // If `has_l3_cache` is true, an L3 cache is created. All CPUs in a NUMA node
 // share the same L3 cache. If `has_l3_cache` is false, then the topology is
 // configured as though the microarchitecture does not have an L3 cache.
-std::vector<Cpu::Raw> GetRawCustomTopology(bool has_l3_cache) {
+std::vector<Cpu::Raw> GetRawCustomTopology(
+    bool has_l3_cache, bool use_consecutive_smt_numbering = false) {
   std::vector<Cpu::Raw> raw_cpus;
 
   for (int i = 0; i < Topology::kNumTestCpus; i++) {
     Cpu::Raw raw_cpu;
     raw_cpu.cpu = i;
-    raw_cpu.core = GetRawCore(/*cpu=*/i);
-    raw_cpu.smt_idx = i / (Topology::kNumTestCpus / 2);
+    raw_cpu.core = GetRawCore(
+        /*cpu=*/i,
+        /*use_consecutive_smt_numbering=*/use_consecutive_smt_numbering);
+    if (use_consecutive_smt_numbering) {
+      raw_cpu.smt_idx = i % 2;
+    } else {
+      raw_cpu.smt_idx = i / (Topology::kNumTestCpus / 2);
+    }
     for (int j = 0; j < Topology::kNumTestCpus; j++) {
       // For CPU `j`, we want both `j` and the sibling(s) of `j` to be in the
       // siblings list.
-      if (GetRawCore(/*cpu=*/j) == raw_cpu.core) {
+      if (GetRawCore(/*cpu=*/j, /*use_consecutive_smt_numbering=*/
+                     use_consecutive_smt_numbering) == raw_cpu.core) {
         raw_cpu.siblings.push_back(j);
       }
     }
@@ -775,6 +818,35 @@ TEST(TopologyTest, CustomCheckSmtIdx) {
             (cpu.id() < CustomTopology()->num_cpus() / 2) ? 0 : 1;
         EXPECT_THAT(cpu.smt_idx(), Eq(expected_smt_idx));
       }
+    }
+    EXPECT_THAT(found, IsTrue());
+  }
+}
+
+// Test consecutive SMT numbering with the custom topology.
+TEST(TopologyTest, CustomConsecutiveSmtNumbering) {
+  UpdateCustomTopology(GetRawCustomTopology(
+      /*has_l3_cache=*/true, /*use_consecutive_smt_numbering=*/true));
+
+  // We don't have any larger SMT toplogies.
+  EXPECT_THAT(CustomTopology()->smt_count(), Le(2));
+
+  for (int i = 0; i < CustomTopology()->num_cpus(); i++) {
+    const Cpu& cpu = CustomTopology()->cpu(i);
+    const CpuList& siblings = cpu.siblings();
+    bool found = false;
+    for (int j = 0; j < siblings.Size(); j++) {
+      const Cpu& sibling = siblings.GetNthCpu(j);
+      ASSERT_THAT(sibling.valid(), IsTrue());
+      EXPECT_THAT(cpu.smt_idx(), Eq(cpu.id() % CustomTopology()->smt_count()));
+      EXPECT_THAT(cpu.core(), Eq(cpu.id() / CustomTopology()->smt_count()));
+
+      if (cpu == sibling) {
+        continue;
+      }
+
+      found = true;
+      EXPECT_THAT(abs(cpu.id() - sibling.id()), Eq(1));
     }
     EXPECT_THAT(found, IsTrue());
   }
@@ -1085,6 +1157,58 @@ TEST(TopologyTest, CpuMapEmpty) {
 
   l.Set(TestTopology()->all_cpus().Size() - 1);
   EXPECT_THAT(l.Empty(), IsFalse());
+}
+
+TEST(TopologyTest, WrappedCpuListTest) {
+  uint64_t map[CpuMap::kMapCapacity] = {0};
+
+  WrappedCpuList l(*TestTopology(), map, CpuMap::kMapCapacity);
+
+  for (int slot = 0; slot < l.map_size(); slot++) {
+    constexpr int kCpu0Base = 2;
+    int cpu0 = kCpu0Base + slot * CpuMap::kIntsBits;
+    EXPECT_THAT(l.Empty(), IsTrue());
+    l.Set(cpu0);
+    EXPECT_THAT(l.Empty(), IsFalse());
+    EXPECT_THAT(l.IsSet(cpu0), IsTrue());
+    EXPECT_THAT(l.Size(), Eq(1));
+    EXPECT_EQ(
+        map[slot],
+        1ULL << kCpu0Base);  // Make sure that updates are going to our map.
+
+    l.Clear(cpu0);
+    EXPECT_THAT(l.Empty(), IsTrue());
+    EXPECT_THAT(l.IsSet(cpu0), IsFalse());
+    EXPECT_THAT(l.Size(), Eq(0));
+    EXPECT_EQ(map[slot], 0);
+
+    // Now test from the other direction; updates directly to our map.
+    constexpr int kCpu1Base = 3;
+    int cpu1 = kCpu1Base + slot * CpuMap::kIntsBits;
+    map[slot] = 1ULL << kCpu1Base;
+    EXPECT_THAT(l.Empty(), IsFalse());
+    EXPECT_THAT(l.IsSet(cpu1), IsTrue());
+    EXPECT_THAT(l.Size(), Eq(1));
+
+    map[slot] = 0;
+    EXPECT_THAT(l.Empty(), IsTrue());
+    EXPECT_THAT(l.IsSet(cpu1), IsFalse());
+    EXPECT_THAT(l.Size(), Eq(0));
+  }
+  // Rest of the test case assumes the map is empty now.
+  ASSERT_THAT(l.Empty(), IsTrue());
+
+  // Comparison between regular CpuList and WrappedCpuList.
+  CpuList l2 = TestTopology()->EmptyCpuList();
+  int num_cpus = TestTopology()->num_cpus();
+  for (int i = 0; i < num_cpus; i += 5) {
+    l.Set(i);
+    l2.Set(i);
+  }
+  EXPECT_THAT(l == l2, IsTrue());
+  l.Clear(num_cpus - 1);
+  l2.Set(num_cpus - 1);
+  EXPECT_THAT(l == l2, IsFalse());
 }
 
 }  // namespace

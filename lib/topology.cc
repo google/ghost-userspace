@@ -14,10 +14,34 @@
 #include <string>
 #include <thread>
 
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_split.h"
 #include <numa.h>
 
 namespace ghost {
+
+namespace {
+
+bool CheckConsecutiveSmtNumbering(const Topology& topology) {
+  const CpuList& siblings = topology.cpu(0).siblings();
+  if (siblings.Size() != 2) {
+    CHECK_EQ(siblings.Size(), 1);
+    return false;
+  }
+
+  int sibling_offset = abs(siblings[0].id() - siblings[1].id());
+  if (sibling_offset == 1) {
+    return true;
+  }
+
+  // BPF topology helpers assume a standard core offset if we don't have
+  // consecutive siblings.
+  CHECK_EQ(sibling_offset, topology.all_cores().Size());
+  return false;
+}
+
+}  // namespace
 
 CpuMap::CpuMap(const Topology& topology)
     : topology_(&topology),
@@ -28,7 +52,7 @@ CpuMap::CpuMap(const Topology& topology)
 
 Cpu CpuList::GetNthCpu(uint32_t n) const {
   for (uint32_t i = 0; i < map_size_; i++) {
-    uint64_t word = bitmap_[i];
+    uint64_t word = GetMapConst()[i];
     int count = absl::popcount(word);
     // `n` is zero-indexed, so if `count` == `n`, then the `n`th bit set is
     // not in this word.
@@ -124,15 +148,6 @@ absl::flat_hash_map<int, CpuList> Topology::GetAllSiblings(
   return siblings;
 }
 
-static std::vector<std::string> split(const std::string& s, std::string regex) {
-  std::vector<std::string> result;
-  std::regex split_on(regex);
-
-  std::sregex_token_iterator iter(s.begin(), s.end(), split_on, -1), end;
-  for (; iter != end; iter++) result.push_back(*iter);
-  return result;
-}
-
 int Topology::GetHighestNodeIdx(const std::filesystem::path& path) const {
   std::ifstream f(path);
   CHECK(f.is_open());
@@ -141,8 +156,12 @@ int Topology::GetHighestNodeIdx(const std::filesystem::path& path) const {
   CHECK(!f.fail());
 
   int highest_idx = 0;
-  for (const auto& node_idx_s : split(node_possible_str, "[,-]"))
-    highest_idx = std::max(highest_idx, std::stoi(node_idx_s));
+  for (absl::string_view node_idx_s :
+       absl::StrSplit(node_possible_str, absl::ByAnyChar(",-"))) {
+    int node_idx;
+    CHECK(absl::SimpleAtoi(node_idx_s, &node_idx));
+    highest_idx = std::max(highest_idx, node_idx);
+  }
 
   return highest_idx;
 }
@@ -211,6 +230,7 @@ Topology::Topology(InitHost) : num_cpus_(std::thread::hardware_concurrency()) {
   highest_node_idx_ = GetHighestNodeIdx("/sys/devices/system/node/possible");
   CheckSiblings();
   CreateCpuListsForNumaNodes(highest_node_idx_ + 1);
+  consecutive_smt_numbering_ = CheckConsecutiveSmtNumbering(*this);
 }
 
 void Topology::CreateTestSibling(
@@ -229,17 +249,28 @@ void Topology::CreateTestSibling(
 }
 
 std::filesystem::path Topology::SetUpTestSiblings(
-    const std::filesystem::path& test_directory, bool has_l3_cache) const {
+    const std::filesystem::path& test_directory, bool has_l3_cache,
+    bool use_consecutive_smt_numbering) const {
   std::filesystem::path topology_test_directory =
       test_directory / topology_test_subpath_;
 
   for (int i = 0; i < num_cpus_ / 2; i++) {
-    // This CPU is co-located on the same physical core as CPU `i + num_cpus_ /
-    // 2`. For example, when there are 112 CPUs, CPU 0 is co-located with CPU
-    // 56, CPU 1 is co-located with CPU 57, ..., and CPU 55 is co-located with
-    // CPU 111.
-    int sibling0 = i;
-    int sibling1 = i + num_cpus_ / 2;
+    int sibling0;
+    int sibling1;
+
+    if (use_consecutive_smt_numbering) {
+      // SMT offset is 1, so CPU 0 pairs with CPU 1, CPU 2 pairs with CPU 3,
+      // etc.
+      sibling0 = i * 2;
+      sibling1 = sibling0 + 1;
+    } else {
+      // This CPU is co-located on the same physical core as CPU
+      // `i + num_cpus_ / 2`. For example, when there are 112 CPUs, CPU 0 is
+      // co-located with CPU 56, CPU 1 is co-located with CPU 57, ..., and CPU
+      // 55 is co-located with CPU 111.
+      sibling0 = i;
+      sibling1 = i + num_cpus_ / 2;
+    }
     std::string kernel_mapping =
         absl::StrFormat("kernel_mapping_iteration_%d", i);
 
@@ -311,7 +342,7 @@ std::filesystem::path Topology::SetupTestNodePossible(
 }
 
 Topology::Topology(InitTest, const std::filesystem::path& test_directory,
-                   bool has_l3_cache)
+                   bool has_l3_cache, bool use_consecutive_smt_numbering)
     : num_cpus_(kNumTestCpus) {
   static_assert(kNumTestCpus <= MAX_CPUS);
 
@@ -324,8 +355,8 @@ Topology::Topology(InitTest, const std::filesystem::path& test_directory,
     rep->cpu = i;
   }
 
-  const std::filesystem::path siblings_prefix =
-      SetUpTestSiblings(test_directory, has_l3_cache);
+  const std::filesystem::path siblings_prefix = SetUpTestSiblings(
+      test_directory, has_l3_cache, use_consecutive_smt_numbering);
   absl::flat_hash_map<int, CpuList> siblings =
       GetAllSiblings(siblings_prefix, "topology/thread_siblings");
   CHECK_EQ(siblings.size(), num_cpus_);
@@ -379,6 +410,8 @@ Topology::Topology(InitTest, const std::filesystem::path& test_directory,
   highest_node_idx_ = GetHighestNodeIdx(node_possible_path);
   CheckSiblings();
   CreateCpuListsForNumaNodes(highest_node_idx_ + 1);
+  consecutive_smt_numbering_ = CheckConsecutiveSmtNumbering(*this);
+  CHECK_EQ(consecutive_smt_numbering_, use_consecutive_smt_numbering);
 }
 
 namespace {
@@ -455,6 +488,7 @@ Topology::Topology(InitCustom, std::vector<Cpu::Raw> raw_cpus)
 
   CheckSiblings();
   CreateCpuListsForNumaNodes(highest_node_idx_ + 1);
+  consecutive_smt_numbering_ = CheckConsecutiveSmtNumbering(*this);
 }
 
 CpuList Topology::ParseCpuStr(const std::string& str) const {
@@ -522,12 +556,12 @@ Topology* custom_topology = nullptr;
 }  // namespace
 
 void UpdateTestTopology(const std::filesystem::path& test_directory,
-                        bool has_l3_cache) {
+                        bool has_l3_cache, bool use_consecutive_smt_numbering) {
   if (test_topology) {
     delete test_topology;
   }
-  test_topology =
-      new Topology(Topology::InitTest{}, test_directory, has_l3_cache);
+  test_topology = new Topology(Topology::InitTest{}, test_directory,
+                               has_l3_cache, use_consecutive_smt_numbering);
 }
 
 Topology* TestTopology() {

@@ -7,6 +7,7 @@
 #ifndef _SCHED_GHOST_H_
 #define _SCHED_GHOST_H_
 
+#include <linux/types.h>
 #include <linux/ioctl.h>
 
 #ifdef __KERNEL__
@@ -25,7 +26,7 @@
  * process are the same version as each other. Each successive version changes
  * values in this header file, assumptions about operations in the kernel, etc.
  */
-#define GHOST_VERSION 84
+#define GHOST_VERSION 91
 
 /*
  * Define SCHED_GHOST via the ghost uapi unless it has already been defined
@@ -268,6 +269,7 @@ struct ghost_msg_payload_task_new {
 	uint16_t runnable;
 	int nice;		/* task priority in nice value [-20, 19] */
 	struct ghost_sw_info sw_info;
+	uint64_t agent_data;	/* used by BPF */
 };
 
 struct ghost_msg_payload_task_preempt {
@@ -299,6 +301,7 @@ struct ghost_msg_payload_task_blocked {
 
 struct ghost_msg_payload_task_dead {
 	uint64_t gtid;
+	int cpu;
 };
 
 struct ghost_msg_payload_task_departed {
@@ -364,6 +367,8 @@ struct ghost_msg_payload_cpu_not_idle {
 
 struct ghost_msg_payload_cpu_tick {
 	int cpu;
+	/* Whether this tick hit a ghost agent process. */
+	int is_agent;
 };
 
 struct ghost_msg_payload_timer {
@@ -416,9 +421,60 @@ struct bpf_ghost_msg {
 	/*
 	 * BPF can inform the kernel which cpu it would prefer to wake up
 	 * in response to this message.
-	 * -1 indicates no preference.
+	 * Special values may be used here (see below).
+	 * The default value is BPF_GHOST_MSG_NO_WAKEUP_PREF.
 	 */
 	int pref_cpu;
+};
+
+/* Special values for msg->pref_cpu */
+#define BPF_GHOST_MSG_NO_WAKEUP_PREF		-1
+#define BPF_GHOST_MSG_SKIP_AGENT_WAKE		-2
+
+struct bpf_ghost_sched {
+	__u8 agent_on_rq;	/* there is an agent, it can run if poked */
+	__u8 agent_runnable;	/* there is an agent, it will run */
+	__u8 might_yield;	/* other classes (CFS) probably want to run.
+				 * the agent will supersede these.  latched
+				 * tasks will not.
+				 */
+	__u8 dont_idle;		/* set true to prevent the cpu from idling */
+	__u8 must_resched;	/* set true force prev to get off cpu */
+	__u64 next_gtid;	/* scheduler will run this next, unless you do
+				 * something (or agent_runnable or
+				 * should_yield).  This is either a latched task
+				 * or was current and still TASK_RUNNING in PNT.
+				 * It will be preempted if you latch.
+				 */
+};
+
+struct bpf_ghost_select_rq {
+	__u64 gtid;
+	__u32 task_cpu;
+	__u32 waker_cpu;
+	__u32 sd_flag;
+	__u32 wake_flags;
+	__u8 skip_ttwu_queue;
+};
+
+struct bpf_ghost_halt_poll {
+	__u32 type; /* one of the enum GHOST_***_HALT_POLL options */
+};
+
+#define BPF_SYNC_COMMIT_MAX_CPUS        2
+
+/* Used with bpf_sync_commit */
+struct bpf_sync_commit_args {
+	/*
+	 * Fewer than MAX cpus can be used in the sync commit by specifying -1
+	 * for the other cpus.
+	 */
+	int cpus[BPF_SYNC_COMMIT_MAX_CPUS];
+	uint64_t gtids[BPF_SYNC_COMMIT_MAX_CPUS];
+	uint32_t task_barriers[BPF_SYNC_COMMIT_MAX_CPUS];
+
+	int run_flags[BPF_SYNC_COMMIT_MAX_CPUS];
+	int commit_flags[BPF_SYNC_COMMIT_MAX_CPUS];
 };
 
 #ifdef __cplusplus

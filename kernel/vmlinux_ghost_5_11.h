@@ -8791,6 +8791,7 @@ enum bpf_prog_type {
 	BPF_PROG_TYPE_GHOST_SCHED = 1000,
 	BPF_PROG_TYPE_GHOST_MSG = 1001,
 	BPF_PROG_TYPE_GHOST_SELECT_RQ = 1002,
+	BPF_PROG_TYPE_GHOST_HALT_POLL = 1003,
 };
 
 enum bpf_attach_type {
@@ -8839,7 +8840,8 @@ enum {
 	BPF_GHOST_SCHED_PNT = 2000,
 	BPF_GHOST_MSG_SEND = 2001,
 	BPF_GHOST_SELECT_RQ = 2002,
-	__MAX_BPF_GHOST_ATTACH_TYPE = 2003,
+	BPF_GHOST_HALT_POLL = 2003,
+	__MAX_BPF_GHOST_ATTACH_TYPE = 2004,
 };
 
 struct sock_filter {
@@ -33259,6 +33261,16 @@ struct bpf_ghost_select_rq {
 	__u8 skip_ttwu_queue;
 };
 
+enum {
+	BPF_PREPARE_HALT_POLL,
+	BPF_CONTINUE_HALT_POLL,
+	BPF_END_HALT_POLL,
+};
+
+struct bpf_ghost_halt_poll {
+	__u32 type;
+};
+
 enum bpf_func_id {
 	BPF_FUNC_unspec = 0,
 	BPF_FUNC_map_lookup_elem = 1,
@@ -42533,6 +42545,8 @@ struct bpf_ctx_convert {
 	struct bpf_ghost_msg BPF_PROG_TYPE_GHOST_MSG_kern;
 	struct bpf_ghost_select_rq BPF_PROG_TYPE_GHOST_SELECT_RQ_prog;
 	struct bpf_ghost_select_rq BPF_PROG_TYPE_GHOST_SELECT_RQ_kern;
+	struct bpf_ghost_select_rq BPF_PROG_TYPE_GHOST_HALT_POLL_prog;
+	struct bpf_ghost_select_rq BPF_PROG_TYPE_GHOST_HALT_POLL_kern;
 };
 
 struct bpf_flow_keys {

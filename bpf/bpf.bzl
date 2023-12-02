@@ -1,6 +1,6 @@
 """The open source build rules for eBPF programs and skeleton headers."""
 
-def bpf_program(name, src, hdrs, bpf_object, **kwargs):
+def bpf_program(name, src, hdrs, bpf_object, macros = [], **kwargs):
     """Generates an eBPF object file from .c source code.
 
     Args:
@@ -8,6 +8,7 @@ def bpf_program(name, src, hdrs, bpf_object, **kwargs):
       src: eBPF program source code in C.
       hdrs: list of header files depended on by src.
       bpf_object: name of generated eBPF object file.
+      macros: additional macros that will be passed to clang.
       **kwargs: additional arguments.
     """
     native.genrule(
@@ -15,7 +16,7 @@ def bpf_program(name, src, hdrs, bpf_object, **kwargs):
         srcs = ["@linux//:libbpf"] + [src] + hdrs,
         outs = [bpf_object],
         cmd = (
-            "clang-12 -g -O2 -target bpf -D__TARGET_ARCH_x86 " +
+            "clang-12 -g -O2 -target bpf -D__TARGET_ARCH_x86 -D__x86_64__ " +
             # The `.` directory is the project root, so we pass it with the `-I`
             # flag so that #includes work in the source files.
             #
@@ -25,8 +26,10 @@ def bpf_program(name, src, hdrs, bpf_object, **kwargs):
             # (i.e., $(BINDIR)/external/linux/libbpf/include/*).
             #
             # `$@` is the location to write the eBPF object file.
-            "-I . -I $(BINDIR)/external/linux/libbpf/include -c $(location " + src + ") -o $@ && " +
-            "llvm-strip -g $@"
+            "-I . -I /usr/include/x86_64-linux-gnu " +
+            "-I $(BINDIR)/external/linux/libbpf/include " +
+            "-c $(location " + src + ") -o $@ " +
+            "".join([" -D%s" % m for m in macros]) + " && llvm-strip -g $@"
         ),
         **kwargs
     )

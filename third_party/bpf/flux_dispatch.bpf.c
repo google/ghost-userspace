@@ -89,23 +89,7 @@ static struct flux_cpu *get_cpus(void)
 /* Helper, from cpu id to per-cpu data blob */
 static struct flux_cpu *cpuid_to_cpu(u32 cpu_id)
 {
-	struct flux_cpu *cpus = get_cpus();
-
-	if (!cpus)
-		return NULL;
-	/*
-	 * Do the index bounds check as close to the use as possible.  That will
-	 * decrease the chances that the compiler drops the register and e.g.
-	 * uses the function argument's register.  The verifier knows the bounds
-	 * check only for a particular register.
-	 *
-	 * BPF_MUST_CHECK has helped prevent the compiler from dropping the
-	 * register, though it doesn't seem to matter all the time.
-	 */
-	BPF_MUST_CHECK(cpu_id);
-	if (cpu_id >= FLUX_MAX_CPUS)
-		return NULL;
-	return &cpus[cpu_id];
+	return BOUNDED_ARRAY_IDX(get_cpus(), FLUX_MAX_CPUS, cpu_id);
 }
 
 static struct flux_cpu *get_this_cpu(void)
@@ -127,8 +111,6 @@ static struct flux_thread *get_thread_array(void)
 static struct flux_thread *gtid_to_thread(u64 gtid)
 {
 	struct task_sw_info *swi;
-	struct flux_thread *__t_arr;
-	u32 idx;
 
 	/* Convenience for our callers: no process has gtid == 0 */
 	if (gtid == 0)
@@ -136,14 +118,8 @@ static struct flux_thread *gtid_to_thread(u64 gtid)
 	swi = bpf_map_lookup_elem(&sw_lookup, &gtid);
 	if (!swi)
 		return NULL;
-	__t_arr = get_thread_array();
-	if (!__t_arr)
-		return NULL;
-	idx = swi->index;
-	BPF_MUST_CHECK(idx);
-	if (idx >= FLUX_MAX_GTIDS)
-		return NULL;
-	return &__t_arr[idx];
+	return BOUNDED_ARRAY_IDX(get_thread_array(), FLUX_MAX_GTIDS,
+				 swi->index);
 }
 
 /*
@@ -185,35 +161,34 @@ static inline struct flux_sched *get_parent(struct flux_sched *s)
  *
  * The including scheduler must define macros to generate the case statements:
  * __gen_thread_op_cases and __gen_cpu_op_cases.
- *
- * TODO: consider adding pre and post hooks around the switch statements.
- * That way, the "composing" scheduler can do a little work for certain messages
- * without changing a child scheduler.  e.g. if you want to use prio change to
- * mean "move the thread from biff to cfs-bpf", you can do that without changing
- * biff_flux.bpf.c.  Something like pre_thread_op(thr, msg, op) that expands to
- * the right function for each message type, all of which are conditionally
- * defined to an empty function.
  */
 
 #define __cat_op(SCHED, OP) SCHED ## OP
 #define __thread_cat_op(SCHED, OP) __cat_op(SCHED, _thread_ ## OP)
 #define __cpu_cat_op(SCHED, OP) __cat_op(SCHED, _cpu_ ## OP)
 
-#define __thread_op_thr(thr, seq, msg, op) ({				\
+#define __pre_thread_op_thr(sched, thr, args, op)				\
+	__thread_cat_op(pre, op)(sched, thr, args)
+#define __post_thread_op_thr(sched, thr, args, op)				\
+	__thread_cat_op(post, op)(sched, thr, args)
+
+#define __thread_op_thr(thr, seq, args, op) ({				\
 	struct flux_sched *__sched = get_sched((thr)->f.sched);		\
 	if (!__sched)							\
 		return;							\
+	__pre_thread_op_thr(__sched, thr, args, op);				\
 	switch (__sched->f.type) {					\
-	__gen_thread_op_cases(__thread_cat_op, op, __sched, thr, msg)	\
+	__gen_thread_op_cases(__thread_cat_op, op, __sched, thr, args)	\
 	};								\
+	__post_thread_op_thr(__sched, thr, args, op);				\
 	smp_store_release(&(thr)->f.seqnum, seq);			\
 })
 
-#define __thread_op(gtid, seq, msg, op) ({				\
+#define __thread_op(gtid, seq, args, op) ({				\
 	struct flux_thread *__thr = gtid_to_thread(gtid);		\
 	if (!__thr)							\
 		return;							\
-	__thread_op_thr(__thr, seq, msg, op);				\
+	__thread_op_thr(__thr, seq, args, op);				\
 	__thr;								\
 })
 
@@ -230,7 +205,7 @@ static inline struct flux_sched *get_parent(struct flux_sched *s)
 })
 
 #define __request_for_cpus(sched, child_id, nr_cpus) ({			\
-	int __ret = -1;							\
+	int __ret;							\
 	switch ((sched)->f.type) {					\
 	__gen_cpu_op_cases(__cat_op, _request_for_cpus, sched,		\
 			   child_id, nr_cpus, &__ret)			\
@@ -366,3 +341,18 @@ static void flux_run_current(struct flux_cpu *cpu, struct bpf_ghost_sched *ctx);
 static void flux_restart_pnt(struct flux_cpu *cpu, struct bpf_ghost_sched *ctx);
 static void flux_join_scheduler(struct flux_thread *t, int new_sched_id,
 				bool runnable);
+
+/*
+ * Returns how many more cpus the scheduler *might* want.  This is racy.  If we
+ * grant more than necessary, the child will just yield the excess.  If we grant
+ * less than necessary, we'll eventually notice on the next edge.
+ */
+static inline uint64_t flux_sched_nr_cpus_needed(struct flux_sched *s)
+{
+	int64_t delta = READ_ONCE(s->f.nr_cpus_wanted) -
+			READ_ONCE(s->f.nr_cpus);
+	return delta < 0 ? 0 : delta;
+}
+
+/* For getting s's storage in a flux_cpu. */
+#define __sched_cpu_union(s) __s[bounded_idx((s)->f.id, FLUX_NR_SCHEDS)]

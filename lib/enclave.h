@@ -374,6 +374,9 @@ class RunRequest {
   // Updates owner of the sync_group in the associated txn.
   virtual void sync_group_owner_set(int32_t owner) = 0;
 
+  // Attempts to take ownership of the sync_group, if not already taken.
+  virtual bool sync_group_take_ownership(int32_t owner) = 0;
+
   // Returns true if the txn has a valid sync_group owner and false otherwise.
   virtual bool sync_group_owned() const = 0;
 
@@ -440,6 +443,15 @@ class LocalRunRequest : public RunRequest {
   // Updates owner of the sync_group in the associated txn.
   void sync_group_owner_set(int32_t owner) override {
     txn_->u.sync_group_owner.store(owner, std::memory_order_release);
+  }
+
+  // Attempts to take ownership of the sync_group, if not already taken.
+  // Uses the weak form of CAS, so this may fail spuriously (it is expected to
+  // be used in a loop).
+  bool sync_group_take_ownership(int32_t owner) override {
+    int32_t no_owner = kSyncGroupNotOwned;
+    return txn_->u.sync_group_owner.compare_exchange_weak(
+        no_owner, owner, std::memory_order_acq_rel);
   }
 
   // Returns true if the txn has a valid sync_group owner and false otherwise.

@@ -3,9 +3,12 @@
 
 load("//:bpf/bpf.bzl", "bpf_program")
 
-package(default_visibility = [
-    "//:__subpackages__",
-])
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = [
+        "//:__subpackages__",
+    ],
+)
 
 # We use the GPLv2 license for the eBPF code so that we can access kernel
 # functionality restricted to eBPF programs that are licensed under GPLv2. That
@@ -26,6 +29,7 @@ exports_files(
         "schedlat.h",
         "schedrun.h",
         "topology.bpf.h",
+        "schedghostidle.bpf.c",
     ],
 )
 
@@ -45,6 +49,8 @@ filegroup(
         "biff_flux_bpf.h",
         "idle_flux.bpf.c",
         "idle_flux_bpf.h",
+        "prov_flux.bpf.c",
+        "prov_flux_bpf.h",
         "roci_flux.bpf.c",
         "roci_flux_bpf.h",
     ],
@@ -57,7 +63,8 @@ bpf_program(
         "biff_bpf.h",
         "common.bpf.h",
         "topology.bpf.h",
-        "//:kernel/vmlinux_ghost_5_11.h",
+        "//:abi/latest/kernel/ghost.h",
+        "//:lib/ghost_uapi.h",
     ],
     bpf_object = "biff_bpf.o",
 )
@@ -68,8 +75,9 @@ bpf_program(
     hdrs = [
         "cfs_bpf.h",
         "common.bpf.h",
-        "//:kernel/vmlinux_ghost_5_11.h",
-        "//:lib/queue.bpf.h",
+        "//:abi/latest/kernel/ghost.h",
+        "//:arr_structs",
+        "//:lib/ghost_uapi.h",
     ],
     bpf_object = "cfs_bpf.o",
 )
@@ -80,7 +88,8 @@ bpf_program(
     hdrs = [
         "common.bpf.h",
         "edf.h",
-        "//:kernel/vmlinux_ghost_5_11.h",
+        "//:abi/latest/kernel/ghost.h",
+        "//:lib/ghost_uapi.h",
     ],
     bpf_object = "edf_bpf.o",
 )
@@ -93,8 +102,9 @@ bpf_program(
         "flux_bpf.h",
         ":flux_infra",
         ":flux_scheds",
-        "//:kernel/vmlinux_ghost_5_11.h",
-        "//:lib/queue.bpf.h",
+        "//:abi/latest/kernel/ghost.h",
+        "//:arr_structs",
+        "//:lib/ghost_uapi.h",
     ],
     bpf_object = "flux_bpf.o",
 )
@@ -104,7 +114,6 @@ bpf_program(
     src = "schedclasstop.bpf.c",
     hdrs = [
         "common.bpf.h",
-        "//:kernel/vmlinux_ghost_5_11.h",
     ],
     bpf_object = "schedclasstop_bpf.o",
 )
@@ -115,21 +124,9 @@ bpf_program(
     hdrs = [
         "common.bpf.h",
         "schedfair.h",
-        "//:kernel/vmlinux_ghost_5_11.h",
         "//third_party:iovisor_bcc/bits.bpf.h",
     ],
     bpf_object = "schedfair_bpf.o",
-)
-
-bpf_program(
-    name = "schedghostidle_bpf",
-    src = "schedghostidle.bpf.c",
-    hdrs = [
-        "common.bpf.h",
-        "//:kernel/vmlinux_ghost_5_11.h",
-        "//third_party:iovisor_bcc/bits.bpf.h",
-    ],
-    bpf_object = "schedghostidle_bpf.o",
 )
 
 bpf_program(
@@ -138,7 +135,6 @@ bpf_program(
     hdrs = [
         "common.bpf.h",
         "schedlat.h",
-        "//:kernel/vmlinux_ghost_5_11.h",
         "//third_party:iovisor_bcc/bits.bpf.h",
     ],
     bpf_object = "schedlat_bpf.o",
@@ -150,7 +146,6 @@ bpf_program(
     hdrs = [
         "common.bpf.h",
         "schedrun.h",
-        "//:kernel/vmlinux_ghost_5_11.h",
         "//third_party:iovisor_bcc/bits.bpf.h",
     ],
     bpf_object = "schedrun_bpf.o",
@@ -161,7 +156,8 @@ bpf_program(
     src = "test.bpf.c",
     hdrs = [
         "common.bpf.h",
-        "//:kernel/vmlinux_ghost_5_11.h",
+        "//:abi/latest/kernel/ghost.h",
+        "//:lib/ghost_uapi.h",
     ],
     bpf_object = "test_bpf.o",
 )

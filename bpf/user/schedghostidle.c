@@ -13,7 +13,7 @@
 #include <sys/param.h>
 #include <unistd.h>
 
-#include "bpf/user/schedghostidle_bpf.skel.h"
+#include "bpf/user/bpf_schedghostidle.skel.h"
 #include "third_party/iovisor_bcc/trace_helpers.h"
 #include "libbpf/bpf.h"
 #include "libbpf/libbpf.h"
@@ -70,7 +70,7 @@ static struct sigaction sigact = {.sa_handler = sig_hand};
 
 int main(int argc, char **argv)
 {
-	struct schedghostidle_bpf *obj;
+	struct bpf_schedghostidle_bpf *obj;
 	int err;
 
 	sigaction(SIGINT, &sigact, 0);
@@ -80,13 +80,13 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	obj = schedghostidle_bpf__open_and_load();
+	obj = bpf_schedghostidle_bpf__open_and_load();
 	if (!obj) {
 		fprintf(stderr, "failed to open BPF object\n");
 		return -1;
 	}
 
-	err = schedghostidle_bpf__attach(obj);
+	err = bpf_schedghostidle_bpf__attach(obj);
 	if (err) {
 		fprintf(stderr, "failed to attach BPF programs\n");
 		goto cleanup;
@@ -110,7 +110,7 @@ int main(int argc, char **argv)
 	       100.0 * obj->bss->nr_idle_to_bpf_latches / obj->bss->nr_latches);
 
 cleanup:
-	schedghostidle_bpf__destroy(obj);
+	bpf_schedghostidle_bpf__destroy(obj);
 
 	return 0;
 }

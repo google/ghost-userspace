@@ -13,9 +13,7 @@
 #ifndef GHOST_LIB_BPF_BPF_SCHEDFAIR_H_
 #define GHOST_LIB_BPF_BPF_SCHEDFAIR_H_
 
-#ifndef __BPF__
 #include <stdint.h>
-#endif
 
 #define MAX_PIDS 102400
 

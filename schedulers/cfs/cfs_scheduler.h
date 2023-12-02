@@ -80,6 +80,7 @@ class CfsTaskState {
   // Convenience functions for accessing on_rq state.
   inline bool OnRqQueued() const { return on_rq_ == OnRq::kQueued; }
   inline bool OnRqMigrating() const { return on_rq_ == OnRq::kMigrating; }
+  inline bool OnRqDequeued() const { return on_rq_ == OnRq::kDequeued; }
 
   // Accessors.
   State GetState() const { return state_; }
@@ -424,8 +425,8 @@ struct CpuState {
   // ID of the cpu.
   int id = -1;
 
-  bool IsIdle() { return current == nullptr; }
-  bool LocklessRqEmpty() { return run_queue.LocklessSize() == 0; }
+  bool IsIdle() const { return current == nullptr; }
+  bool LocklessRqEmpty() const { return run_queue.LocklessSize() == 0; }
 } ABSL_CACHELINE_ALIGNED;
 
 class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
@@ -508,7 +509,7 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   void DumpState(const Cpu& cpu, int flags) final;
   std::atomic<bool> debug_runqueue_ = false;
 
-  int CountAllTasks() {
+  int CountAllTasks() const {
     int num_tasks = 0;
     allocator()->ForEachTask([&num_tasks](Gtid gtid, const CfsTask* task) {
       ++num_tasks;
@@ -543,10 +544,11 @@ class CfsScheduler : public BasicDispatchScheduler<CfsTask> {
   // Note: Should be called with this CPU's rq mutex lock held.
   void CheckPreemptTick(const Cpu& cpu);
 
-  // Kicks the current task off-cpu and puts into this CPU's run queue or
-  // initiate its migration if this CPU is no longer eligible as per its
-  // affinity mask.
-  void PutPrevTask();
+  // Kicks a given task off-cpu and puts into this CPU's run queue or initiate
+  // its migration if this CPU is no longer eligible as per its affinity mask.
+  // If the task was on-cpu (cs->current == task), cs->current will be reset as
+  // a side effect.
+  void PutPrevTask(CfsTask* task);
 
   // CfsSchedule looks at the current cpu state and its run_queue, decides what
   // to run next, and then commits a txn. REQUIRES: Called after all messages
