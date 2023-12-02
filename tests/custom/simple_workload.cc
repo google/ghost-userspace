@@ -150,6 +150,7 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
         t->Join();
     }
     std::cout << "Finished running worker threads." << std::endl;
+    std::cerr << "Finished running worker threads." << std::endl;
 
     return jobs;
 }
