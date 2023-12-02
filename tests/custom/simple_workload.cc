@@ -125,7 +125,6 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
     steady_clock::time_point shutdown_at = steady_clock::now();
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        std::lock_guard lg(work_q_m);
 
         // If we haven't shutdown after 10 seconds, then stop the experiment.
         // Mark tail latency of remaining jobs as very large value
@@ -133,17 +132,24 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
                 .count() > 10.0) {
             std::cout << "Test timed out." << std::endl;
             std::cerr << "Test timed out." << std::endl;
-            while (!work_q.empty()) {
-                // mark tail latency as 30 seconds (arbitrary large value)
-                work_q.front()->finished =
-                    shutdown_at + std::chrono::seconds(30);
-                work_q.pop();
+
+            {
+                std::lock_guard lg(work_q_m);
+                while (!work_q.empty()) {
+                    // mark tail latency as 30 seconds (arbitrary large value)
+                    work_q.front()->finished =
+                        shutdown_at + std::chrono::seconds(30);
+                    work_q.pop();
+                }
             }
         }
 
-        if (work_q.empty()) {
-            isdead = true;
-            break;
+        {
+            std::lock_guard lg(work_q_m);
+            if (work_q.empty()) {
+                isdead = true;
+                break;
+            }
         }
     }
     for (const auto &t : worker_threads) {
