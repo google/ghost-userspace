@@ -29,7 +29,7 @@ struct FifoTask : public Task<> {
   };
 
   FifoTask(Gtid fifo_task_gtid, ghost_sw_info sw_info)
-      : Task<>(fifo_task_gtid, sw_info) {}
+      : Task<>(fifo_task_gtid, sw_info), m(fifo_task_gtid) {}
   ~FifoTask() override {}
 
   bool blocked() const { return run_state == RunState::kBlocked; }
