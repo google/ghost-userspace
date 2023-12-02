@@ -14,15 +14,17 @@ restart_orca() {
 restart_orca
 
 for i in {1..10}; do
+    stdout="stdout.txt"
+    touch $stdout
     scripts/simple_workload_experiment.py \
         --orca_port 8000 \
         --out_file results${i}.txt |
-        tee "stdout.txt" \
+        tee $stdout \
         &
     exp_pid=$!
 
     while kill -0 $exp_pid; do
-        last_printed=$(stat -c %Y stdout.txt)
+        last_printed=$(stat -c %Y $stdout)
         now=$(date +%s)
         elapsed=$((now - last_printed))
 
