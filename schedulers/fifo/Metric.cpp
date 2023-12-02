@@ -53,7 +53,7 @@ namespace ghost
             return TaskState::kQueued;
         else if (state == "OnCpu")
             return TaskState::kOnCpu;
-        else if (state == "yielding")
+        else if (state == "Yielding")
             return TaskState::kYielding;
         else if (state == "Died")
             return TaskState::kDied;
