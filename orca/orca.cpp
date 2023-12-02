@@ -68,15 +68,18 @@ int main(int argc, char *argv[]) {
 
     printf("Orca listening on port %d...\n", port);
     while (true) {
-        // get stdout of scheduler
-        int schedfd = orca_agent->get_sched_stdout_fd();
+        int sched_stdout = orca_agent->get_sched_stdout_fd();
+        int sched_stderr = orca_agent->get_sched_stderr_fd();
 
         // set up fd set for select()
         fd_set readfds;
         FD_ZERO(&readfds);
         FD_SET(sockfd, &readfds);
-        if (schedfd != -1) {
-            FD_SET(schedfd, &readfds);
+        if (sched_stdout != -1) {
+            FD_SET(sched_stdout, &readfds);
+        }
+        if (sched_stderr != -1) {
+            FD_SET(sched_stderr, &readfds);
         }
 
         // set timeout of 1ms
@@ -134,20 +137,31 @@ int main(int argc, char *argv[]) {
                     panic("unimplemented message type");
                 }
             }
-            if (schedfd != -1 && FD_ISSET(schedfd, &readfds)) {
+            if (sched_stdout != -1 && FD_ISSET(sched_stdout, &readfds)) {
                 char buf[8192];
                 memset(buf, 0, sizeof(buf));
 
-                if (read(schedfd, buf, sizeof(buf) - 1) == -1) {
+                if (read(sched_stdout, buf, sizeof(buf) - 1) == -1) {
                     panic("read");
                 }
 
-                // forward scheduler's output to our stdout
+                // forward scheduler's stdout to our stdout
                 std::cout << buf << std::flush;
 
                 if (strstr(buf, "Initialization complete, ghOSt active.")) {
                     sched_ready.fire(0);
                 }
+            }
+            if (sched_stderr != -1 && FD_ISSET(sched_stderr, &readfds)) {
+                char buf[8192];
+                memset(buf, 0, sizeof(buf));
+
+                if (read(sched_stderr, buf, sizeof(buf) - 1) == -1) {
+                    panic("read");
+                }
+
+                // forward scheduler's stderr to our stderr
+                std::cerr << buf << std::flush;
 
                 /**
                  *  If we find a substring indicating crash:
