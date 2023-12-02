@@ -131,7 +131,7 @@ def main() -> None:
             Decimal("0.5"),
         ]:
             # Check for intermediate result
-            tmpfile = f"{sched_type}.{proportion_long_jobs}.{out_file}.tmp"
+            tmpfile = f"{out_file}.{sched_type}.{proportion_long_jobs}.tmp"
             try:
                 with open(tmpfile) as file:
                     reader = csv.reader(file)
