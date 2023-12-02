@@ -78,7 +78,7 @@ def run_sched_exp(
         preemption_interval_us=preemption_interval_us,
     )
 
-    for throughput in range(20000, 200000 + 1, 20000):
+    for throughput in range(20000, 120000 + 1, 20000):
         print(
             f"Starting experiment for sched_type={sched_type} "
             f"throughput={throughput} "
