@@ -10,7 +10,7 @@
 int main() {
     std::vector<std::unique_ptr<ghost::GhostThread>> threads;
     int ctr = 0;
-    for (int threadId = 0; threadId < 5; ++threadId) {
+    for (int threadId = 0; threadId < 10000; ++threadId) {
         threads.push_back(std::make_unique<ghost::GhostThread>(
             ghost::GhostThread::KernelScheduler::kCfs, [&ctr, threadId]() {
                 for (int i = 0; i < 100; ++i) {
