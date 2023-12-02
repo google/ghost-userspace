@@ -43,8 +43,8 @@ def read_csv(filename: str) -> list[ExpResult]:
 
 def main() -> None:
     results: list[ExpResult] = []
-    for i in range(1, 11):
-        results += read_csv(f"results{i}.txt")
+    for i in range(1, 5 + 1):
+        results += read_csv(f"run2/results{i}.txt")
 
     # Want to plot  : throughput vs. short_99_9_pct (tail latency).
     # Multiple lines: sched_type.
@@ -56,16 +56,15 @@ def main() -> None:
     # Dep vars: short_99_9_pct.
 
     # Filter for lowest tail latency per group.
-    m: dict[tuple[str, int], float] = {}
+    m: dict[tuple[str, int], list[float]] = {}
     for row in results:
         k = (row.sched_type, row.throughput)
         v = row.short_99_9_pct
         if k not in m:
-            m[k] = v
-        else:
-            m[k] = min(m[k], v)
+            m[k] = []
+        m[k].append(v)
 
-    vals: list[tuple[str, int, float]] = [(k[0], k[1], v) for k, v in m.items()]
+    vals: list[tuple[str, int, float]] = [(k[0], k[1], min(v)) for k, v in m.items()]
     for sched_type in ["dFCFS", "cFCFS", "cfs"]:
         svals = [(v[1], v[2]) for v in vals if v[0] == sched_type]
         xs = [v[0] for v in svals]
@@ -74,7 +73,6 @@ def main() -> None:
 
     plt.xlabel("Throughput (reqs/sec)")
     plt.ylabel("99.9%% latency")
-    plt.title("Scheduler Performance for 99 Short - 1 Long Task Workload")
     plt.legend()
     plt.show()
 
