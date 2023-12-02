@@ -132,6 +132,8 @@ int main(int argc, char *argv[]) {
                             close(connfd);
                         });
 
+                    printf("connfd=%d handle=%d\n", connfd, handle);
+
                     break;
                 }
                 default:
