@@ -119,16 +119,14 @@ int main(int argc, char *argv[]) {
 
                     orca_agent->set_scheduler(msg->config);
 
-                    EventSignal<int>::handle_t handle =
-                        sched_ready.sub([connfd, handle, &sched_ready](int) {
-                            // send ack
-                            orca::OrcaHeader ack;
-                            ack.type = orca::MessageType::Ack;
-                            send_full(connfd, (const char *)&ack, sizeof(ack));
-                            sched_ready.unsub(handle);
+                    sched_ready.once([connfd, &sched_ready](int) {
+                        // send ack
+                        orca::OrcaHeader ack;
+                        ack.type = orca::MessageType::Ack;
+                        send_full(connfd, (const char *)&ack, sizeof(ack));
 
-                            close(connfd);
-                        });
+                        close(connfd);
+                    });
 
                     break;
                 }
