@@ -163,7 +163,7 @@ void FifoScheduler::TaskDeparted(FifoTask* task, const Message& msg) {
   }
   task->m.updateState("Died");
   absl::MutexLock lock(&deadTasksMu_);
-  deadTasks.push_back(task);
+  deadTasks.push_back(task->m);
   allocator()->FreeTask(task);
 }
 
@@ -171,7 +171,7 @@ void FifoScheduler::TaskDead(FifoTask* task, const Message& msg) {
   CHECK(task->blocked());
   task->m.updateState("Died");
   absl::MutexLock lock(&deadTasksMu_);
-  deadTasks.push_back(task);
+  deadTasks.push_back(task->m);
   allocator()->FreeTask(task);
 }
 
