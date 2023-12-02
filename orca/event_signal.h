@@ -14,6 +14,7 @@ public:
     handle_t sub(std::function<void(T)> &&callback) {
         handle_t handle = next_handle++;
         listeners[handle] = std::move(callback);
+        return handle;
     }
 
     // Unsubscribe from the event.
@@ -26,8 +27,8 @@ public:
 
     // Send an event to all listeners.
     void fire(T value) {
-        for (auto &[_, callback] : listeners) {
-            callback(value);
+        for (auto &p : listeners) {
+            p.second(value);
         }
     }
 
