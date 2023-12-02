@@ -16,6 +16,7 @@ restart_orca
 for i in {1..10}; do
     stdout="stdout.txt"
     touch $stdout
+    echo "Running scripts/simple_workload_experiment.py"
     scripts/simple_workload_experiment.py \
         --orca_port 8000 \
         --out_file results${i}.txt |
