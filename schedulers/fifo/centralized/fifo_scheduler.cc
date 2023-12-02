@@ -506,7 +506,7 @@ void FifoAgent::AgentThread() {
           for(auto &m : res){
             m.printResult(stderr);
           }
-          for(auto &m : scheduler_->deadTasks){
+          for(auto &m : global_scheduler_->deadTasks){
             m.printResult(stderr);
           }
           global_scheduler_->deadTasks.clear();
