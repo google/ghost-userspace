@@ -412,7 +412,7 @@ void FifoAgent::AgentThread() {
 
     if(profile_peroid.Edge()){
       auto res = scheduler_->CollectMetric();
-      if(debug_out.Edge())
+      if(verbose() && debug_out.Edge())
       {
         absl::MutexLock lock(&(scheduler_->deadTasksMu_));
         for(auto &m : res){

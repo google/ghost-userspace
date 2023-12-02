@@ -501,7 +501,7 @@ void FifoAgent::AgentThread() {
 
       if(profile_peroid.Edge()){
         auto res = global_scheduler_->CollectMetric();
-        if(debug_out.Edge())
+        if(verbose() && debug_out.Edge())
         {
           for(auto &m : res){
             m.printResult(stderr);
