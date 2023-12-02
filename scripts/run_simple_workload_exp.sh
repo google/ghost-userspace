@@ -5,9 +5,9 @@
 PW=pass
 
 restart_orca() {
-    tmux kill-session -t orca
-    tmux new-session -d -s orca
-    tmux send-keys -t orca "echo $PW | sudo -S scripts/cleanup.sh; sudo orca/orca 8000" C-m
+    echo $PW | sudo -S pkill -KILL orca/orca
+    echo $PW | sudo -S scripts/cleanup.sh
+    echo $PW | sudo -S orca/orca 8000
     sleep 1
 }
 
