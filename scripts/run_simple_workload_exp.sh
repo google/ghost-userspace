@@ -4,11 +4,9 @@
 # this is my VM user's password
 PW=pass
 
-# Start tmux, which will run Orca
-tmux new-session -d -s orca
-
 restart_orca() {
     tmux kill-session -t orca
+    tmux new-session -d -s orca
     tmux send-keys -t orca "echo $PW | sudo -S scripts/cleanup.sh; sudo orca/orca 8000" C-m
 }
 
