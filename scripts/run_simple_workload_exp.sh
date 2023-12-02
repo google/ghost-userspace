@@ -21,18 +21,14 @@ for i in {1..10}; do
         &
     exp_pid=$!
 
-    # Start timeout countdown
-    timeout=30
-    (sleep $timeout && kill -KILL $exp_pid) &
-    timeout_pid=$!
-
     while kill -0 $exp_pid; do
         last_printed=$(stat -c %Y stdout.txt)
         now=$(date +%s)
         elapsed=$((now - last_printed))
 
+        timeout=30
         if [ $elapsed -ge $timeout ]; then
-            kill -KILL $exp_pid
+            echo $PW | sudo -S kill -KILL $exp_pid
             break
         fi
 
