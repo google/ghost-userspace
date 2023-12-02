@@ -405,14 +405,16 @@ void FifoAgent::AgentThread() {
   while (!Finished() || !scheduler_->Empty(cpu())) {
     scheduler_->Schedule(cpu(), status_word());
 
-    if(profile_peroid.Edge())
-      scheduler_->CollectMetric();
-    if(debug_out.Edge())
-    {
-      for(auto &m : scheduler_->metrics){
-        m.printResult(stderr);
+    if(profile_peroid.Edge()){
+      auto res = scheduler_->CollectMetric();
+      if(debug_out.Edge())
+      {
+        for(auto &m : res){
+          m.printResult(stderr);
+        }
       }
     }
+    
     if (verbose() && debug_out.Edge()) {
       static const int flags = verbose() > 1 ? Scheduler::kDumpStateEmptyRQ : 0;
       if (scheduler_->debug_runqueue_) {
