@@ -1,12 +1,16 @@
 #!/bin/bash
 
+# very very bad security
+# this is my VM user's password
+PW=pass
+
 # Start tmux, which will run Orca
 tmux new-session -d -s orca_session
 
 restart_orca() {
     tmux send-keys -t orca_session C-c
-    tmux send-keys -t orca_session "sudo scripts/cleanup.sh" C-m
-    tmux send-keys -t orca_session "sudo orca/orca 8000" C-m
+    tmux send-keys -t orca_session "echo $PW | sudo -S scripts/cleanup.sh" C-m
+    tmux send-keys -t orca_session "echo $PW | sudo -S orca/orca 8000" C-m
 }
 
 restart_orca
