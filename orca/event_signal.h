@@ -12,20 +12,20 @@ public:
 
     // Subscribe to the event.
     handle_t sub(std::function<void(T)> callback) {
-        handle_t handle = next_handle++;
+        handle_t handle = next_handle();
         listeners[handle] = std::move(callback);
-        printf("Registering handle %d\n", handle);
         return handle;
+    }
+
+    // Subscribe to an event; once fired, callback is automatically unsubbed.
+    void once(std::function<void(T)> callback) {
+        listeners_once.push(std::move(callback));
     }
 
     // Unsubscribe from the event.
     void unsub(handle_t handle) {
-        printf("Unregistering handle %d\n", handle);
         auto it = listeners.find(handle);
         if (it == listeners.end()) {
-            for (auto &p : listeners) {
-                printf("debug %d\n", p.first);
-            }
             panic("handle not found in listeners");
         }
         listeners.erase(it);
@@ -36,10 +36,16 @@ public:
         for (auto &p : listeners) {
             p.second(value);
         }
+        for (auto &callback : listeners_once) {
+            callback(value);
+        }
+        listeners_once = std::queue<std::function<void(T)>>();
     }
 
 private:
     std::unordered_map<int, std::function<void(T)>> listeners;
+    std::queue<std::function<void(T)>> listeners_once;
 
-    int next_handle = 0;
+    int next_handle_v = 0;
+    handle_t next_handle() { return next_handle_v++; }
 };
