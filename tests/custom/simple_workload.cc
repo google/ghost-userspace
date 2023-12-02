@@ -79,7 +79,7 @@ std::vector<Job> run_experiment(GhostThread::KernelScheduler ks_mode,
                     work_q.pop();
 
                     ++num_jobs_done;
-                    if (num_jobs_done % 5000 == 0) {
+                    if (num_jobs_done % 50000 == 0) {
                         std::cerr << num_jobs_done << std::endl;
                     }
                 }
