@@ -121,6 +121,8 @@ int main(int argc, char *argv[]) {
 
                     EventSignal<int>::handle_t handle =
                         sched_ready.sub([connfd, handle, &sched_ready](int) {
+                            printf("connfd=%d handle=%d\n", connfd, handle);
+
                             // send ack
                             orca::OrcaHeader ack;
                             ack.type = orca::MessageType::Ack;
