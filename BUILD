@@ -712,9 +712,12 @@ cc_library(
     srcs = [
         "schedulers/fifo/centralized/fifo_scheduler.cc",
         "schedulers/fifo/centralized/fifo_scheduler.h",
+        "schedulers/fifo/Metric.h",
+        "schedulers/fifo/Metric.cpp",
     ],
     hdrs = [
         "schedulers/fifo/centralized/fifo_scheduler.h",
+         "schedulers/fifo/Metric.h",
     ],
     copts = compiler_flags,
     deps = [
