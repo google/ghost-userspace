@@ -6,3 +6,7 @@
 
 /.vscode
 env
+
+/orca/orca
+/orca/orca_client
+/orca/*.o
