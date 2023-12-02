@@ -19,10 +19,11 @@ public:
 
     // Unsubscribe from the event.
     void unsub(handle_t handle) {
-        if (listeners.find(handle) == listeners.end()) {
+        auto it = listeners.find(handle);
+        if (it == listeners.end()) {
             panic("handle not found in listeners");
         }
-        listeners.erase(handle);
+        listeners.erase(it);
     }
 
     // Send an event to all listeners.
