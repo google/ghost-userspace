@@ -36,10 +36,11 @@ public:
         for (auto &p : listeners) {
             p.second(value);
         }
-        for (auto &callback : listeners_once) {
+        while (!listeners_once.empty()) {
+            auto &callback = listeners_once.front();
             callback(value);
+            listeners_once.pop();
         }
-        listeners_once = std::queue<std::function<void(T)>>();
     }
 
 private:
