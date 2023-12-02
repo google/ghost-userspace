@@ -13,17 +13,31 @@ restart_orca() {
 
 restart_orca
 
-for i in {1..10}
-do
-    scripts/simple_workload_experiment.py --orca_port 8000 --out_file results${i}.txt &
+for i in {1..10}; do
+    scripts/simple_workload_experiment.py \
+        --orca_port 8000 \
+        --out_file results${i}.txt \
+        tee "stdout.txt" \
+        &
     exp_pid=$!
 
-    # If the experiment is still running after 30 secs, then restart it
-    sleep 30
-    if kill -0 $exp_pid 2>/dev/null; then
-        restart_orca
-        kill $exp_pid
-    fi
+    # Start timeout countdown
+    timeout=30
+    (sleep $timeout && kill -KILL $exp_pid) &
+    timeout_pid=$!
+
+    while kill -0 $exp_pid; do
+        last_printed=$(stat -c %Y stdout.txt)
+        now=$(date +%s)
+        elapsed=$((now - last_printed))
+
+        if [ $elapsed -ge $timeout ]; then
+            kill -KILL $exp_pid
+            break
+        fi
+
+        sleep 1
+    done
 
     wait $exp_pid
 done
