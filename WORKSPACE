@@ -102,6 +102,13 @@ http_archive(
     strip_prefix = "rules_python-6f37aa9966f53e063c41b7509a386d53a9f156c3",
 )
 
+# diptest
+http_archive(
+    name = "diptest",
+    urls = ["https://github.com/sje30/diptest/archive/1.0.0.tar.gz"],
+    strip_prefix = "diptest-1.0.0",
+)
+
 load("@rules_python//python:pip.bzl", "pip_install")
 
 pip_install(
