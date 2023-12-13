@@ -26,7 +26,7 @@ py_library(
 )
 
 # Runs the centralized queuing experiments.
-par_binary(
+py_binary(
     name = "centralized_queuing",
     srcs = [
         "centralized_queuing.py",
@@ -39,7 +39,7 @@ par_binary(
 )
 
 # Runs the Shinjuku experiments.
-par_binary(
+py_binary(
     name = "shinjuku",
     srcs = [
         "shinjuku.py",
@@ -52,7 +52,7 @@ par_binary(
 )
 
 # Runs the Shenango experiments.
-par_binary(
+py_binary(
     name = "shenango",
     srcs = [
         "shenango.py",
@@ -65,7 +65,7 @@ par_binary(
 )
 
 # Runs the Shinjuku+Shenango experiments.
-par_binary(
+py_binary(
     name = "shinjuku_shenango",
     srcs = [
         "shinjuku_shenango.py",
